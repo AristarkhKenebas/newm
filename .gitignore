@@ -4,3 +4,7 @@ newm.egg-info
 newm/resources/*.mp4
 build/
 result
+
+# Kotlin port (Gradle)
+.gradle/
+.kotlin/
