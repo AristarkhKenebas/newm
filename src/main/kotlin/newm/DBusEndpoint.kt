@@ -71,7 +71,7 @@ class DBusEndpoint(private val layout: Layout) {
                 layout.launchApp(json["app"] as String)
                 "OK"
             } else {
-                layout.command(json["cmd"] as String, json["arg"] as String?).toString()
+                layout.command(json["cmd"] as String, json["arg"] as String?)
             }
             Json.write(mapOf("msg" to result))
         } catch (e: Exception) {
@@ -139,7 +139,7 @@ class DBusGestureProvider(onGesture: (NewmGesture) -> Boolean) : GestureProvider
 /** newm-cmd: sends a command to the running newm and prints its answer (newm's cmd.py). */
 fun newmCmd(args: List<String>) {
     val command = args.firstOrNull() ?: run {
-        System.err.println("Usage: newm cmd <command> [arguments]   (lock, config, update-config, debug, inhibit-idle, launcher <app>, clean, unlock)")
+        System.err.println("Usage: newm cmd <command> [arguments]   (lock, config, update-config, debug, inhibit-idle, launcher <app>, clean, unlock, restart)")
         return
     }
     fun send(message: Map<String, Any?>): Map<String, Any?>? {

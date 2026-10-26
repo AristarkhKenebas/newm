@@ -30,7 +30,7 @@ fun defaultConfig(layout: Layout): Map<String, Any?> {
             "L-C-k" to { l.resizeFocusedView(0, -1) },
             "L-C-l" to { l.resizeFocusedView(1, 0) },
 
-            "L-Return" to { l.caulis.launch("alacritty") },
+            "L-Return" to { l.caulis.launch(defaultTerminal()) },
             "L-q" to { l.closeFocusedView() },
 
             "L-p" to { l.ensureLocked(dim = true) },
@@ -67,8 +67,8 @@ fun defaultConfig(layout: Layout): Map<String, Any?> {
         "synchronous_update" to synchronousUpdate,
         "key_bindings" to keyBindings,
         "panels" to mapOf(
-            "lock" to mapOf("cmd" to "alacritty -e newm-panel-basic lock"),
-            "launcher" to mapOf("cmd" to "alacritty -e newm-panel-basic launcher"),
+            "lock" to mapOf("cmd" to "${defaultTerminal()} -e newm-panel-basic lock"),
+            "launcher" to mapOf("cmd" to "${defaultTerminal()} -e newm-panel-basic launcher"),
             "top_bar" to mapOf(
                 "native" to mapOf(
                     "enabled" to true,

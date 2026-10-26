@@ -28,6 +28,9 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
                 caulis.input.pointers.naturalScroll = value
             }
             "focus_follows_mouse" -> caulis.focusFollowsMouse = value as Boolean
+            // newm's own (not pywm's): from keyboard { numLock } and cursor { hideAfter }.
+            "numlock" -> caulis.numLock = value as Boolean
+            "hide_cursor_after" -> caulis.hideCursorAfterSeconds = (value as Number).toInt()
             // pywm's: programs draw their own title bars (true), or none are drawn at all.
             "encourage_csd" -> caulis.titleBars = if (value as Boolean) dev.caulis.core.TitleBars.PROGRAM else dev.caulis.core.TitleBars.NONE
             else -> log.info { "pywm.$key: pywm's own (Caulis draws here), left out" }

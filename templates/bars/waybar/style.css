@@ -1,0 +1,24 @@
+/* waybar in newm's look: a light, rounded bar (Nord's colours, as newm's own). */
+* {
+    font-family: "JetBrains Mono", "Noto Sans", sans-serif;
+    font-size: 12px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba(236, 239, 244, 0.80);
+    color: #2e3440;
+    border-radius: 12px;
+}
+
+#clock, #network, #cpu, #memory, #temperature, #pulseaudio, #battery, #tray {
+    padding: 0 10px;
+    margin: 4px 0;
+    border-radius: 8px;
+}
+
+#clock { font-weight: bold; }
+#battery.warning { color: #d08770; }
+#battery.critical { color: #bf616a; }
+#temperature.critical { color: #bf616a; }
+#network.disconnected, #pulseaudio.muted { color: #4c566a; }

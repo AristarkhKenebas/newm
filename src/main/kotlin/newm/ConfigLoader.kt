@@ -37,34 +37,63 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
     private fun locate(): Path {
         val kts = folder.resolve("config.kts")
         val system = Path.of("/etc/newm/config.kts")
-        // The user's own (config.kts first; a config.py of before still works), else the system's.
-        listOf(kts, folder.resolve("config.py")).firstOrNull(Files::isRegularFile)?.let { return it }
-        // None of the user's own: theirs from the system's config.kts, or newm's own, written for them to change.
+        // The user's own (config.kts first, then config.lua, config.json — Nix writes that —
+        // and a config.py of before), else the system's.
+        NAMES.map(folder::resolve).firstOrNull(Files::isRegularFile)?.let { return it }
+        // None of the user's own: theirs from the system's (/etc/newm), or newm's own templates,
+        // written for them to change (config.kts, examples/, a README).
         try {
-            Files.createDirectories(folder)
-            if (Files.isRegularFile(system)) {
-                Files.copy(system, kts)
-            } else {
-                ConfigLoader::class.java.getResourceAsStream("/newm/config.kts")!!.use { Files.copy(it, kts) }
-            }
-            log.info { "There was no configuration: $kts written (${if (Files.isRegularFile(system)) "from $system" else "newm's default"}, with notes)" }
-            return kts
+            val from = if (Files.isRegularFile(system)) "/etc/newm" else "newm's templates"
+            if (Files.isRegularFile(system)) Templates.copyFolder(system.parent, folder) else Templates.copyTo(folder)
+            log.info { "There was no configuration: $folder written from $from" }
+            if (Files.isRegularFile(kts)) return kts
         } catch (e: Exception) {
-            log.warn("$kts cannot be written ($e)")
+            log.warn("$folder cannot be written ($e)")
         }
-        return listOf(system, Path.of("/etc/newm/config.py")).firstOrNull(Files::isRegularFile) ?: kts
+        return NAMES.map { Path.of("/etc/newm", it) }.firstOrNull(Files::isRegularFile) ?: kts
     }
 
-    private val isKts get() = path.fileName.toString().endsWith(".kts")
+    private companion object {
+        val NAMES = listOf("config.kts", "config.lua", "config.json", "config.py")
+    }
 
-    /** The configuration now (at the start: compiled here, a few seconds the first time). */
-    fun load(): Map<String, Any?>? = if (isKts) runKts(KtsConfig.compile(path)) else loadPython()
+    private val kind get() = path.fileName.toString().substringAfterLast('.')
+
+    /** The configuration now (config.kts at the start: compiled here, a few seconds the first time). */
+    fun load(): Map<String, Any?>? = when (kind) {
+        "kts" -> runKts(KtsConfig.compile(path))
+        "lua", "json" -> loadData()
+        else -> loadPython()
+    }
+
+    // config.lua and config.json: read here, quickly.
+    private fun loadData(): Map<String, Any?>? {
+        val (settings, problems) = try {
+            if (kind == "lua") {
+                LuaConfig.load(path, caulis) { (handler as? LayoutApiSource)?.api() ?: error("newm is not ready") }
+            } else {
+                // (JSON as Nix writes it; lines starting with // are notes, for a hand-written one.)
+                val text = Files.readAllLines(path).filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
+                DataConfig.settings(Json.parseObject(text), caulis, path.fileName.toString())
+            }
+        } catch (e: Exception) {
+            failed(e.message ?: e.toString())
+            return null
+        }
+        if (problems.isNotEmpty()) {
+            // (What could be read still counts; the rest is shown.)
+            show("${path.fileName}: ${problems.take(3).joinToString("\n")}", NoticeLevel.WARNING)
+        } else {
+            clearError()
+        }
+        return settings
+    }
 
     /** newm's own default (when the user's cannot be loaded at the start). */
     fun loadDefault(): Map<String, Any?>? {
         val copy = Files.createTempFile("newm-default", ".kts")
         return try {
-            ConfigLoader::class.java.getResourceAsStream("/newm/config.kts")!!.use { Files.copy(it, copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+            ConfigLoader::class.java.getResourceAsStream("/newm/templates/config.kts")!!.use { Files.copy(it, copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
             val compiled = KtsConfig.compile(copy)
             val config = NewmConfig(caulis)
             if (KtsConfig.run(compiled, config).isEmpty()) config.values else null
@@ -113,8 +142,8 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
      * screen does not stop), then [apply] runs on the compositor's thread with the settings.
      */
     fun loadAgain(apply: (Map<String, Any?>) -> Unit) {
-        if (!isKts) {
-            loadPython()?.let(apply)
+        if (kind != "kts") {
+            load()?.let(apply)
             return
         }
         Thread({
@@ -172,7 +201,7 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
                 } catch (_: InterruptedException) {
                     return@Thread
                 }
-                val changed = key.pollEvents().map { it.context().toString() }.filter { it.endsWith(".py") || it.endsWith(".kts") }
+                val changed = key.pollEvents().map { it.context().toString() }.filter { name -> listOf(".py", ".kts", ".lua", ".json").any(name::endsWith) }
                 key.reset()
                 if (changed.isEmpty()) continue
                 caulis.post {
@@ -186,4 +215,9 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
         }, "newm-config-watch").apply { isDaemon = true }.start()
         log.info { "Following $dir: saving ${path.fileName} loads it again" }
     }
+}
+
+/** A handler that can give the layout's API (config.lua's `layout` table needs it). */
+interface LayoutApiSource {
+    fun api(): LayoutApi
 }

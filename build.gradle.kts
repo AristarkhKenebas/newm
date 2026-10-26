@@ -29,6 +29,8 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     implementation(libs.caulis.wm)
     implementation(libs.caulis.compose)
+    // config.lua.
+    implementation(libs.luaj)
     // config.kts, compiled by newm itself.
     implementation(libs.kotlin.scripting.common)
     implementation(libs.kotlin.scripting.jvm)
@@ -53,4 +55,10 @@ application {
 // `newm --version` says it.
 tasks.jar {
     manifest { attributes("Implementation-Version" to project.version) }
+}
+
+// The templates (config.kts and the rest, newm's wallpaper) go into newm itself: newm writes
+// them for a user who has none, and `newm install-session` into /etc/newm.
+tasks.processResources {
+    from("templates") { into("newm/templates") }
 }

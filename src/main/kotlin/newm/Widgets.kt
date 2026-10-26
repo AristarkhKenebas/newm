@@ -71,7 +71,6 @@ fun textureOf(renderer: Renderer, image: BufferedImage): GpuTexture {
 
 private val confOutputs = configuredValue<List<Map<String, Any?>>>("outputs", emptyList())
 private val confTimeScale = configuredValue("background.time_scale", 0.15)
-private val confPathDefault = configuredValue<String?>("background.path", null)
 private val confAnimDefault = configuredValue("background.anim", true)
 
 /**
@@ -284,7 +283,7 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
         fun read(path: String): BufferedImage? = try {
             val t0 = System.nanoTime()
             val image = if (path.startsWith("resource:")) {
-                Wallpaper::class.java.getResourceAsStream("/newm/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
+                Wallpaper::class.java.getResourceAsStream("/newm/templates/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
             } else {
                 javax.imageio.ImageIO.read(java.io.File(path.replaceFirst("~", System.getenv("HOME") ?: System.getProperty("user.home"))))
             } ?: error("not a picture")
@@ -453,7 +452,7 @@ fun BarContent(bar: Bar) {
 
 /** The background and the screen's corners as Caulis drawings (one each, every output). */
 internal fun Layout.addWidgetDrawings(backgrounds: () -> List<Background>, corners: Corners, bars: () -> List<Bar>) {
-    caulis.addDrawing(DrawingLevel.BELOW_WINDOWS, object : Drawing {
+    caulis.addDrawing(DrawingLevel.WALLPAPER, object : Drawing {
         override fun draw(monitor: Monitor, canvas: OverlayCanvas) {
             backgrounds().filter { it.monitor === monitor }.forEach { it.draw(canvas) }
         }

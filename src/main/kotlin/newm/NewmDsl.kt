@@ -114,7 +114,7 @@ class NewmConfig(
      */
     fun keys(configure: KeysSection.() -> Unit) {
         val keys = KeysSection().apply(configure)
-        values["key_bindings"] = { layout: Layout -> keys.bindings.map { (combo, action) -> combo to { layout.action() } } }
+        values["key_bindings"] = { layout: Layout -> keys.bindings.map { (combo, action) -> combo to { action.invoke(layout) } } }
     }
 
     /** Runs once newm has started (start programs here). */
@@ -134,6 +134,9 @@ class NewmConfig(
 
     /** Starts [command] inside newm (as in a shell: "firefox --private-window"). */
     fun launch(command: String) = caulis.launch(command)
+
+    /** The terminal installed here: \$TERMINAL, else alacritty, foot, kitty, ... (the first there is). */
+    fun defaultTerminal(): String = newm.defaultTerminal()
 }
 
 class BackgroundSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
@@ -178,12 +181,18 @@ class KeyboardSection internal constructor(values: MutableMap<String, Any?>) : S
     /** "grp:alt_shift_toggle,caps:escape". */
     var options by setting<String>("xkb_options")
     var model by setting<String>("xkb_model")
+
+    /** Num Lock on from the start (newm issue 168). */
+    var numLock by setting<Boolean>("numlock")
 }
 
 class CursorSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
     /** An installed cursor theme ("Adwaita", "Bibata-Modern-Ice"); unset: Caulis's own. */
     var theme by setting<String>("xcursor_theme")
     var size by setting<Int>("xcursor_size")
+
+    /** Hide the cursor after the mouse was still this many seconds (0: never; newm issue 74). */
+    var hideAfter by setting<Int>("hide_cursor_after")
 }
 
 class InputSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
@@ -204,6 +213,15 @@ class InputSection internal constructor(values: MutableMap<String, Any?>) : Sect
 class Rule internal constructor(internal val values: Map<String, Any?>)
 
 class ViewSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** How opaque windows without the focus are (1.0: as they are; 0.85: a little see-through). */
+    var unfocusedOpacity by setting<Double>("unfocused_opacity")
+
+    /** The first window of an empty workspace takes the whole screen (false: a quarter, as newm had it). */
+    var fillFirst by setting<Boolean>("fill_first")
+
+    /** Windows fade in when they open and out when they close. */
+    var fade by setting<Boolean>("fade")
+
     /** Windows' corners rounded, in pixels. */
     var cornerRadius by setting<Double>("corner_radius")
 
@@ -242,13 +260,14 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
         values["rules"] = { view: View -> decide(view)?.values }
     }
 
-    /** A rule: floating (with a size and a place: 0..1 of the screen), how opaque, blur behind it. */
+    /** A rule: floating (with a size and a place: 0..1 of the screen), how opaque, blur behind it, no focus border (focus = false). */
     fun rule(
         float: Boolean? = null,
         floatSize: Pair<Int, Int>? = null,
         floatPos: Pair<Double, Double>? = null,
         opacity: Double? = null,
         blur: Blur? = null,
+        focus: Boolean? = null,
     ): Rule = Rule(
         buildMap {
             float?.let { put("float", it) }
@@ -256,6 +275,7 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
             floatPos?.let { put("float_pos", listOf(it.first, it.second)) }
             opacity?.let { put("opacity", it) }
             blur?.let { put("blur", mapOf("radius" to it.radius, "passes" to it.passes)) }
+            focus?.let { put("focus", it) }
         },
     )
 }
@@ -299,6 +319,9 @@ class PanelSection internal constructor(values: MutableMap<String, Any?>) : Sect
     /** A program to show instead of newm's own panel (newm-panel-basic, ...). */
     var cmd by setting<String>("cmd")
 
+    /** lock { }: a screen locker of the session-lock kind to start instead (swaylock, gtklock, hyprlock). */
+    var program by setting<String>("program")
+
     /** Its size: parts of the screen (0..1). */
     var w by setting<Double>("w")
     var h by setting<Double>("h")
@@ -338,6 +361,9 @@ class EnergySection internal constructor(values: MutableMap<String, Any?>) : Sec
     /** Seconds without input until: dimmed, locked, suspended. */
     var idleTimes by setting<List<Int>>("idle_times")
     var suspendCommand by setting<String>("suspend_command")
+
+    /** Seconds without input until the screens go dark (they come back with a key or the mouse; newm issue 159). */
+    var screensOffAfter by setting<Int>("screens_off_after")
 
     /**
      * Told what happens: "idle", "idle-lock", "idle-presuspend", "idle-suspend", "active",

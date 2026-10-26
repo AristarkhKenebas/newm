@@ -13,7 +13,7 @@ class KtsConfigTest {
     fun `the default config kts gives newm's settings`() {
         val file = Files.createTempFile("config", ".kts")
         try {
-            KtsConfigTest::class.java.getResourceAsStream("/newm/config.kts")!!.use { Files.copy(it, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+            KtsConfigTest::class.java.getResourceAsStream("/newm/templates/config.kts")!!.use { Files.copy(it, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
             val compiled = KtsConfig.compile(file)
             assertEquals(emptyList(), compiled.problems)
             val config = NewmConfig(Caulis())
@@ -48,5 +48,26 @@ class KtsConfigTest {
         } finally {
             Files.deleteIfExists(file)
         }
+    }
+
+    @Test
+    fun `the examples of the documentation compile`() {
+        val docs = java.nio.file.Path.of("docs")
+        val pages = Files.walk(docs).use { files -> files.filter { it.toString().endsWith(".md") }.sorted().toList() }
+        assertTrue(pages.size >= 18, "${pages.size} pages")
+        val problems = ArrayList<String>()
+        for (page in pages) {
+            val blocks = Regex("```kotlin\n(.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(Files.readString(page)).map { it.groupValues[1] }.toList()
+            if (blocks.isEmpty()) continue
+            val file = Files.createTempFile("doc", ".kts")
+            try {
+                // All of a page's examples as one configuration, each in its own block (the names of one stay its own).
+                Files.writeString(file, blocks.joinToString("\n") { "run {\n$it\n}" })
+                problems += KtsConfig.compile(file).problems.map { "$page: $it" }
+            } finally {
+                Files.deleteIfExists(file)
+            }
+        }
+        assertEquals(emptyList(), problems)
     }
 }

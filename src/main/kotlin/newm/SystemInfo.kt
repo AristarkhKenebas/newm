@@ -91,3 +91,9 @@ object SystemInfo {
     /** The user's name. */
     fun user(): String = System.getProperty("user.name")
 }
+
+/** The system's texts by name, for config.json's and config.lua's bars. */
+val SYSTEM_TEXTS: Map<String, () -> String> = mapOf(
+    "wifi" to SystemInfo::wifi, "cpu" to SystemInfo::cpu, "memory" to SystemInfo::memory, "temperature" to SystemInfo::temperature,
+    "battery" to SystemInfo::battery, "date" to { SystemInfo.date() }, "time" to { SystemInfo.time() }, "user" to SystemInfo::user,
+)

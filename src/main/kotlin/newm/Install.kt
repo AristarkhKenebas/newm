@@ -31,13 +31,14 @@ fun installSession(): Int {
         Type=Application
         DesktopNames=newm
     """.trimIndent() + "\n"
-    val config = Files.createTempFile("newm-config", ".kts")
+    // (newm's templates, for /etc/newm: what new users start from; those there already stay.)
+    val templates = Files.createTempDirectory("newm-templates")
     val desktop = Files.createTempFile("newm", ".desktop")
     try {
-        Install::class.java.getResourceAsStream("/newm/config.kts")!!.use { Files.copy(it, config, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+        Templates.copyTo(templates)
         Files.writeString(desktop, session)
         val script = "install -Dm644 '$desktop' '$SESSION_FILE' && " +
-            "if [ ! -e /etc/newm/config.kts ]; then install -Dm644 '$config' /etc/newm/config.kts; fi"
+            Templates.FILES.joinToString(" && ") { name -> "{ [ -e '/etc/newm/$name' ] || install -Dm644 '$templates/$name' '/etc/newm/$name'; }" }
         val root = (Files.getAttribute(Path.of("/proc/self"), "unix:uid") as Int) == 0
         val command = when {
             root -> listOf("sh", "-c", script)
@@ -53,13 +54,21 @@ fun installSession(): Int {
         }
         return status
     } finally {
-        Files.deleteIfExists(config)
+        templates.toFile().deleteRecursively()
         Files.deleteIfExists(desktop)
     }
 }
 
 // (A class for the resources.)
 private object Install
+
+/**
+ * The terminal to open: $TERMINAL, else the first of the usual ones that is installed
+ * (newm used to expect alacritty).
+ */
+fun defaultTerminal(): String = System.getenv("TERMINAL")?.takeIf { it.isNotBlank() }
+    ?: listOf("alacritty", "foot", "kitty", "wezterm", "ghostty", "gnome-terminal", "konsole", "xfce4-terminal", "xterm").firstOrNull(::onPath)
+    ?: "alacritty"
 
 internal fun onPath(program: String) = (System.getenv("PATH") ?: "/usr/bin").split(':').any { Files.isExecutable(Path.of(it, program)) }
 
@@ -71,8 +80,38 @@ const val USAGE = """newm — a Wayland compositor: windows on an endless wall, 
 
   newm                     start newm (on a text console: the whole screen; inside a Wayland session: a window)
   newm cmd <command>       talk to the running newm: lock, debug, config, update-config, open-launcher, clean, ...
-  newm install-session     add newm to the login screen's sessions (and /etc/newm/config.kts)
+  newm install-session     add newm to the login screen's sessions (and /etc/newm: the configuration new users get)
   newm --version
 
 Your configuration: ~/.config/newm/config.kts (made the first time newm starts; saved changes apply at once).
-The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/guide.md"""
+The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/README.md"""
+
+/** newm's templates (in newm itself): what a user gets the first time, and /etc/newm. */
+object Templates {
+    val FILES = listOf(
+        "config.kts", "README.md", "examples/config.lua", "examples/config.json",
+        "bars/classic.kts", "bars/waybar/config.jsonc", "bars/waybar/style.css",
+    )
+
+    /** Writes the templates into [dir] (what is there already stays). */
+    fun copyTo(dir: Path) {
+        for (name in FILES) {
+            val target = dir.resolve(name)
+            if (Files.exists(target)) continue
+            Files.createDirectories(target.parent)
+            Templates::class.java.getResourceAsStream("/newm/templates/$name")!!.use { Files.copy(it, target) }
+        }
+    }
+
+    /** Copies the files of [from] (the system's /etc/newm) into [to] (what is there already stays). */
+    fun copyFolder(from: Path, to: Path) {
+        Files.walk(from).use { files ->
+            for (file in files.filter(Files::isRegularFile).toList()) {
+                val target = to.resolve(from.relativize(file).toString())
+                if (Files.exists(target)) continue
+                Files.createDirectories(target.parent)
+                Files.copy(file, target)
+            }
+        }
+    }
+}

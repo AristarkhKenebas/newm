@@ -24,7 +24,6 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
     private var process: Process? = null
     private var toldMissing = false
 
-    private fun onPath(program: String) = (System.getenv("PATH") ?: "/usr/bin").split(':').any { java.nio.file.Files.isExecutable(java.nio.file.Path.of(it, program)) }
 
     val pid: Long? get() = process?.pid()
 
@@ -32,7 +31,7 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
         process = null
         val cmd = confCmds.getValue(panel)() ?: return
         val cwd = confCwds.getValue(panel)()
-        log.info { "Starting $cmd in $cwd" }
+        log.info { "Starting $cmd${cwd?.let { " in $it" }.orEmpty()}" }
         // (Inside the compositor: its environment, its socket.)
         process = spawn(cmd.split(" "), cwd?.let { java.nio.file.Path.of(it) })
     }
@@ -46,7 +45,7 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
             return
         }
         if (process?.isAlive != true) {
-            log.info { "Subprocess for panel $panel died" }
+            if (process != null) log.info { "Subprocess for panel $panel died" }
             start()
         }
     }

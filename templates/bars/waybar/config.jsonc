@@ -1,0 +1,30 @@
+// waybar for newm, in newm's look. Copy this folder to ~/.config/waybar/ and in
+// ~/.config/newm/config.kts turn newm's own bar off and start waybar:
+//
+//   panels {
+//       topBar { enabled = false }
+//       bar { cmd = "waybar" }
+//   }
+//
+// Windows make way for it by themselves (its exclusive zone).
+{
+    "layer": "bottom",
+    "position": "top",
+    "height": 30,
+    "margin-top": 6,
+    "margin-left": 10,
+    "margin-right": 10,
+    "spacing": 6,
+    "modules-left": ["clock#date"],
+    "modules-center": ["clock"],
+    "modules-right": ["network", "cpu", "memory", "temperature", "pulseaudio", "battery", "tray"],
+    "clock": { "format": "{:%H:%M}", "tooltip-format": "{:%A, %d %B %Y}" },
+    "clock#date": { "format": "{:%d %b %Y}" },
+    "network": { "format-wifi": "{essid} {signalStrength}%", "format-ethernet": "wired", "format-disconnected": "offline" },
+    "cpu": { "format": "cpu {usage}%", "interval": 2 },
+    "memory": { "format": "mem {used:0.1f}G" },
+    "temperature": { "format": "{temperatureC}°C" },
+    "pulseaudio": { "format": "vol {volume}%", "format-muted": "muted", "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle" },
+    "battery": { "format": "bat {capacity}%", "format-charging": "bat {capacity}% +" },
+    "tray": { "spacing": 8 }
+}

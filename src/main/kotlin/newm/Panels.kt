@@ -338,7 +338,7 @@ data class DesktopApp(val name: String, val comment: String, val command: String
             } else {
                 // %f, %U and the like: nothing to open, so left out.
                 var command = exec.replace(Regex("%[fFuUdDnNickvm]"), "").trim()
-                if (entry["Terminal"] == "true") command = "${System.getenv("TERMINAL") ?: "alacritty"} -e $command"
+                if (entry["Terminal"] == "true") command = "${defaultTerminal()} -e $command"
                 DesktopApp(entry["Name"] ?: file.fileName.toString().removeSuffix(".desktop"), entry["Comment"] ?: entry["GenericName"] ?: "", command, entry["Keywords"] ?: "")
             }
         } catch (_: Exception) {

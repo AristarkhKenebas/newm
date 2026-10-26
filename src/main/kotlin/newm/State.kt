@@ -94,6 +94,9 @@ class WorkspaceState(
     var bottomExcluded: Double = 0.0,
     // Non-null indicates we are in overview mode
     var stateBeforeOverview: BeforeOverview? = null,
+    // Room bars at the left and right edges keep (newm had top and bottom only).
+    var leftExcluded: Double = 0.0,
+    var rightExcluded: Double = 0.0,
 ) {
     internal var viewStates: MutableMap<Int, ViewState> = LinkedHashMap()
 
@@ -111,16 +114,23 @@ class WorkspaceState(
 
     // --- Copy / Update
 
+    /** The width tiles share: the workspace's, but for side bars. */
+    fun usableWidth(): Double = ws.width - leftExcluded - rightExcluded
+
+    /** The height tiles share: the workspace's, but for bars at the top and bottom. */
+    fun usableHeight(): Double = ws.height - topExcluded - bottomExcluded
+
     fun copy(
         i: Double = this.i, j: Double = this.j, size: Double = this.size, sizeOrigin: Double? = this.sizeOrigin,
         stateBeforeFullscreen: BeforeFullscreen? = this.stateBeforeFullscreen,
         topBarDy: Double = this.topBarDy, bottomBarDy: Double = this.bottomBarDy,
         topExcluded: Double = this.topExcluded, bottomExcluded: Double = this.bottomExcluded,
         stateBeforeOverview: BeforeOverview? = this.stateBeforeOverview,
+        leftExcluded: Double = this.leftExcluded, rightExcluded: Double = this.rightExcluded,
     ): WorkspaceState {
         val res = WorkspaceState(
             ws, i, j, size, sizeOrigin, ArrayList(intermediateRows), ArrayList(intermediateCols), stateBeforeFullscreen,
-            topBarDy, bottomBarDy, topExcluded, bottomExcluded, stateBeforeOverview,
+            topBarDy, bottomBarDy, topExcluded, bottomExcluded, stateBeforeOverview, leftExcluded, rightExcluded,
         )
         res.viewStates = viewStates.mapValuesTo(LinkedHashMap()) { it.value.copy() }
         return res
@@ -221,6 +231,10 @@ class WorkspaceState(
     fun validateBars(wm: Layout, wmState: LayoutState) {
         topExcluded = 0.0
         bottomExcluded = 0.0
+        // Bars at the sides (an exclusive zone at the left or right): out of the way but in fullscreen.
+        val (left, right) = wm.barWidths(ws)
+        leftExcluded = if (isFullscreen()) 0.0 else left
+        rightExcluded = if (isFullscreen()) 0.0 else right
 
         if (topBarVn() || topBarVf() || bottomBarVn() || bottomBarVf()) {
             var (topBarHeight, bottomBarHeight) = wm.barHeights(ws, wmState)
@@ -483,7 +497,8 @@ class WorkspaceState(
         size == other.size && sizeOrigin == other.sizeOrigin && intermediateRows == other.intermediateRows &&
         intermediateCols == other.intermediateCols && stateBeforeFullscreen == other.stateBeforeFullscreen &&
         topBarDy == other.topBarDy && bottomBarDy == other.bottomBarDy && topExcluded == other.topExcluded &&
-        bottomExcluded == other.bottomExcluded && stateBeforeOverview == other.stateBeforeOverview && viewStates == other.viewStates
+        bottomExcluded == other.bottomExcluded && leftExcluded == other.leftExcluded &&
+        rightExcluded == other.rightExcluded && stateBeforeOverview == other.stateBeforeOverview && viewStates == other.viewStates
 
     override fun hashCode() = java.util.Objects.hash(ws.handle, i, j, size)
 }

@@ -15,7 +15,10 @@ import kotlin.math.max
 
 private val log = Logger("layout")
 
-private val confBackgroundPath = configuredValue<String?>("background.path", null)
+// newm's own wallpaper unless another is named; "" for none (a wallpaper program instead, swaybg).
+private val confScreensOffAfter = configuredValue("energy.screens_off_after", 0)
+private val confLockProgram = configuredValue<String?>("panels.lock.program", null)
+private val confBackgroundPath = configuredValue<String?>("background.path", "resource:wallpaper.jpg")
 private val confSendFullscreenToViews = configuredValue("view.send_fullscreen", true)
 private val confKeyBindings = configuredValue<(Layout) -> List<Pair<String, () -> Unit>>>("key_bindings") { emptyList() }
 private val confAnimT = configuredValue("anim_time", .3)
@@ -275,6 +278,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     var layoutDown = LayoutDown(0.0)
         private set
 
+    // The monitors' room left by bar programs, as last seen.
+    private var lastUsable: List<dev.caulis.geometry.Rect>? = null
+
     init {
         caulis.director = director()
         caulis.onKey { key -> onKeyInput(key) }
@@ -288,6 +294,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onMonitorRemoved { onLayoutChange() }
         caulis.onSleep { onSleep() }
         caulis.onWake { onWakeup() }
+        // Idle: Caulis says when nobody is there (programs that keep the screen on hold it off),
+        // newm counts the seconds and goes through energy.idle_times.
+        caulis.onIdle(1, resume = { idleSince = null; onIdle(0.0, false) }) { idleSince = now() - 1.0 }
+        caulis.onStart { caulis.every(1000) { idleSince?.let { onIdle(now() - it, false) } } }
         caulis.onStart { main() }
     }
 
@@ -354,12 +364,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 val area = place.clip?.let { place.rect.intersect(it) } ?: place.rect
                 if (area != null) canvas.blur(area, radius = place.cornerRadius ?: 0f, size = size, passes = passes)
             }
-            if (focusBorders.currentView?.window === window) focusBorders.draw(canvas)
+            val focused = focusBorders.currentView
+            if (focused?.window === window && focused.wantsFocusBorder) focusBorders.draw(canvas)
         }
 
         // Asked once a frame: the layout's own state of this frame (pywm processed it every frame).
         override fun animating(now: Long): Boolean {
             layoutDown = process(reducer(state))
+            // A bar program came, went or changed its height: windows make way anew.
+            val usable = desktopOrNull()?.monitors?.map { it.usableArea }
+            if (usable != lastUsable) {
+                if (lastUsable != null) animateTo({ s -> null to s.copy() }, confAnimT())
+                lastUsable = usable
+            }
             return constantDamage > 0 || animating || focusBorders.animating || views.values.any { it.animating } ||
                 topBars.any { it.animating } || bottomBars.any { it.animating }
         }
@@ -470,7 +487,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
         // The wallpaper (newm's background.path; an output may name its own: one picture for all
         // here), read on a thread of its own: shown when it is ready.
-        val path = confBackgroundPath()
+        val path = confBackgroundPath()?.takeIf { it.isNotBlank() }
         if (wallpaper?.first != path) {
             wallpaper?.second?.texture?.close()
             wallpaper = path to null
@@ -675,10 +692,28 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         setupWidgets()
     }
 
-    /** The heights of the bar panels on [ws] (programs of newm's panels: "bar", "top_bar", "bottom_bar"). */
+    /** The widths of the bars at the left and right edges of [ws] (their exclusive zones). */
+    fun barWidths(ws: Workspace): Pair<Double, Double> {
+        var left = 0.0
+        var right = 0.0
+        for (m in ws.outputs.filterNotNull()) {
+            left = max(left, (m.usableArea.x - m.area.x).toDouble())
+            right = max(right, (m.area.right - m.usableArea.right).toDouble())
+        }
+        return left to right
+    }
+
+    /**
+     * The heights of the bars on [ws]: room bar programs keep at a monitor's edge (waybar,
+     * ironbar, ...: their exclusive zone), and newm's own panel programs ("bar", "top_bar", "bottom_bar").
+     */
     fun barHeights(ws: Workspace, state: LayoutState): Pair<Double, Double> {
         var top = 0.0
         var bottom = 0.0
+        for (m in ws.outputs.filterNotNull()) {
+            top = max(top, (m.usableArea.y - m.area.y).toDouble())
+            bottom = max(bottom, (m.area.bottom - m.usableArea.bottom).toDouble())
+        }
         for (p in panels(ws)) {
             val up = p.upState ?: continue
             if (p.panel !in listOf("bar", "top_bar", "bottom_bar")) continue
@@ -823,22 +858,56 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // --- idle, sleep -----------------------------------------------------------------------------
 
+    // Since when nobody has been there (null: someone is), and the stage of idle_times reached.
+    private var idleSince: Double? = null
+    private var idleStage = 0
+    private var screensOff = false
+
+    /**
+     * [elapsed] seconds without input (0: someone is back). Each stage of energy.idle_times
+     * happens once until someone is back: newm called them again and again, locking a locked
+     * screen over and over (newm issue 98).
+     */
     fun onIdle(elapsed: Double, idleInhibited: Boolean) {
         val inhibited = idleInhibited || idleInhibitUser
-        if (inhibited && elapsed > 0) return
+        if (elapsed == 0.0 && screensOff) {
+            screensOff = false
+            caulis.run("dpms on")
+        }
+        val offAfter = confScreensOffAfter()
+        if (elapsed > 0 && offAfter > 0 && elapsed > offAfter && !screensOff && !inhibited) {
+            log.info { "Idle for ${elapsed.toInt()} s: screens off" }
+            screensOff = true
+            caulis.run("dpms off")
+        }
+        if (elapsed == 0.0) {
+            if (idleStage > 0) confIdleCallback()("active")
+            idleStage = 0
+            return
+        }
+        if (inhibited) return
         val times = confIdleTimes()
-        when {
-            elapsed == 0.0 -> confIdleCallback()("active")
-            times.size > 2 && elapsed > times[2] -> {
+        val stage = when {
+            times.size > 2 && elapsed > times[2] -> 4
+            times.size > 2 && elapsed > times[2] - 5.0 -> 3
+            times.size > 1 && elapsed > times[1] -> 2
+            times.isNotEmpty() && elapsed > times[0] -> 1
+            else -> 0
+        }
+        if (stage <= idleStage) return
+        idleStage = stage
+        log.info { "Idle for ${elapsed.toInt()} s: stage $stage" }
+        when (stage) {
+            4 -> {
                 confIdleCallback()("idle-suspend")
                 caulis.launch(confSuspendCommand())
             }
-            times.size > 2 && elapsed > times[2] - 5.0 -> confIdleCallback()("idle-presuspend")
-            times.size > 1 && elapsed > times[1] -> {
+            3 -> confIdleCallback()("idle-presuspend")
+            2 -> {
                 confIdleCallback()("idle-lock")
                 ensureLocked()
             }
-            times.isNotEmpty() && elapsed > times[0] -> confIdleCallback()("idle")
+            1 -> confIdleCallback()("idle")
         }
     }
 
@@ -969,7 +1038,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         activeWorkspacePair = activeWorkspacePair.first to ws
     }
 
-    /** newm's commands (newm-cmd): lock, config, update-config, debug, inhibit-idle, finish-inhibit-idle, close-launcher, clean, unlock. */
+    /** newm's commands (newm-cmd): restart (newm's own), lock, config, update-config, debug, inhibit-idle, finish-inhibit-idle, close-launcher, clean, unlock. */
     fun command(cmd: String, arg: String? = null): String? {
         log.trace { "Received command $cmd" }
         return when (cmd) {
@@ -997,6 +1066,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
             "close-launcher" -> {
                 if (overlay is LauncherOverlay) exitOverlay()
+                null
+            }
+            "restart" -> {
+                // For dev/newm-dev: newm ends, and the script starts it again (a new build).
+                restartRequested = true
+                terminate()
                 null
             }
             "clean" -> {
@@ -1060,6 +1135,20 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             safelyEnterMode(LOCKED_MODE)
             val lockScreen = panels().filter { it.panel == "lock" }
             if (lockScreen.isNotEmpty()) lockScreen[0].focus() else panelsUi.locked()
+        }
+        // A locker of one's own (swaylock, gtklock: ext-session-lock), which Caulis shows (newm issue 154).
+        confLockProgram()?.takeIf { it.isNotBlank() }?.let { program ->
+            if (!caulis.desktop.locked) {
+                log.info { "Locking with $program" }
+                caulis.launch(program)
+            }
+            if (dim) confIdleCallback()("lock")
+            return
+        }
+        // Locked already: nothing more (a second lock asked for the password again, newm issue 98).
+        if (state.lockPerc >= 1.0) {
+            if (dim) confIdleCallback()("lock")
+            return
         }
         authBackend.lock()
         animateTo({ s -> (if (anim) null else s.copy(lockPerc = 1.0, backgroundOpacity = 0.5)) to s.copy(lockPerc = 1.0, backgroundOpacity = 0.5) }, confAnimT(), ::focusLock)

@@ -8,7 +8,7 @@
 // zoom out (Logo+u, four fingers up) to see more of it, in (Logo+n) to see less. New windows
 // take the next free tile. Logo alone shows everything (the overview).
 //
-// The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/guide.md
+// The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/README.md
 
 // --- Looks -----------------------------------------------------------------------------------
 
@@ -66,7 +66,8 @@ panels {
     // A bar at the bottom too:
     // bottomBar { enabled = true; texts { listOf(user(), "newm") } }
 
-    // Or a bar program of your own instead (turn topBar off then):
+    // Or a bar program of your own instead (turn topBar off then; a waybar in newm's look
+    // is in bars/waybar of this folder):
     // bar { cmd = "waybar"; visibleNormal = true; visibleFullscreen = false }
 
     lock {
@@ -84,6 +85,7 @@ panels {
 keyboard {
     layouts = "us"                          // "us,ru"
     // options = "grp:alt_shift_toggle"     // switch layouts with Alt+Shift
+    // numLock = true                       // Num Lock on from the start
 }
 
 input {
@@ -93,7 +95,7 @@ input {
     // xwayland = true                      // X11 programs
 }
 
-// cursor { theme = "Adwaita"; size = 24 }
+// cursor { theme = "Adwaita"; size = 24; hideAfter = 5 }   // hideAfter: seconds the mouse is still
 
 // A monitor of its own (connectors: `newm cmd debug`):
 // output("eDP-1") { scale = 1.25 }
@@ -102,9 +104,9 @@ input {
 // --- Keys ------------------------------------------------------------------------------------
 // "L" is the Logo (Super) key, "S" Shift, "C" Ctrl, "A" Alt: "L-S-h" is Logo+Shift+h, and
 // "L-H" means the same. "L-" is Logo tapped alone. Inside { } the layout is at hand: move(...),
-// toggleOverview(), ... (all of them: the guide).
+// toggleOverview(), ... (all of them: docs/en/settings.md).
 
-val terminal = "alacritty"
+val terminal = defaultTerminal()             // $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
 
 keys {
     // Programs
@@ -182,6 +184,7 @@ onStartup {
 
 energy {
     idleTimes = listOf(120, 300, 600)       // seconds without input: dim, lock, suspend
+    screensOffAfter = 330                   // and the screens go dark (0: never)
     // suspendCommand = "systemctl suspend"
 }
 // lockOnWakeup = true

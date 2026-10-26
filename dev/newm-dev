@@ -1,0 +1,108 @@
+#!/bin/sh
+# newm from its sources, for working on newm inside newm.
+#
+#   dev/newm-dev                   run newm (from a text console, or the "newm (dev)" login session)
+#   dev/newm-dev rebuild           inside it: build, and on success restart newm with the new build
+#   dev/newm-dev install-session   add "newm (dev)" to the login screen's sessions
+#
+# Safe to break things:
+#   - a build with mistakes changes nothing: the running newm stays, the mistakes are in the terminal;
+#   - a new build that crashes at the start is replaced by the build before it, and newm says so;
+#   - the configuration (~/.config/newm) reloads on save as always;
+#   - a debugger can attach at localhost:5005 (IntelliJ: Run > Attach to Process), and
+#     "Reload Changed Classes" swaps changed method bodies into the running newm: no restart at all.
+#
+# Builds live in ~/.cache/newm-dev (good: the one running, good.prev: the one before).
+# Caulis is built from ../caulis when it is there, so library changes come along too.
+set -u
+root=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/newm-dev"
+good="$cache/good"
+log="$cache/newm-dev.log"
+mkdir -p "$cache"
+
+say() { echo "newm-dev: $*"; echo "$(date '+%F %T') $*" >> "$log"; }
+
+# Builds newm into $good (the one before kept as good.prev). Fails, changing nothing, on a mistake.
+build() {
+    local_caulis=""
+    [ -d "$root/../caulis/caulis-core" ] && local_caulis="-Pcaulis.local=true"
+    (cd "$root" && ./gradlew installDist $local_caulis --console=plain -q) || return 1
+    rm -rf "$good.new" && cp -r "$root/build/install/newm" "$good.new" || return 1
+    rm -rf "$good.prev"
+    [ -d "$good" ] && mv "$good" "$good.prev"
+    mv "$good.new" "$good"
+}
+
+case "${1:-}" in
+    rebuild)
+        say "building..."
+        if build; then
+            say "built; restarting newm"
+            touch "$cache/fresh"
+            "$good/bin/newm" cmd restart
+        else
+            say "the build failed: newm stays as it is (the mistakes are above)"
+            exit 1
+        fi
+        exit 0
+        ;;
+    install-session)
+        desktop="$cache/newm-dev.desktop"
+        cat > "$desktop" <<DESKTOP
+[Desktop Entry]
+Name=newm (dev)
+Comment=newm from its sources in $root
+Exec=$root/dev/newm-dev
+Type=Application
+DesktopNames=newm
+DESKTOP
+        if command -v sudo >/dev/null 2>&1 && [ -t 0 ]; then as=sudo; else as=pkexec; fi
+        $as install -Dm644 "$desktop" /usr/share/wayland-sessions/newm-dev.desktop && say "\"newm (dev)\" is in the login screen now"
+        exit $?
+        ;;
+    "") ;;
+    *) sed -n '2,20p' "$0"; exit 2 ;;
+esac
+
+# The session: newm, started again after `newm-dev rebuild`, rolled back after a crashing build.
+if [ ! -d "$good" ]; then
+    say "first build..."
+    build || { say "the build failed"; exit 1; }
+fi
+
+# `newm` in terminals inside is this build too (newm cmd ...).
+export PATH="$good/bin:$PATH"
+# The debugger's port, if it is free (another newm holding it must not keep this one from starting).
+if ss -ltn 2>/dev/null | grep -q '127.0.0.1:5005 '; then
+    say "port 5005 is taken: no debugger this time"
+else
+    export NEWM_OPTS="${NEWM_OPTS:-} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005"
+fi
+notice=""
+quick_crashes=0
+while :; do
+    started=$(date +%s)
+    NEWM_NOTICE="$notice" "$good/bin/newm"
+    code=$?
+    notice=""
+    ran=$(( $(date +%s) - started ))
+    fresh=false
+    [ -e "$cache/fresh" ] && fresh=true && rm -f "$cache/fresh"
+    case $code in
+        0) say "newm ended (logged out)"; exit 0 ;;
+        3) say "restarting with the new build"; quick_crashes=0; [ "$fresh" = true ] && touch "$cache/fresh-running" ;;
+        *)
+            say "newm stopped with $code after ${ran}s (the log: ~/.local/state/newm/newm.log.old)"
+            if [ "$ran" -lt 20 ] && [ -e "$cache/fresh-running" ] && [ -d "$good.prev" ]; then
+                rm -rf "$good.broken" && mv "$good" "$good.broken" && mv "$good.prev" "$good"
+                notice="The new build crashed at the start: the one before runs. Its log: ~/.local/state/newm/newm.log.old"
+                say "rolled back to the build before"
+            fi
+            if [ "$ran" -lt 20 ]; then quick_crashes=$((quick_crashes + 1)); else quick_crashes=0; fi
+            [ "$quick_crashes" -ge 3 ] && { say "newm crashes at every start: giving up"; exit 1; }
+            ;;
+    esac
+    # A build counts as tried once it ran a while.
+    [ "$code" != 3 ] && rm -f "$cache/fresh-running"
+done

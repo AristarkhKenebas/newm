@@ -12,6 +12,12 @@ private val log = Logger("view")
 private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 private val confPadding = configuredValue("view.padding", 6.0)
 private val confFullscreenPadding = configuredValue("view.fullscreen_padding", 0.0)
+// Windows without the focus a little see-through (1: not at all; newm issue 139).
+private val confUnfocusedOpacity = configuredValue("view.unfocused_opacity", 1.0)
+// Windows fade in when they open and out when they close.
+private val confFade = configuredValue("view.fade", true)
+// The first window of an empty workspace takes the whole screen (newm showed it as a quarter, zoomed out).
+private val confFillFirst = configuredValue("view.fill_first", true)
 private val confBorderWsSwitch = configuredValue("view.border_ws_switch", 10.0)
 private val confRulesCallback = configuredValue<(View) -> Map<String, Any?>?>("view.rules") { null }
 private val confFloatingMinSize = configuredValue("view.floating_min_size", true)
@@ -54,6 +60,9 @@ class Up(window: Window, focused: Boolean) {
 class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDown>(), Animatable {
 
     private var rules: Map<String, Any?> = emptyMap()
+
+    /** False if its rule says "focus": false (no focus border around it). */
+    val wantsFocusBorder: Boolean get() = rules["focus"] != false
 
     /** Blur behind it, from its rule: (how far it spreads, passes), or null. */
     val blur: Pair<Int, Int>?
@@ -242,6 +251,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         }
 
         result.opacity = opacity * (if (result.lockEnabled && !state.final) 1.0 else state.backgroundOpacity)
+        if (!isFocused()) result.opacity *= confUnfocusedOpacity()
         result.box = Box(result.box.x + ws.posX, result.box.y + ws.posY, result.box.w, result.box.h)
         result.logicalBox = Box(result.box.x + up.offset.first * size / wsState.size, result.box.y + up.offset.second * size / wsState.size, result.box.w, result.box.h)
 
@@ -309,7 +319,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
      * with correct size. The view may still turn out floating when it maps.
      */
     private fun initTiled(up: Up, ws: Workspace): ViewDown {
-        val wsState = wm.state.workspaceState(ws)
+        val wsState = forFirstWindow(wm.state.workspaceState(ws))
         val minW = up.sizeConstraints[0]
         val minH = up.sizeConstraints[2]
         var w = 1.0
@@ -321,7 +331,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             if (result.size.second < minH) h += 1
         }
         result.box = Box.ZERO
-        result.floating = null
+        // Tiled from the first configure (pywm left it open): programs that size themselves by
+        // cells (foot, kitty) then take the tile's size exactly instead of the nearest cell.
+        result.floating = false
         return result
     }
 
@@ -348,7 +360,8 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         var j = selfState.j
         var w = selfState.w
         var h = selfState.h
-        val usableHeight = ws.height - wsState.topExcluded - wsState.bottomExcluded
+        val usableHeight = wsState.usableHeight()
+        val usableWidth = wsState.usableWidth()
 
         var stackLen = 1
         if (!wsState.isFullscreen()) {
@@ -356,18 +369,19 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             stackLen = selfState.stackData.length
             if (stackLen > 1) {
                 i += 0.05 * stackIdx / (stackLen - 1)
-                j += 0.05 * ws.width / usableHeight * stackIdx / (stackLen - 1)
+                j += 0.05 * usableWidth / usableHeight * stackIdx / (stackLen - 1)
                 w -= 0.05
-                h -= 0.05 * ws.width / usableHeight
+                h -= 0.05 * usableWidth / usableHeight
             }
         }
 
         var x = i - wsState.i
         var y = j - wsState.j
-        x *= ws.width / wsState.size
+        x *= usableWidth / wsState.size
         y *= usableHeight / wsState.size
-        w *= ws.width / wsState.size
+        w *= usableWidth / wsState.size
         h *= usableHeight / wsState.size
+        x += wsState.leftExcluded
         y += wsState.topExcluded
 
         result.cornerRadius /= max(1.0, wsState.size / 2.0)
@@ -390,9 +404,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         val size = wsState.sizeOrigin ?: wsState.size
         if (stackLen > 1) {
             wForSize -= 0.05
-            hForSize -= 0.05 * ws.width / usableHeight
+            hForSize -= 0.05 * usableWidth / usableHeight
         }
-        wForSize *= ws.width / size
+        wForSize *= usableWidth / size
         hForSize *= usableHeight / size
         wForSize -= 2 * paddingForSize
         hForSize -= 2 * paddingForSize
@@ -433,6 +447,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         result.box = Box(x, y, w, h)
 
         result.opacity = opacity * (if (result.lockEnabled && !state.final) 1.0 else state.backgroundOpacity)
+        if (!isFocused()) result.opacity *= confUnfocusedOpacity()
+        // Opening and closing (no size yet, or none any more): faded out too, not only shrunk (newm issue 183).
+        if (confFade() && (selfState.w == 0.0 || selfState.h == 0.0)) result.opacity = 0.0
         result.box = Box(result.box.x + ws.posX, result.box.y + ws.posY, result.box.w, result.box.h)
 
         if (selfState.swallowed != null) {
@@ -456,8 +473,8 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         var minW = (up?.sizeConstraints?.get(0) ?: 0).toDouble()
         var minH = (up?.sizeConstraints?.get(2) ?: 0).toDouble()
         val size = wsState.sizeOrigin ?: wsState.size
-        minW *= size / ws.width
-        minH *= size / (ws.height - wsState.topExcluded - wsState.bottomExcluded)
+        minW *= size / wsState.usableWidth()
+        minH *= size / wsState.usableHeight()
 
         val w = max(ceil(minW), 1)
         val h = max(ceil(minH), 1)
@@ -467,7 +484,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             wsState.isInOverview() -> state.withOverviewSet(false, onlyWorkspace = ws)
             else -> state.copy()
         }
-        val referenceWsState = referenceState.workspaceState(ws)
+        val referenceWsState = forFirstWindow(referenceState.workspaceState(ws))
 
         val (i1, j1) = wm.placeInitial(ws, referenceWsState, w, h)
 
@@ -488,6 +505,12 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         focus()
         wm.focusBorders.updateFocus(this, state1 to state2)
         return state1 to state2
+    }
+
+    // The workspace as the first window sees it: zoomed in on one tile, if it is empty.
+    private fun forFirstWindow(wsState: WorkspaceState): WorkspaceState {
+        if (!confFillFirst() || wsState.viewStates.values.any { it.isTiled } || wsState.isInOverview() || wsState.isFullscreen()) return wsState
+        return wsState.copy(i = 0.0, j = 0.0, size = 1.0, sizeOrigin = null)
     }
 
     // --- Init and map
@@ -647,8 +670,13 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     fun damage() = wm.damage()
 
     // Asks the program again for the size it was asked first.
+    // (Asked again now and then, not every frame: each configure is one more for the program to answer.)
+    private var lastForced = 0.0
+
     private fun forceSize() {
         val size = initialState?.size ?: return
+        if (now() - lastForced < .1) return
+        lastForced = now()
         if (size.first > 0 && size.second > 0) window.configure(size.first, size.second)
     }
 
@@ -672,8 +700,8 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             val floatPos = state.i + 0.1 to state.j - 0.1
             return state to state.copy(isTiled = false, floatSize = floatSize, floatPos = floatPos)
         }
-        val w = max(1, pyRound((state.floatSize.first + 2 * padding) / ws.width * wsState.size))
-        val h = max(1, pyRound((state.floatSize.second + 2 * padding) / (ws.height - wsState.topExcluded - wsState.bottomExcluded) * wsState.size))
+        val w = max(1, pyRound((state.floatSize.first + 2 * padding) / wsState.usableWidth() * wsState.size))
+        val h = max(1, pyRound((state.floatSize.second + 2 * padding) / wsState.usableHeight() * wsState.size))
         val i = pyRound(state.floatPos.first)
         val j = pyRound(state.floatPos.second)
         return state to state.copy(isTiled = true, i = i.toDouble(), j = j.toDouble(), w = w.toDouble(), h = h.toDouble())

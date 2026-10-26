@@ -28,6 +28,11 @@ fun main(args: Array<String>) {
         logFile = logPath()
         // No title bars: newm's look (a config may want programs' own: titleBars = true).
         titleBars = dev.caulis.core.TitleBars.NONE
+        // Notices (a mistake in the configuration, ...) as neat cards at the top.
+        noticeStyle = dev.caulis.core.NoticeStyle.cards()
+        // Only for newm itself (dev/newm-dev's debugger port, its notice): not for programs started inside.
+        environment["NEWM_OPTS"] = null
+        environment["NEWM_NOTICE"] = null
         // While newm is locked: none of Caulis's keys (see Layout.ensureLocked).
         mode(LOCKED_MODE) {}
         lateinit var layout: Layout
@@ -36,6 +41,8 @@ fun main(args: Array<String>) {
         onStart { config.started() }
         // On the real screen and not among the login screen's sessions yet: told once how.
         onStart { if (System.getenv("WAYLAND_DISPLAY") == null) sessionHint()?.let { notify(it, title = "newm") } }
+        // What the one who started newm has to say (dev/newm-dev: "the new build crashed, the one before runs").
+        onStart { System.getenv("NEWM_NOTICE")?.takeIf { it.isNotBlank() }?.let { notify(it, title = "newm") } }
         layout = Layout(this)
 
         val settings = config.load() ?: config.loadDefault() ?: defaultConfig(layout)
@@ -53,7 +60,15 @@ fun main(args: Array<String>) {
         config.reload = { layout.updateConfig() }
         onUnload { config.close() }
     }
+    if (restartRequested) kotlin.system.exitProcess(RESTART_EXIT)
 }
+
+/** True once `newm cmd restart` asked newm to end so that it is started again (exit code [RESTART_EXIT]). */
+@Volatile
+internal var restartRequested = false
+
+/** newm's exit code when it is to be started again (`newm cmd restart`, for dev/newm-dev). */
+const val RESTART_EXIT = 3
 
 // The pywm and outputs sections, as Caulis's settings.
 @Suppress("UNCHECKED_CAST")
@@ -63,8 +78,9 @@ private fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) 
 }
 
 // LayoutApi once the layout is there (config.py's Python starts before it).
-private class DeferredApi(make: () -> LayoutApi) : PyConfig.Handler {
+private class DeferredApi(make: () -> LayoutApi) : PyConfig.Handler, LayoutApiSource {
     private val api by lazy(make)
+    override fun api() = api
     override fun layout(method: String, args: List<Any?>, kwargs: Map<String, Any?>) = api.layout(method, args, kwargs)
     override fun view(handle: Int, method: String, args: List<Any?>, kwargs: Map<String, Any?>) = api.view(handle, method, args, kwargs)
     override fun viewData(view: View) = api.viewData(view)
