@@ -115,6 +115,7 @@ class NewmConfig(
     fun keys(configure: KeysSection.() -> Unit) {
         val keys = KeysSection().apply(configure)
         values["key_bindings"] = { layout: Layout -> keys.bindings.map { (combo, action) -> combo to { action.invoke(layout) } } }
+        values["key_help"] = keys.bindings.map { (combo, _) -> combo to keys.descriptions[combo].orEmpty() }
     }
 
     /** Runs once newm has started (start programs here). */
@@ -221,6 +222,9 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
 
     /** Windows fade in when they open and out when they close. */
     var fade by setting<Boolean>("fade")
+
+    /** A new window goes right of the focused one (false: the original newm's first free place in view). */
+    var placeBesideFocused by setting<Boolean>("place_beside_focused")
 
     /** Windows' corners rounded, in pixels. */
     var cornerRadius by setting<Double>("corner_radius")
@@ -481,8 +485,15 @@ class TuningSection internal constructor(values: MutableMap<String, Any?>) : Sec
 @NewmConfigDsl
 class KeysSection internal constructor() {
     internal val bindings = ArrayList<Pair<String, Layout.() -> Unit>>()
+    internal val descriptions = LinkedHashMap<String, String>()
 
     operator fun String.invoke(action: Layout.() -> Unit) {
         bindings += this to action
+    }
+
+    /** A key with what it does in words: shown in the keys' help (Logo+/). */
+    operator fun String.invoke(description: String, action: Layout.() -> Unit) {
+        bindings += this to action
+        descriptions[this] = description
     }
 }

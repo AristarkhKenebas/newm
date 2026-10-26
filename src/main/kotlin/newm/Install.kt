@@ -73,8 +73,17 @@ fun defaultTerminal(): String = System.getenv("TERMINAL")?.takeIf { it.isNotBlan
 internal fun onPath(program: String) = (System.getenv("PATH") ?: "/usr/bin").split(':').any { Files.isExecutable(Path.of(it, program)) }
 
 /** The first start on a screen without newm among the sessions: told once how to add it. */
-fun sessionHint(): String? =
-    if (Files.exists(SESSION_FILE)) null else "To choose newm at login (ly, SDDM, GDM): run  newm install-session  in a terminal."
+fun sessionHint(): String? {
+    // Started by a login screen already (a session of newm's: "newm", "newm (dev)"), or installed: nothing to say.
+    if (Files.exists(SESSION_FILE) || System.getenv("DESKTOP_SESSION") != null || System.getenv("XDG_SESSION_DESKTOP") != null) return null
+    val sessions = Path.of(SESSION_FILE.parent.toString())
+    val installed = try {
+        Files.list(sessions).use { files -> files.anyMatch { it.fileName.toString().startsWith("newm") } }
+    } catch (_: Exception) {
+        false
+    }
+    return if (installed) null else "To choose newm at login (ly, SDDM, GDM): run  newm install-session  in a terminal."
+}
 
 const val USAGE = """newm — a Wayland compositor: windows on an endless wall, made for touchpads.
 

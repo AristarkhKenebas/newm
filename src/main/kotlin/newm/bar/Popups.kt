@@ -45,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.caulis.compose.compose
 import dev.caulis.log.Logger
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -55,12 +54,25 @@ import java.util.Locale
 
 private val log = Logger("bar")
 
-/** The bars' popups: one Compose part above everything, where the open popup is. */
-fun BarModel.showPopups(): AutoCloseable = wm.caulis.compose(place = { m ->
-    popup?.takeIf { it.bar.monitor === m }?.let(::popupRect)
-}) { m ->
-    val open = popup
-    if (open != null && open.bar.monitor === m) PopupContent(this, open)
+/** The bars' popups: one Compose part above everything, where the open popup is (a click on it gives it the keys). */
+fun BarModel.showPopups(): AutoCloseable {
+    val model = this
+    val caulis = wm.caulis
+    var handle: AutoCloseable? = null
+    val start = caulis.after(0) {
+        val widget = dev.caulis.compose.ComposeWidget(caulis.desktop, post = { task -> caulis.post { task.run() } }, place = { m ->
+            popup?.takeIf { it.bar.monitor === m }?.let(::popupRect)
+        }, takesKeyboard = true) { m ->
+            val open = popup
+            if (open != null && open.bar.monitor === m) PopupContent(model, open)
+        }
+        popupWidget = widget
+        handle = caulis.desktop.addWidget(widget)
+    }
+    return AutoCloseable {
+        start.close()
+        handle?.close()
+    }
 }
 
 @Composable
@@ -86,9 +98,10 @@ private fun PopupContent(model: BarModel, popup: Popup) {
     ) {
         when (popup.kind) {
             PopupKind.CALENDAR -> Calendar(model, popup, colors, text)
-            PopupKind.VOLUME -> VolumePopup(model, colors, text)
-            PopupKind.NETWORK -> NetworkPopup(model, colors, text)
-            PopupKind.BATTERY -> BatteryPopup(model, colors, text)
+            PopupKind.VOLUME -> SoundPopup(model, colors, text)
+            PopupKind.NETWORK -> WifiPopup(model, popup, colors, text)
+            PopupKind.BLUETOOTH -> BluetoothPopup(model, popup, colors, text)
+            PopupKind.BATTERY -> BatteryAndPowerPopup(model, colors, text)
             PopupKind.POWER -> PowerPopup(model, popup, colors, text)
             PopupKind.TRAY_MENU -> TrayMenu(model, popup, colors, text)
             PopupKind.TOOLTIP -> BasicText(popup.text, style = text.copy(fontSize = 12.sp))
@@ -191,43 +204,9 @@ private fun IconButton(colors: BarColors, glyph: Glyph, onClick: () -> Unit) {
 
 // --- volume and brightness --------------------------------------------------------------------
 
-@Composable
-private fun VolumePopup(model: BarModel, colors: BarColors, text: TextStyle) {
-    val v = model.status.volume
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (v != null) {
-            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(30.dp).background(if (v.muted) colors.hover else Color.Transparent, CircleShape)
-                    .pointerInput(Unit) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) { model.wm.caulis.run("volume mute"); model.status.refreshSoon() } } },
-                    contentAlignment = Alignment.Center) {
-                    GlyphIcon(Glyph.SPEAKER, if (v.muted) colors.dim else colors.text, 18.dp, level = v.percent / 100f, slash = v.muted)
-                }
-                Spacer(Modifier.width(8.dp))
-                Slider(colors, v.percent / 100f, Modifier.weight(1f)) { level -> setVolume(model, level) }
-                Spacer(Modifier.width(8.dp))
-                BasicText("${v.percent}%", style = text.copy(color = colors.dim, fontSize = 12.sp), modifier = Modifier.width(36.dp))
-            }
-        } else {
-            BasicText("No sound device", style = text.copy(color = colors.dim))
-        }
-        model.status.brightness?.let { b ->
-            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) { GlyphIcon(Glyph.BRIGHTNESS, colors.text, 18.dp) }
-                Spacer(Modifier.width(8.dp))
-                Slider(colors, b / 100f, Modifier.weight(1f)) { level -> setBrightness(model, level) }
-                Spacer(Modifier.width(8.dp))
-                BasicText("$b%", style = text.copy(color = colors.dim, fontSize = 12.sp), modifier = Modifier.width(36.dp))
-            }
-        }
-        MenuRow(colors, onClick = { model.close(); model.wm.caulis.launch(firstInstalled("pavucontrol", "pwvucontrol", "helvum") ?: "pavucontrol") }) {
-            BasicText("Sound settings…", style = text)
-        }
-    }
-}
-
 // A slider of 0..1 that follows the pointer while it is held ([onChange] as it moves).
 @Composable
-private fun Slider(colors: BarColors, value: Float, modifier: Modifier, onChange: (Float) -> Unit) {
+internal fun Slider(colors: BarColors, value: Float, modifier: Modifier, onChange: (Float) -> Unit) {
     var dragging by remember { androidx.compose.runtime.mutableStateOf<Float?>(null) }
     val shown = dragging ?: value.coerceIn(0f, 1f)
     var lastSent by remember { mutableFloatStateOf(-1f) }
@@ -261,6 +240,7 @@ private fun Slider(colors: BarColors, value: Float, modifier: Modifier, onChange
     }
 }
 
+@Suppress("unused")
 private fun setVolume(model: BarModel, level: Float) {
     val percent = (level * 100).toInt()
     Thread({
@@ -270,7 +250,7 @@ private fun setVolume(model: BarModel, level: Float) {
     }, "newm-volume").apply { isDaemon = true }.start()
 }
 
-private fun setBrightness(model: BarModel, level: Float) {
+internal fun setBrightness(model: BarModel, level: Float) {
     val percent = (level * 100).toInt().coerceAtLeast(1)
     Thread({
         if (!runQuietly("brightnessctl", "-q", "set", "$percent%")) log.warn("brightnessctl is not installed: the brightness cannot be set")
@@ -290,56 +270,6 @@ private fun firstInstalled(vararg programs: String): String? = programs.firstOrN
 }
 
 // --- network and battery ---------------------------------------------------------------------
-
-@Composable
-private fun NetworkPopup(model: BarModel, colors: BarColors, text: TextStyle) {
-    val n = model.status.network
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-            when (n.kind) {
-                Network.Kind.WIFI -> GlyphIcon(Glyph.WIFI, colors.accent, 26.dp, level = n.strength / 100f)
-                Network.Kind.WIRED -> GlyphIcon(Glyph.WIRED, colors.accent, 26.dp)
-                Network.Kind.NONE -> GlyphIcon(Glyph.WIFI_OFF, colors.dim, 26.dp)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                BasicText(when (n.kind) {
-                    Network.Kind.WIFI -> n.name.ifEmpty { "Wi-Fi" }
-                    Network.Kind.WIRED -> "Wired connection"
-                    Network.Kind.NONE -> "Not connected"
-                }, style = text.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (n.kind == Network.Kind.WIFI) BasicText("Signal ${n.strength}%", style = text.copy(color = colors.dim, fontSize = 12.sp))
-            }
-        }
-        MenuRow(colors, onClick = {
-            model.close()
-            val editor = firstInstalled("nm-connection-editor", "iwgtk", "connman-gtk")
-            model.wm.caulis.launch(editor ?: "${newm.defaultTerminal()} -e nmtui")
-        }) { BasicText("Network settings…", style = text) }
-    }
-}
-
-@Composable
-private fun BatteryPopup(model: BarModel, colors: BarColors, text: TextStyle) {
-    val b = model.status.battery ?: return BasicText("No battery", style = text.copy(color = colors.dim))
-    androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxSize()) {
-        GlyphIcon(Glyph.BATTERY, colors.text, 40.dp, level = b.percent / 100f, bolt = b.charging, accent = if (b.charging || b.full) colors.accent else if (b.percent <= 20) colors.warning else colors.text)
-        Spacer(Modifier.width(14.dp))
-        Column {
-            BasicText("${b.percent}%", style = text.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold))
-            val minutes = b.minutesLeft
-            BasicText(when {
-                b.full -> "Fully charged"
-                b.charging && minutes != null -> "Charging, full in ${hours(minutes)}"
-                b.charging -> "Charging"
-                minutes != null -> "${hours(minutes)} left"
-                else -> "On battery"
-            }, style = text.copy(color = colors.dim, fontSize = 12.sp))
-        }
-    }
-}
-
-private fun hours(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
 
 // --- power -------------------------------------------------------------------------------------
 

@@ -249,8 +249,8 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
         animCaught = null
     }
 
-    /** True while it glides towards where the view says. */
-    val moving: Boolean get() = !preventAnim && current.delta(target) > 1
+    /** True while it glides towards where the view says, or fades in. */
+    val moving: Boolean get() = (!preventAnim && current.delta(target) > 1) || picture.fading
 
     fun draw(canvas: OverlayCanvas) {
         if (!preventAnim) {
@@ -272,12 +272,25 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
         }
         val b = current.box
         val rect = Rect(monitor.area.x + Math.round(b[0]).toInt(), monitor.area.y + Math.round(b[1]).toInt(), Math.round(b[2]).toInt(), Math.round(b[3]).toInt())
-        canvas.image(picture.texture, rect, current.opacity.toFloat())
+        canvas.image(picture.texture, rect, current.opacity.toFloat() * picture.appearing())
     }
 }
 
 /** A wallpaper picture on the GPU ("resource:wallpaper.jpg": newm's own). */
 class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
+    // When it was first shown (System.nanoTime): it fades in from then, once (not again on a reload).
+    private var shownAt = 0L
+
+    /** How far it has faded in (0..1, eased). */
+    fun appearing(): Float {
+        if (shownAt == 0L) shownAt = System.nanoTime()
+        val t = ((System.nanoTime() - shownAt) / 600_000_000.0).coerceIn(0.0, 1.0)
+        return (1 - (1 - t) * (1 - t) * (1 - t)).toFloat()
+    }
+
+    /** Still fading in. */
+    val fading: Boolean get() = shownAt == 0L || System.nanoTime() - shownAt < 600_000_000L
+
     companion object {
         // The picture read from [path] (slow for a big one: not on the compositor's thread).
         fun read(path: String): BufferedImage? = try {
@@ -370,7 +383,7 @@ private val confRadius = BarSetting("corner_radius", 12)
 private val confTheme = BarSetting("theme", "auto")
 private val confLeft = BarSetting("left", listOf("wall", "window"))
 private val confCenter = BarSetting("center", listOf("clock"))
-private val confRight = BarSetting("right", listOf("tray", "layout", "network", "volume", "battery", "power"))
+private val confRight = BarSetting("right", listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power"))
 private val confClock = BarSetting("clock", "HH:mm")
 private val confDate = BarSetting("date", "EEE d MMM")
 private val confIslandColor = BarSetting<String?>("island_color", null)

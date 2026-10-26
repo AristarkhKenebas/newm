@@ -2,7 +2,7 @@
   "background": { "path": "resource:wallpaper.jpg", "anim": true },
   "corner_radius": 24,
   "anim_time": 0.3,
-  "view": { "corner_radius": 24, "padding": 8 },
+  "view": { "corner_radius": 14, "padding": 8 },
   "rules": [
     { "app_id": "pavucontrol", "float": true },
     { "app_id": "mpv", "float": true },
@@ -13,12 +13,12 @@
   "focus": { "enabled": true, "color": "#E5E9F0AA", "distance": 4, "width": 2 },
   "panels": {
     "top_bar": { "enabled": true, "height": 32, "margin": 6, "corner_radius": 12, "theme": "auto",
-                 "left": ["wall", "window"], "center": ["clock"], "right": ["tray", "layout", "network", "volume", "battery", "power"],
+                 "left": ["wall", "window"], "center": ["clock"], "right": ["tray", "layout", "bluetooth", "network", "volume", "battery", "power"],
                  "clock": "HH:mm", "date": "EEE d MMM" },
     "lock": { "w": 0.6, "h": 0.6, "corner_radius": 32 },
     "launcher": { "w": 0.7, "h": 0.7, "corner_radius": 24 }
   },
-  "input": { "tap_to_click": true, "natural_scroll": false, "focus_follows_mouse": false },
+  "input": { "tap_to_click": true, "natural_scroll": false, "focus_follows_mouse": true },
   "keys": {
     "L-Return": "terminal",
     "L-d": "enter_launcher_overlay",
@@ -32,7 +32,10 @@
     "L-": "toggle_overview",
     "L-q": "close_focused_view",
     "L-f": "toggle_fullscreen",
-    "L-space": "toggle_focused_view_floating",
+    "L-v": "toggle_focused_view_floating",
+    "L-0": "fit_focused_view", "L-s": "side_by_side",
+    "L-minus": "basic_scale 1", "L-equal": "basic_scale -1",
+    "L-slash": "toggle_key_help",
     "L-p": "ensure_locked dim=true",
     "L-C": "update_config",
     "L-S-Escape": "terminate",

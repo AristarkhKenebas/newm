@@ -253,7 +253,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         result.opacity = opacity * (if (result.lockEnabled && !state.final) 1.0 else state.backgroundOpacity)
         if (!isFocused()) result.opacity *= confUnfocusedOpacity()
         result.box = Box(result.box.x + ws.posX, result.box.y + ws.posY, result.box.w, result.box.h)
-        result.logicalBox = Box(result.box.x + up.offset.first * size / wsState.size, result.box.y + up.offset.second * size / wsState.size, result.box.w, result.box.h)
+        result.logicalBox = result.box
 
         if (selfState.swallowed != null) {
             val b = result.box
@@ -433,23 +433,18 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
         result.logicalBox = Box(x + ws.posX, y + ws.posY, w, h)
 
-        // Use masking to cut off unwanted CSD (a root surface larger than the toplevel, for shadows).
-        var maskOrigin = 0.0 to 0.0
-        if (up.size.first > 0 && up.size.second > 0) {
-            val ox = up.offset.first.toDouble() / up.size.first * w
-            val oy = up.offset.second.toDouble() / up.size.second * h
-            x -= ox
-            y -= oy
-            maskOrigin = ox to oy
-        }
-        result.mask = Box(maskOrigin.first, maskOrigin.second, w, h)
+        // (pywm placed the whole surface, client-side shadows too: newm moved it by their size
+        // and masked them off. Caulis places the window's visible part itself and leaves the
+        // shadows out — moving it again cut off the top of programs with shadows: Firefox's
+        // tabs, GTK programs' header bars.)
+        result.mask = Box(0.0, 0.0, w, h)
         result.size = width to height
         result.box = Box(x, y, w, h)
 
         result.opacity = opacity * (if (result.lockEnabled && !state.final) 1.0 else state.backgroundOpacity)
         if (!isFocused()) result.opacity *= confUnfocusedOpacity()
-        // Opening and closing (no size yet, or none any more): faded out too, not only shrunk (newm issue 183).
-        if (confFade() && (selfState.w == 0.0 || selfState.h == 0.0)) result.opacity = 0.0
+        // Opening: see-through until it has appeared; closing (no size any more) too (newm issue 183).
+        if (confFade()) result.opacity *= if (selfState.w == 0.0 || selfState.h == 0.0) 0.0 else selfState.appear
         result.box = Box(result.box.x + ws.posX, result.box.y + ws.posY, result.box.w, result.box.h)
 
         if (selfState.swallowed != null) {
@@ -488,11 +483,16 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
         val (i1, j1) = wm.placeInitial(ws, referenceWsState, w, h)
 
+        // It opens in its place, a little smaller and see-through, and grows to its size as it
+        // appears (newm grew it out of a point in its middle while the view moved: it seemed to
+        // fly in at a slant).
+        val start = if (confFade()) 0.85 else 0.0
         val wsState1 = wsState.withViewState(
             this,
             ViewState(
-                isTiled = true, i = i1 + .5 * w, j = j1 + .5 * h, w = 0.0, h = 0.0,
+                isTiled = true, i = i1 + (1 - start) / 2 * w, j = j1 + (1 - start) / 2 * h, w = start * w, h = start * h,
                 scaleOrigin = w.toDouble() to h.toDouble(), moveOrigin = MoveOrigin(i1.toDouble(), j1.toDouble(), ws), stackIdx = handle,
+                appear = 0.0,
             ),
         )
         val wsState2 = referenceWsState.withViewState(
@@ -661,7 +661,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
     // --- Public API
 
-    fun isFocused(): Boolean = upState?.isFocused == true
+    // (Asked of Caulis now: the upstream state is a frame old when the focus has just changed,
+    // and the border stayed on the window before.)
+    fun isFocused(): Boolean = window === wm.caulis.desktop.focusedWindow
 
     fun focus() = wm.focusWindow(window)
 

@@ -100,7 +100,7 @@ data class WallMap(val tiles: List<Tile>, val view: Tile?, val width: Float, val
 data class Focused(val title: String, val appId: String)
 
 /** What a bar's popup shows. */
-enum class PopupKind { CALENDAR, VOLUME, NETWORK, BATTERY, POWER, TRAY_MENU, TOOLTIP }
+enum class PopupKind { CALENDAR, VOLUME, NETWORK, BLUETOOTH, BATTERY, POWER, TRAY_MENU, TOOLTIP }
 
 /** An open popup: below [anchorX] (desktop units) of [bar]. */
 class Popup(val kind: PopupKind, val bar: Bar, val anchorX: Double, val item: TrayItem? = null) {
@@ -116,6 +116,10 @@ class Popup(val kind: PopupKind, val bar: Bar, val anchorX: Double, val item: Tr
 
     /** A tooltip's text. */
     var text by mutableStateOf("")
+
+    /** The entry opened in place (a network asking for its password, a device's buttons), and the password typed. */
+    var expanded by mutableStateOf<String?>(null)
+    var password by mutableStateOf("")
 }
 
 /**
@@ -126,6 +130,13 @@ class Popup(val kind: PopupKind, val bar: Bar, val anchorX: Double, val item: Tr
 class BarModel(val wm: Layout) {
     val tray = Tray(wm.caulis)
     val status = Status(wm.caulis)
+    val network = NetworkManager(wm.caulis)
+    val bluetooth = Bluetooth(wm.caulis)
+    val sound = Sound(wm.caulis)
+    val powerProfiles = PowerProfiles(wm.caulis)
+
+    /** The popups' part of the screen (a click on it gives it the keyboard: a password). */
+    internal var popupWidget: dev.caulis.compose.ComposeWidget? = null
 
     var scheme by mutableStateOf(ColorScheme.DEFAULT)
         private set
@@ -146,6 +157,9 @@ class BarModel(val wm: Layout) {
         wm.caulis.onColorSchemeChanged { scheme = it }
         tray.start()
         status.start()
+        network.start()
+        bluetooth.start()
+        powerProfiles.start()
         wm.every(1000) {
             val t = LocalDateTime.now()
             if (t.minute != now.minute || t.second != now.second) now = t
@@ -185,12 +199,26 @@ class BarModel(val wm: Layout) {
         val next = Popup(kind, bar, anchorX, item)
         popup = next
         if (kind == PopupKind.TRAY_MENU && item != null) tray.menuOf(item) { entries -> if (popup === next) next.entries = entries }
-        if (kind == PopupKind.VOLUME || kind == PopupKind.BATTERY || kind == PopupKind.NETWORK) status.refreshSoon()
+        when (kind) {
+            PopupKind.VOLUME -> { status.refreshSoon(); sound.refresh() }
+            PopupKind.BATTERY -> { status.refreshSoon(); powerProfiles.refresh() }
+            PopupKind.NETWORK -> network.refresh()
+            PopupKind.BLUETOOTH -> bluetooth.refresh()
+            else -> {}
+        }
+    }
+
+    /** The open popup takes the keys (a password is to be typed). */
+    fun wantKeyboard() {
+        popupWidget?.let { wm.caulis.desktop.focusWidget(it) }
     }
 
     fun close() {
         val open = popup ?: return
         popup = null
+        // The keys go back to the window that had them.
+        val d = wm.caulis.desktop
+        if (popupWidget != null && d.keyboardWidget === popupWidget) d.focusWidget(null)
         if (open.kind == PopupKind.TRAY_MENU && open.item != null) tray.menuClosed(open.item)
     }
 
@@ -208,9 +236,18 @@ class BarModel(val wm: Layout) {
 
     private fun popupSize(popup: Popup): Pair<Int, Int> = when (popup.kind) {
         PopupKind.CALENDAR -> 292 to 282
-        PopupKind.VOLUME -> 300 to (if (status.brightness != null) 142 else 96)
-        PopupKind.NETWORK -> 280 to 100
-        PopupKind.BATTERY -> 260 to 88
+        PopupKind.VOLUME -> 340 to (34 + 36 + (if (sound.outputs.size > 1) 26 + sound.outputs.size * 34 else 0) +
+            (if (sound.inputs.isNotEmpty()) 26 + 36 + (if (sound.inputs.size > 1) sound.inputs.size * 34 else 0) else 0) +
+            (if (status.brightness != null) 26 + 36 else 0) + 26).coerceAtMost(560)
+        PopupKind.NETWORK -> 350 to (34 + (if (network.problem != null) 20 else 0) + (if (network.wired) 42 else 0) +
+            (if (!network.wifiEnabled || network.networks.isEmpty()) 32 else network.networks.size.coerceAtMost(8) * 42) +
+            (if (popup.expanded != null) 76 else 0) + 26).coerceAtMost(520)
+        PopupKind.BLUETOOTH -> 350 to (34 + (if (bluetooth.problem != null) 20 else 0) + (if (!bluetooth.powered) 32 else {
+            val shown = bluetooth.devices.take(9)
+            shown.sumOf { if (it.connected || !it.paired || bluetooth.busy == it.path) 42 else 34 } +
+                (if (shown.any { it.paired }) 26 else 0) + (if (bluetooth.scanning || shown.any { !it.paired }) 26 else 0) + (if (shown.isEmpty()) 30 else 0)
+        }) + (if (popup.expanded != null) 34 else 0) + 28).coerceAtMost(520)
+        PopupKind.BATTERY -> 290 to ((if (status.battery != null) 56 else 0) + (if (powerProfiles.profiles.isNotEmpty()) 26 + powerProfiles.profiles.size * 34 + 8 else 0) + 26).coerceAtLeast(60)
         PopupKind.POWER -> 240 to 192
         PopupKind.TOOLTIP -> (popup.text.lines().maxOfOrNull { it.length } ?: 10).coerceIn(4, 60) * 7 + 28 to popup.text.lines().size * 18 + 18
         PopupKind.TRAY_MENU -> {
@@ -362,6 +399,7 @@ private fun Modules(names: List<String>, bar: Bar, model: BarModel, colors: BarC
         "clock" -> ClockModule(bar, model, colors, text)
         "tray" -> TrayModule(bar, model, colors)
         "layout" -> LayoutModule(bar, model, colors, text)
+        "bluetooth" -> BluetoothModule(bar, model, colors)
         "network" -> NetworkModule(bar, model, colors, text)
         "volume" -> VolumeModule(bar, model, colors, text)
         "battery" -> BatteryModule(bar, model, colors, text)
@@ -493,6 +531,17 @@ private fun LayoutModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
     Chip(colors, onPrimary = { caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + 1); bar.look() },
         onScroll = { dy -> caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + if (dy > 0) 1 else -1); bar.look() }) {
         BasicText(name, style = text.copy(fontWeight = FontWeight.SemiBold, fontSize = (bar.fontSize - 1).sp))
+    }
+}
+
+@Composable
+private fun BluetoothModule(bar: Bar, model: BarModel, colors: BarColors) {
+    val bt = model.bluetooth
+    if (!bt.available) return
+    var x by remember { mutableStateOf(0.0) }
+    val connected = bt.devices.any { it.connected }
+    Chip(colors, onX = { x = it }, onPrimary = { model.toggle(PopupKind.BLUETOOTH, bar, bar.originX + x) }) {
+        GlyphIcon(Glyph.BLUETOOTH, if (connected) colors.accent else if (bt.powered) colors.text else colors.dim, bar.iconSize.dp, slash = !bt.powered)
     }
 }
 

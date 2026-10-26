@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** The bar's own small pictures, drawn as lines (sharp at any scale, in the bar's colours). */
-enum class Glyph { WIFI, WIFI_OFF, WIRED, SPEAKER, BATTERY, POWER, LOCK, LOGOUT, MOON, RESTART, CHEVRON_LEFT, CHEVRON_RIGHT, BRIGHTNESS }
+enum class Glyph { WIFI, WIFI_OFF, WIRED, SPEAKER, BATTERY, POWER, LOCK, LOGOUT, MOON, RESTART, CHEVRON_LEFT, CHEVRON_RIGHT, BRIGHTNESS, BLUETOOTH, CHECK, MIC }
 
 /**
  * [glyph] at [size] in [color]; [level] (0..1) fills what has a level (Wi-Fi's strength, the
@@ -139,6 +139,25 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, level: Float, slash:
             val d = if (glyph == Glyph.CHEVRON_LEFT) 1f else -1f
             val p = Path().apply { moveTo(s / 2 + d * s * 0.14f, s * 0.22f); lineTo(s / 2 - d * s * 0.14f, s / 2); lineTo(s / 2 + d * s * 0.14f, s * 0.78f) }
             drawPath(p, color, style = line)
+        }
+        Glyph.BLUETOOTH -> {
+            // The rune: a line, two arrows' tips crossing it.
+            val p = Path().apply {
+                moveTo(s * 0.28f, s * 0.32f); lineTo(s * 0.68f, s * 0.68f); lineTo(s * 0.5f, s * 0.86f); lineTo(s * 0.5f, s * 0.14f)
+                lineTo(s * 0.68f, s * 0.32f); lineTo(s * 0.28f, s * 0.68f)
+            }
+            drawPath(p, if (slash) faint else color, style = line)
+        }
+        Glyph.CHECK -> {
+            val p = Path().apply { moveTo(s * 0.18f, s * 0.52f); lineTo(s * 0.42f, s * 0.76f); lineTo(s * 0.84f, s * 0.26f) }
+            drawPath(p, color, style = Stroke(width = s * 0.14f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+        Glyph.MIC -> {
+            drawRoundRect(color, Offset(s * 0.36f, s * 0.1f), Size(s * 0.28f, s * 0.48f), CornerRadius(s * 0.14f))
+            val r = s * 0.26f
+            drawArc(color, 0f, 180f, false, Offset(s / 2 - r, s * 0.32f), Size(2 * r, 2 * r * 0.9f), style = line)
+            drawLine(color, Offset(s / 2, s * 0.74f), Offset(s / 2, s * 0.88f), w, StrokeCap.Round)
+            if (slash) drawLine(color, Offset(s * 0.16f, s * 0.12f), Offset(s * 0.84f, s * 0.88f), w, StrokeCap.Round)
         }
         Glyph.BRIGHTNESS -> {
             drawCircle(color, radius = s * 0.18f, center = Offset(s / 2, s / 2))

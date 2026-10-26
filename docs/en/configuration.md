@@ -8,7 +8,7 @@ sections with settings in them.
 
 ```kotlin
 view {
-    cornerRadius = 24.0     // rounded windows
+    cornerRadius = 14.0     // rounded windows
     padding = 8.0           // the gap around each window
 }
 ```

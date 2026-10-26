@@ -15,7 +15,7 @@ corner_radius = 24                   -- the screen's own corners
 anim_time = 0.3                      -- how long moving and zooming take (seconds)
 
 view = {
-  corner_radius = 24,
+  corner_radius = 14,
   padding = 8,
 }
 
@@ -42,7 +42,7 @@ panels = {
     theme = "auto",                  -- "light", "dark"
     left = { "wall", "window" },
     center = { "clock" },
-    right = { "tray", "layout", "network", "volume", "battery", "power" },
+    right = { "tray", "layout", "bluetooth", "network", "volume", "battery", "power" },
     clock = "HH:mm", date = "EEE d MMM",
     -- style = "classic",            -- the original newm's bar, with texts = function() return { sys.cpu(), sys.time() } end
   },
@@ -52,7 +52,7 @@ panels = {
 }
 
 -- keyboard = { layouts = "us,ru", options = "grp:alt_shift_toggle" }   -- unset: the system's layouts
-input = { tap_to_click = true, natural_scroll = false, focus_follows_mouse = false }
+input = { tap_to_click = true, natural_scroll = false, focus_follows_mouse = true }
 
 -- Keys: "L" Logo, "S" Shift, "C" Ctrl, "A" Alt; "L-" is Logo tapped alone.
 -- An action is a text ("move -1 0", "launch firefox", "volume +5") or a function.
@@ -73,7 +73,10 @@ keys = {
   ["L-"] = "toggle_overview",
   ["L-q"] = "close_focused_view",
   ["L-f"] = "toggle_fullscreen",
-  ["L-space"] = "toggle_focused_view_floating",
+  ["L-v"] = "toggle_focused_view_floating",
+  ["L-0"] = "fit_focused_view", ["L-s"] = "side_by_side",
+  ["L-minus"] = "basic_scale 1", ["L-equal"] = "basic_scale -1",
+  ["L-slash"] = "toggle_key_help",
   ["L-p"] = "ensure_locked dim=true",
   ["L-C"] = "update_config",
   ["L-S-Escape"] = "terminate",

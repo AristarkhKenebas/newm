@@ -58,6 +58,9 @@ data class ViewState(
 
     // - Layer views
     var layerInitial: Boolean = false,
+
+    // How far it has appeared (0: just opening, see-through; 1: there).
+    var appear: Double = 1.0,
 ) {
     fun ijwh(): DoubleArray {
         var i = this.i

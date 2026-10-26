@@ -7,6 +7,8 @@ object Json {
         return Parser(text).value() as? Map<String, Any?> ?: error("not a JSON object: $text")
     }
 
+    fun parseArray(text: String): List<Any?> = Parser(text).value() as? List<Any?> ?: error("not a JSON array: ${text.take(80)}")
+
     fun write(value: Any?): String = buildString { write(this, value) }
 
     private fun write(out: StringBuilder, value: Any?) {

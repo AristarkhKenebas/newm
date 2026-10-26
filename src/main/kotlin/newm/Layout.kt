@@ -20,9 +20,12 @@ private val log = Logger("layout")
 
 // newm's own wallpaper unless another is named; "" for none (a wallpaper program instead, swaybg).
 private val confScreensOffAfter = configuredValue("energy.screens_off_after", 0)
+// A new window goes right of the focused one (false: newm's first free place in view).
+private val confPlaceBesideFocused = configuredValue("view.place_beside_focused", true)
 private val confLockProgram = configuredValue<String?>("panels.lock.program", null)
 private val confBackgroundPath = configuredValue<String?>("background.path", "resource:wallpaper.jpg")
 private val confSendFullscreenToViews = configuredValue("view.send_fullscreen", true)
+private val confKeyHelp = configuredValue<List<Pair<String, String>>>("key_help", emptyList())
 private val confKeyBindings = configuredValue<(Layout) -> List<Pair<String, () -> Unit>>>("key_bindings") { emptyList() }
 private val confAnimT = configuredValue("anim_time", .3)
 private val confBlendT = configuredValue("blend_time", 1.0)
@@ -558,6 +561,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             bottomBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
         }
         barModel.showPopups()
+        showKeyHelp()
         every(1000) { (topBars + bottomBars).forEach(Bar::refresh) }
         // The wall and the focused window, as the bars show them; a popup goes with its bar.
         every(200) {
@@ -663,9 +667,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val viewMaxI = ceil(wsState.i + wsState.size - 1)
         val viewMaxJ = ceil(wsState.j + wsState.size - 1)
 
+        // Beside the window you are in: right of it, the first free place in its row (newm took
+        // the first free place in view, row by row, which could be anywhere: below, at a slant).
+        val anchor = if (confPlaceBesideFocused()) {
+            (findFocusedView()?.handle?.let { wsState.viewStates[it] } ?: workspace.focusViewHint?.let { wsState.viewStates[it] })?.takeIf { it.isTiled && it.w > 0 }
+        } else null
         if (tiles(workspace).isEmpty()) {
             placeI = 0
             placeJ = 0
+        } else if (anchor != null) {
+            placeI = pyRound(anchor.i + anchor.w)
+            placeJ = pyRound(anchor.j)
+            fun free(i: Int): Boolean = (placeJ until placeJ + h).all { jp -> (i until i + w).all { ip -> wsState.isTileFree(ip, jp) } }
+            while (!free(placeI)) placeI += 1
         } else if (viewMaxI - viewMinI > maxI - minI) {
             placeI = maxI + 1
             placeJ = max(minJ, viewMinJ)
@@ -769,6 +783,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun onKey(timeMillis: Int, keycode: Int, pressed: Boolean, keysyms: String): Boolean {
         // These are processed via onModifiers.
         if (keysyms in listOf("Super_L", "Super_R", "Alt_L", "Alt_R", "Logo_L", "Logo_R")) return false
+        // The keys' help open: a key (but its own) closes it, and does nothing else.
+        if (keyHelpShown && keysyms != "slash" && keysyms !in listOf("Shift_L", "Shift_R", "Control_L", "Control_R")) {
+            if (pressed) keyHelpShown = false
+            return true
+        }
         overlay?.takeIf { it.ready }?.let { o ->
             log.trace { "...passing to overlay $o" }
             if (o.onKey(timeMillis, keycode, pressed, keysyms)) return true
@@ -1227,7 +1246,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // --- 3. global or workspace state, the viewpoint ------------------------------------------------------
 
-    fun enterLauncherOverlay() = enterOverlay(LauncherOverlay(this))
+    /** The launcher, or (open already) away with it. */
+    fun enterLauncherOverlay() {
+        if (overlay is LauncherOverlay) exitOverlay() else enterOverlay(LauncherOverlay(this))
+    }
 
     fun toggleOverview(onlyActiveWorkspace: Boolean = false) {
         animateTo({ s ->
@@ -1277,6 +1299,74 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             null to s.replacingWorkspaceState(ws) { copy(i = i + deltaI, j = j + deltaJ) }
         }, confAnimT())
     }
+
+    /** Zooms so the focused window fills the screen: its tiles, one by one (the view as big as the window). */
+    fun fitFocusedView() {
+        val view = findFocusedView() ?: return
+        animateTo({ s ->
+            val (vs, _, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to s
+            val ws = workspaces.firstOrNull { it.handle == wsHandle }
+            if (!vs.isTiled || ws == null) return@animateTo null to s
+            val size = max(1.0, max(vs.w, vs.h))
+            null to s.replacingWorkspaceState(ws) { copy(size = size, i = vs.i - (size - vs.w) / 2, j = vs.j - (size - vs.h) / 2) }
+        }, confAnimT())
+    }
+
+    /**
+     * Two windows on one screen: the focused one and its neighbour in its row (right, else
+     * left) become halves of the screen — both two tiles tall, seen two by two. Again: back to
+     * one tile each, the focused one filling the screen.
+     */
+    fun sideBySide() {
+        val view = findFocusedView() ?: return
+        animateTo({ s0 ->
+            val s = s0.copy()
+            val (fs, wsState, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to s0
+            val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return@animateTo null to s0
+            if (!fs.isTiled || wsState.isFullscreen()) return@animateTo null to s0
+            val fi = pyRound(fs.i)
+            val fj = pyRound(fs.j)
+            fun inRow(i: Int) = wsState.viewStates.entries.firstOrNull { (h, v) -> h != view.handle && v.isTiled && pyRound(v.i) == i && pyRound(v.j) == fj }
+            val other = inRow(fi + pyRound(fs.w)) ?: inRow(fi - 1)
+            if (other == null) {
+                caulis.notify("Open a second window first: Logo+S puts it beside this one.", title = "newm")
+                return@animateTo null to s0
+            }
+            val os = other.value
+            if (fs.h >= 2.0 && os.h >= 2.0 && fs.w == 1.0 && os.w == 1.0) {
+                // Apart again: one tile each, the focused one on the screen.
+                fs.h = 1.0
+                os.h = 1.0
+                val next = s.replacingWorkspaceState(ws) { copy(size = 1.0, i = fs.i, j = fs.j) }
+                next.constrain()
+                return@animateTo null to next
+            }
+            // The rows below make room (moved one down), then both are two tiles tall.
+            for ((h, v) in wsState.viewStates) {
+                if (h == view.handle || h == other.key || !v.isTiled) continue
+                if (v.j >= fj + 1 - 0.01) v.j += 1.0
+            }
+            fs.w = 1.0
+            fs.h = 2.0
+            os.w = 1.0
+            os.h = 2.0
+            os.j = fj.toDouble()
+            val left = minOf(fi, pyRound(os.i)).toDouble()
+            val next = s.replacingWorkspaceState(ws) { copy(size = 2.0, i = left, j = fj.toDouble()) }
+            log.info { "Side by side: ${view.appId} and ${views[other.key]?.appId}" }
+            null to next.constrain()
+        }, confAnimT())
+    }
+
+    /** The keys' help: every key of the configuration and what it does (Logo+/). */
+    var keyHelpShown by androidx.compose.runtime.mutableStateOf(false)
+
+    fun toggleKeyHelp() {
+        keyHelpShown = !keyHelpShown
+    }
+
+    /** The keys and what they do, as the configuration says (for the help). */
+    fun keyHelp(): List<Pair<String, String>> = confKeyHelp().ifEmpty { confKeyBindings()(this).map { it.first to "" } }
 
     fun basicScale(deltaS: Int) {
         val ws = activeWorkspace()

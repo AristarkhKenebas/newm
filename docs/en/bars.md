@@ -20,10 +20,14 @@ It is on at the start: three see-through islands floating at the top of the scre
     nm-applet, blueman, ...). A click activates the program, a right click opens its menu,
     a middle click does its second action, and the wheel scrolls it. Hovering shows the
     program's tooltip.
-  - The network: a click shows its name and strength, and opens the network settings.
-  - The volume: the wheel changes it, a middle click mutes. A click opens sliders for the
-    volume and the screen's brightness.
-  - The battery: a click shows how long it lasts or how long until it is full.
+  - Bluetooth: on and off, your devices (connect, disconnect, forget, their battery), and
+    "Find devices" to pair new ones — all in the popup.
+  - Wi-Fi: on and off, the networks in reach; a click connects (a new network asks its
+    password right there), a connected one can be disconnected or forgotten.
+  - Sound: the wheel changes the volume, a middle click mutes. A click opens the volume,
+    which speaker or headphones to use, the microphone and the screen's brightness.
+  - The battery: how long it lasts or how long until it is full, and the power mode
+    (power saver, balanced, performance).
   - The power button: lock, suspend, log out, restart, shut down. The last three ask once
     more, so a slip of the hand does not end your session.
 
@@ -44,7 +48,7 @@ panels {
         fontSize = 13
         left = listOf("wall", "window")
         center = listOf("clock")
-        right = listOf("tray", "layout", "network", "volume", "battery", "power")
+        right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power")
         clock = "HH:mm"                 // java.time patterns: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"              // "" for no date
         accentColor = "#88C0D0"         // also islandColor, textColor
@@ -57,7 +61,7 @@ panels {
 ```
 
 Each island shows its modules in order, and an empty list leaves that island out. The
-modules are `wall`, `window`, `clock`, `tray`, `layout` (the keyboard layout, when there are several),
+modules are `wall`, `window`, `clock`, `tray`, `layout`, `bluetooth` (the keyboard layout, when there are several),
 `network`, `volume`, `battery`, `power` and `texts`. The last one shows the texts of `texts { ... }`, asked for every second:
 
 ```kotlin

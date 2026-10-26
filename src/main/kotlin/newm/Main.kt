@@ -28,11 +28,24 @@ fun main(args: Array<String>) {
         logFile = logPath()
         // No title bars: newm's look (a config may want programs' own: titleBars = true).
         titleBars = dev.caulis.core.TitleBars.NONE
+        // Dark behind everything until the wallpaper has faded in (Caulis's own grey-blue otherwise).
+        background = dev.caulis.core.Background.color(dev.caulis.render.Color(0.06f, 0.065f, 0.08f))
         // Notices (a mistake in the configuration, ...) as neat cards at the top.
-        noticeStyle = dev.caulis.core.NoticeStyle.cards()
+        noticeStyle = dev.caulis.core.NoticeStyle.cards(dark = colorScheme == dev.caulis.core.appearance.ColorScheme.DARK)
+        // (Light or dark as programs are, also when that changes.)
+        onColorSchemeChanged { scheme ->
+            noticeStyle = dev.caulis.core.NoticeStyle.cards(dark = scheme == dev.caulis.core.appearance.ColorScheme.DARK)
+            applySettings()
+        }
         // Only for newm itself (dev/newm-dev's debugger port, its notice): not for programs started inside.
         environment["NEWM_OPTS"] = null
         environment["NEWM_NOTICE"] = null
+        // The keys are newm's: of Caulis's usual ones (Super+1..9 workspaces, Super+Q, window
+        // dragging, ... which would fight newm's wall) only a laptop's keys and the consoles stay.
+        val laptopKeys = listOf("volumeUp", "volumeDown", "volumeMute", "micMute", "brightnessUp", "brightnessDown", "touchpad", "displays", "mediaPlay", "mediaNext", "mediaPrevious")
+        val kept = keys.all().filterKeys { it in laptopKeys }
+        keys.off()
+        kept.forEach { (name, combination) -> keys[name] = combination }
         // While newm is locked: none of Caulis's keys (see Layout.ensureLocked).
         mode(LOCKED_MODE) {}
         lateinit var layout: Layout
@@ -41,6 +54,14 @@ fun main(args: Array<String>) {
         onStart { config.started() }
         // On the real screen and not among the login screen's sessions yet: told once how.
         onStart { if (System.getenv("WAYLAND_DISPLAY") == null) sessionHint()?.let { notify(it, title = "newm") } }
+        // The first time: where the keys are told.
+        onStart {
+            val flag = logPathDir()?.resolve("welcomed")
+            if (flag != null && !java.nio.file.Files.exists(flag)) {
+                notify("Super+/ shows every key. Super+D starts a program, Super+S puts two windows side by side. On a touchpad: three fingers move, four zoom.", title = "Welcome to newm")
+                runCatching { java.nio.file.Files.writeString(flag, "") }
+            }
+        }
         // What the one who started newm has to say (dev/newm-dev: "the new build crashed, the one before runs").
         onStart { System.getenv("NEWM_NOTICE")?.takeIf { it.isNotBlank() }?.let { notify(it, title = "newm") } }
         layout = Layout(this)
@@ -81,6 +102,8 @@ private fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) 
         keyboardLayouts = system.layouts
         if (pywm?.get("xkb_options") == null) keyboardOptions = system.options
     }
+    // The window under the pointer gets the keys, unless the configuration says otherwise.
+    if (pywm?.get("focus_follows_mouse") == null) focusFollowsMouse = true
     pywm?.let { applyPywmSettings(this, it) }
     (settings["outputs"] as? List<Map<String, Any?>>)?.let { applyOutputs(this, it) }
 }
@@ -93,6 +116,15 @@ private class DeferredApi(make: () -> LayoutApi) : PyConfig.Handler, LayoutApiSo
     override fun view(handle: Int, method: String, args: List<Any?>, kwargs: Map<String, Any?>) = api.view(handle, method, args, kwargs)
     override fun viewData(view: View) = api.viewData(view)
     override fun viewOf(handle: Int) = api.viewOf(handle)
+}
+
+// ~/.local/state/newm (made if needed), or null.
+private fun logPathDir(): java.nio.file.Path? = try {
+    val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") }
+        ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
+    java.nio.file.Path.of(state, "newm").also { java.nio.file.Files.createDirectories(it) }
+} catch (_: Exception) {
+    null
 }
 
 // ~/.local/state/newm/newm.log, the last start's moved to newm.log.old (null if it cannot be made).

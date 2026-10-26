@@ -23,7 +23,7 @@ animTime = 0.3                              // how long moving and zooming take 
 // blendTime = 1.0                          // fading in at the start, out at the end
 
 view {
-    cornerRadius = 24.0                     // windows' corners
+    cornerRadius = 14.0                     // windows' corners (bigger cuts into what programs draw at their edges)
     padding = 8.0                           // the gap around each window
     // fullscreenPadding = 0.0
     // sendFullscreen = true                // programs are told when they are fullscreen
@@ -65,7 +65,7 @@ panels {
         // font = "Inter"
         left = listOf("wall", "window")
         center = listOf("clock")
-        right = listOf("tray", "layout", "network", "volume", "battery", "power")
+        right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power")
         clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"                  // "" for none
         // accentColor = "#BF616A"          // and islandColor, textColor: your own colours
@@ -101,7 +101,7 @@ keyboard {
 input {
     tapToClick = true
     naturalScroll = false
-    focusFollowsMouse = false               // the window under the mouse gets the keyboard
+    focusFollowsMouse = true                // the window under the mouse gets the keyboard (false: a click)
     // xwayland = true                      // X11 programs
 }
 
@@ -113,64 +113,80 @@ input {
 
 // --- Keys ------------------------------------------------------------------------------------
 // "L" is the Logo (Super) key, "S" Shift, "C" Ctrl, "A" Alt: "L-S-h" is Logo+Shift+h, and
-// "L-H" means the same. "L-" is Logo tapped alone. Inside { } the layout is at hand: move(...),
+// "L-H" means the same. "L-" is Logo tapped alone. "L-x"("what it does") { } says it in the
+// help (Logo+/). Inside { } the layout is at hand: move(...),
 // toggleOverview(), ... (all of them: docs/en/settings.md).
 
 val terminal = defaultTerminal()             // $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
 
 keys {
+    // Each key with what it does in words: Logo+/ shows them all.
+
     // Programs
-    "L-Return" { launch(terminal) }
-    "L-d" { enterLauncherOverlay() }        // newm's launcher (also: five fingers)
+    "L-Return"("Open a terminal") { launch(terminal) }
+    "L-d"("Find and start a program") { enterLauncherOverlay() }
 
-    // Focus: the window beside
-    "L-h" { move(-1, 0) }
-    "L-j" { move(0, 1) }
-    "L-k" { move(0, -1) }
-    "L-l" { move(1, 0) }
-    "L-Left" { move(-1, 0) }
-    "L-Down" { move(0, 1) }
-    "L-Up" { move(0, -1) }
-    "L-Right" { move(1, 0) }
-    "L-t" { moveInStack(1) }                // the next window of a stack
-    "L-Tab" { cycleViews(1) }               // every window in turn
-    "L-S-Tab" { cycleViews(-1) }
-
-    // Moving windows on the wall
-    "L-S-h" { moveFocusedView(-1, 0) }
-    "L-S-j" { moveFocusedView(0, 1) }
-    "L-S-k" { moveFocusedView(0, -1) }
-    "L-S-l" { moveFocusedView(1, 0) }
-
-    // Resizing windows (in tiles)
-    "L-C-h" { resizeFocusedView(-1, 0) }
-    "L-C-j" { resizeFocusedView(0, 1) }
-    "L-C-k" { resizeFocusedView(0, -1) }
-    "L-C-l" { resizeFocusedView(1, 0) }
+    // Going around: the window beside
+    "L-h"("Window to the left") { move(-1, 0) }
+    "L-j"("Window below") { move(0, 1) }
+    "L-k"("Window above") { move(0, -1) }
+    "L-l"("Window to the right") { move(1, 0) }
+    "L-Left"("Window to the left") { move(-1, 0) }
+    "L-Down"("Window below") { move(0, 1) }
+    "L-Up"("Window above") { move(0, -1) }
+    "L-Right"("Window to the right") { move(1, 0) }
+    "L-Tab"("Next window") { cycleViews(1) }
+    "L-S-Tab"("Previous window") { cycleViews(-1) }
+    "L-t"("Next window of a stack") { moveInStack(1) }
 
     // Seeing more or less of the wall
-    "L-u" { basicScale(1) }
-    "L-n" { basicScale(-1) }
-    "L-" { toggleOverview() }
+    "L-"("All windows (tap Super alone)") { toggleOverview() }
+    "L-minus"("Zoom out (see more)") { basicScale(1) }
+    "L-equal"("Zoom in (see fewer)") { basicScale(-1) }
+    "L-u"("Zoom out") { basicScale(1) }
+    "L-n"("Zoom in") { basicScale(-1) }
+    "L-0"("Fit the window to the screen") { fitFocusedView() }
+    "L-s"("Two windows side by side, and back") { sideBySide() }
+
+    // Moving a window on the wall
+    "L-S-h"("Move the window left") { moveFocusedView(-1, 0) }
+    "L-S-j"("Move the window down") { moveFocusedView(0, 1) }
+    "L-S-k"("Move the window up") { moveFocusedView(0, -1) }
+    "L-S-l"("Move the window right") { moveFocusedView(1, 0) }
+    "L-S-Left"("Move the window left") { moveFocusedView(-1, 0) }
+    "L-S-Down"("Move the window down") { moveFocusedView(0, 1) }
+    "L-S-Up"("Move the window up") { moveFocusedView(0, -1) }
+    "L-S-Right"("Move the window right") { moveFocusedView(1, 0) }
+
+    // Its size, in tiles (one tile: a screen at zoom 1)
+    "L-C-h"("Window narrower") { resizeFocusedView(-1, 0) }
+    "L-C-l"("Window wider") { resizeFocusedView(1, 0) }
+    "L-C-k"("Window shorter") { resizeFocusedView(0, -1) }
+    "L-C-j"("Window taller") { resizeFocusedView(0, 1) }
+    "L-C-Left"("Window narrower") { resizeFocusedView(-1, 0) }
+    "L-C-Right"("Window wider") { resizeFocusedView(1, 0) }
+    "L-C-Up"("Window shorter") { resizeFocusedView(0, -1) }
+    "L-C-Down"("Window taller") { resizeFocusedView(0, 1) }
 
     // Windows
-    "L-q" { closeFocusedView() }
-    "L-f" { toggleFullscreen() }
-    "L-space" { toggleFocusedViewFloating() }
+    "L-q"("Close the window") { closeFocusedView() }
+    "L-f"("Fullscreen, and back") { toggleFullscreen() }
+    "L-v"("Float, and back") { toggleFocusedViewFloating() }
 
     // The session
-    "L-p" { ensureLocked(dim = true) }      // lock the screen
-    "L-C" { updateConfig() }                // load this file again (saving does it too)
-    "L-S-Escape" { terminate() }            // log out
+    "L-slash"("These keys") { toggleKeyHelp() }
+    "L-p"("Lock the screen") { ensureLocked(dim = true) }
+    "L-C"("Reload this configuration") { updateConfig() }
+    "L-S-Escape"("Log out") { terminate() }
 
     // The laptop's keys work on the lock screen too
-    "XF86MonBrightnessUp" { caulis.run("brightness +5") }
-    "XF86MonBrightnessDown" { caulis.run("brightness -5") }
-    "XF86AudioRaiseVolume" { caulis.run("volume +5") }
-    "XF86AudioLowerVolume" { caulis.run("volume -5") }
-    "XF86AudioMute" { caulis.run("volume mute") }
-    "XF86AudioMicMute" { caulis.run("mic-mute") }
-    "Print" { launch("grim") }
+    "XF86MonBrightnessUp"("Brighter") { caulis.run("brightness +5") }
+    "XF86MonBrightnessDown"("Darker") { caulis.run("brightness -5") }
+    "XF86AudioRaiseVolume"("Louder") { caulis.run("volume +5") }
+    "XF86AudioLowerVolume"("Quieter") { caulis.run("volume -5") }
+    "XF86AudioMute"("Sound off, and on") { caulis.run("volume mute") }
+    "XF86AudioMicMute"("Microphone off, and on") { caulis.run("mic-mute") }
+    "Print"("Screenshot") { launch("grim") }
 }
 
 // --- Gestures (touchpads) ----------------------------------------------------------------------

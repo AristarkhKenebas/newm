@@ -39,6 +39,8 @@ object DataConfig {
                         combo.toString() to run
                     }
                     out["key_bindings"] = { layout: Layout -> bindings.map { (combo, run) -> combo to { run(layout) } } }
+                    // The help (Logo+/) says the action as it is written ("move -1 0").
+                    out["key_help"] = keys.entries.map { (combo, action) -> combo.toString() to (action as? String ?: "") }
                 }
                 "rules" -> {
                     val rules = (value as? List<*>)?.filterIsInstance<Map<*, *>>() ?: problems.add("$name: rules is a list of tables").let { continue }
@@ -105,6 +107,7 @@ object DataConfig {
         "move_workspace", "toggle_overview", "toggle_fullscreen", "toggle_focused_view_floating", "change_focused_view_workspace",
         "move_focused_view", "resize_focused_view", "close_focused_view", "close_view", "swallow_focused_view",
         "enter_launcher_overlay", "exit_overlay", "update_config", "terminate", "ensure_locked", "command", "launch_app",
+        "fit_focused_view", "toggle_key_help", "side_by_side",
     )
 
     private fun parseAction(text: String, caulis: Caulis, where: String, problems: MutableList<String>): ((Layout) -> Unit)? {

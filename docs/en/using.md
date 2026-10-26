@@ -25,27 +25,36 @@ of tiles, and the screen shows a part of it:
 Two programs side by side? Put them in tiles next to each other and zoom out. One at a
 time again? Zoom back in.
 
+## Two windows on one screen
+
+Open the second program (it comes next to the first), then press **Super+S**: the two share
+the screen, half each. Super+S again gives each the whole screen back. Another way: zoom out
+(Super+−) to see two by two, and make windows taller or wider with Super+Ctrl+arrows.
+
 ## Keys
 
 | Keys | What they do |
 |---|---|
-| Logo+Return | open a terminal |
-| Logo+d | the launcher: type a program's name, Enter starts it, Escape closes it |
-| Logo+h / j / k / l (or the arrows) | focus the window to the left / below / above / to the right |
-| Logo+Shift+h / j / k / l | move the focused window that way |
-| Logo+Ctrl+h / j / k / l | make it narrower / taller / shorter / wider, by tiles |
-| Logo+u / Logo+n | zoom out / in |
-| Logo (tapped alone) | the overview: every window at once |
-| Logo+Tab, Logo+Shift+Tab | every window in turn |
-| Logo+t | the next window of a stack |
-| Logo+f | fullscreen, and back |
-| Logo+space | the window floats above the wall, and back |
-| Logo+q | close the window |
-| Logo+p | lock the screen |
-| Logo+Shift+c | load the configuration again (saving it does this too) |
-| Logo+Shift+Escape | log out |
+| Super+/ | **every key**, with what it does (any key closes it) |
+| Super+Return | open a terminal |
+| Super+D | the launcher: type a few letters, Enter starts it; Super+D again or Escape closes it |
+| Super+H / J / K / L (or the arrows) | the window to the left / below / above / to the right |
+| Super+Tab, Super+Shift+Tab | every window in turn |
+| Super (tapped alone) | the overview: every window at once |
+| Super+S | **two windows side by side** on one screen (the focused one and its neighbour), and back |
+| Super+0 | fit: the window fills the screen |
+| Super+− / Super+= (or U / N) | zoom out (see more windows) / in |
+| Super+Shift+H / J / K / L (or arrows) | move the window on the wall |
+| Super+Ctrl+H / J / K / L (or arrows) | make the window narrower / taller / shorter / wider, by tiles |
+| Super+F | fullscreen, and back |
+| Super+V | the window floats above the wall, and back |
+| Super+Q | close the window |
+| Super+P | lock the screen |
+| Super+Shift+Escape | log out |
 | Brightness, volume and mute keys | work, on the lock screen too |
-| Print | a screenshot (with grim) |
+
+Shortcuts work whatever the keyboard layout: Super+D is Super+D on the Russian layout too.
+The window under the mouse gets the keys (no need to click it); `input { focusFollowsMouse = false }` turns that off.
 
 All of them can be changed: see [Your configuration](configuration.md#keys).
 

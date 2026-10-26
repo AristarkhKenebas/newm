@@ -89,6 +89,15 @@ class Panels(private val wm: Layout) {
         return Rect(x, y, pw, ph)
     }
 
+    // The launcher: in the upper middle of the screen, while it is open (or opening).
+    private fun launcherArea(m: Monitor): Rect? {
+        if (wm.layoutDown.launcherPerc <= 0.0 || m !== monitorShown()) return null
+        val a = m.area
+        val w = minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
+        val h = minOf(560, (a.height * 0.62).toInt())
+        return Rect(a.x + (a.width - w) / 2, a.y + (a.height * 0.16).toInt(), w, h)
+    }
+
     // --- the lock screen
 
     /** What the lock screen is asked now (the password, or — for the greeter — the user). */
@@ -155,9 +164,9 @@ class Panels(private val wm: Layout) {
         ) { LockScreen() }
         val launcher = ComposeWidget(
             desktop, post,
-            place = { m -> if (ownLauncher) area(m, wm.layoutDown.launcherPerc, confLauncherW(), confLauncherH()) else null },
+            place = { m -> if (ownLauncher) launcherArea(m) else null },
             level = DrawingLevel.ON_TOP, takesKeyboard = true,
-        ) { Launcher() }
+        ) { LauncherPanel(wm, apps, opened) }
         lockWidget = lock
         launcherWidget = launcher
         wm.caulis.addWidget(lock)
@@ -236,65 +245,10 @@ class Panels(private val wm: Layout) {
         message = "…"
         req.callback(data)
     }
-
-    @Composable
-    private fun Launcher() {
-        var query by remember(opened) { mutableStateOf("") }
-        var selected by remember(opened) { mutableIntStateOf(0) }
-        val focus = remember { FocusRequester() }
-        val list = rememberLazyListState()
-        LaunchedEffect(opened) { runCatching { focus.requestFocus() } }
-        val shown = DesktopApp.matching(apps, query)
-        if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0)
-        LaunchedEffect(selected) { if (shown.isNotEmpty()) list.animateScrollToItem(selected) }
-        fun start(app: DesktopApp) {
-            query = ""
-            wm.launchApp(app.command)
-        }
-        Panel(confLauncherCornerRadius()) {
-            Column(Modifier.fillMaxSize()) {
-                BasicTextField(
-                    query, { query = it; selected = 0 },
-                    Modifier.fillMaxWidth().focusRequester(focus)
-                        .background(fieldBackground, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 12.dp)
-                        .onPreviewKeyEvent { e ->
-                            if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                            when (e.key) {
-                                Key.DirectionDown -> { selected = (selected + 1).coerceAtMost(shown.size - 1); true }
-                                Key.DirectionUp -> { selected = (selected - 1).coerceAtLeast(0); true }
-                                Key.Enter, Key.NumPadEnter -> { shown.getOrNull(selected)?.let(::start); true }
-                                Key.Escape -> { wm.exitOverlay(); true }
-                                else -> false
-                            }
-                        },
-                    singleLine = true,
-                    textStyle = TextStyle(color = panelText, fontSize = 20.sp),
-                    cursorBrush = SolidColor(panelAccent),
-                    decorationBox = { field ->
-                        if (query.isEmpty()) BasicText("Type to find a program", style = TextStyle(color = panelDim, fontSize = 20.sp))
-                        field()
-                    },
-                )
-                Spacer(Modifier.height(16.dp))
-                LazyColumn(state = list, modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(shown) { i, app ->
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .background(if (i == selected) fieldBackground else Color.Transparent, RoundedCornerShape(10.dp))
-                                .clickable { start(app) }.padding(horizontal = 14.dp, vertical = 10.dp),
-                        ) {
-                            BasicText(app.name, style = TextStyle(color = if (i == selected) panelAccent else panelText, fontSize = 17.sp))
-                            if (app.comment.isNotEmpty()) BasicText(app.comment, style = TextStyle(color = panelDim, fontSize = 13.sp), maxLines = 1)
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** A program as the desktop knows it (a .desktop file): its name, what it says, how to start it. */
-data class DesktopApp(val name: String, val comment: String, val command: String, val keywords: String) {
+data class DesktopApp(val name: String, val comment: String, val command: String, val keywords: String, val icon: String = "", val id: String = "") {
     companion object {
         /** The programs installed (applications folders of XDG_DATA_HOME and XDG_DATA_DIRS; the user's first). */
         fun installed(): List<DesktopApp> {
@@ -310,7 +264,7 @@ data class DesktopApp(val name: String, val comment: String, val command: String
                     for (file in files.filter { it.toString().endsWith(".desktop") }.toList()) {
                         val id = folder.relativize(file).toString().replace('/', '-')
                         if (!seen.add(id)) continue
-                        parse(file)?.let(apps::add)
+                        parse(file)?.copy(id = id.removeSuffix(".desktop"))?.let(apps::add)
                     }
                 }
             }
@@ -339,16 +293,28 @@ data class DesktopApp(val name: String, val comment: String, val command: String
                 // %f, %U and the like: nothing to open, so left out.
                 var command = exec.replace(Regex("%[fFuUdDnNickvm]"), "").trim()
                 if (entry["Terminal"] == "true") command = "${defaultTerminal()} -e $command"
-                DesktopApp(entry["Name"] ?: file.fileName.toString().removeSuffix(".desktop"), entry["Comment"] ?: entry["GenericName"] ?: "", command, entry["Keywords"] ?: "")
+                DesktopApp(entry["Name"] ?: file.fileName.toString().removeSuffix(".desktop"), entry["Comment"] ?: entry["GenericName"] ?: "", command, entry["Keywords"] ?: "", entry["Icon"] ?: "")
             }
         } catch (_: Exception) {
             null
         }
 
         /** The programs for what was typed: names first (those starting with it first), then words. */
+        // Typed on the Russian layout meaning the Latin one ("ашкуащч" is "firefox").
+        private val RU = "йцукенгшщзхъфывапролджэячсмитьбю."
+        private val EN = "qwertyuiop[]asdfghjkl;'zxcvbnm,./"
+
+        private fun latinOf(text: String): String = text.map { c -> RU.indexOf(c).let { if (it >= 0) EN[it] else c } }.joinToString("")
+
         fun matching(apps: List<DesktopApp>, query: String): List<DesktopApp> {
             val q = query.trim().lowercase()
             if (q.isEmpty()) return apps
+            val found = matchingExactly(apps, q)
+            val latin = latinOf(q)
+            return if (found.isNotEmpty() || latin == q) found else matchingExactly(apps, latin)
+        }
+
+        private fun matchingExactly(apps: List<DesktopApp>, q: String): List<DesktopApp> {
             fun score(app: DesktopApp): Int? {
                 val name = app.name.lowercase()
                 return when {
@@ -360,7 +326,7 @@ data class DesktopApp(val name: String, val comment: String, val command: String
                     else -> null
                 }
             }
-            return apps.mapNotNull { app -> score(app)?.let { it to app } }.sortedBy { it.first }.map { it.second }
+            return apps.mapNotNull { app -> score(app)?.let { it to app } }.sortedWith(compareBy({ it.first }, { it.second.name.length })).map { it.second }
         }
     }
 }
