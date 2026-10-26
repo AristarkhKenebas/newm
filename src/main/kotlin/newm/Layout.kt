@@ -3,6 +3,7 @@ package newm
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import dev.caulis.compose.compose
+import newm.bar.connectionChanged
 import newm.bar.hintPill
 import newm.bar.showOsd
 import newm.bar.showPopups
@@ -394,7 +395,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } else if (previous != null && previous.size != up.size && up.size != requestedSize[window]) {
                 view.onResized(up.size.first, up.size.second, clientLeading = true)
             }
-            return placeOf(down)
+            return placeOf(down, up.size.takeIf { !animating && !view.animating })
         }
 
         override fun decorate(window: Window, place: WindowPlace, canvas: OverlayCanvas, above: Boolean) {
@@ -440,9 +441,24 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // A view's downstream state as Caulis places windows: its box, the part shown (the mask,
     // within its workspace), how strongly, in which order, and whether it takes input.
-    private fun placeOf(down: ViewDown): WindowPlace? {
-        val b = down.box
+    private fun placeOf(down: ViewDown, drawn: Pair<Int, Int>? = null): WindowPlace? {
+        var b = down.box
         if (b.w <= 0.0 || b.h <= 0.0) return null
+        // The program drew another size than asked (a smallest size of its own, as Spotify's):
+        // its picture at its own size (zoomed as the view is), in the middle of its place and cut
+        // to it, never stretched (stretched it came out blurred and askew). (Not while moving:
+        // there the picture follows the place until the program catches up.)
+        val tileBox = b
+        val asked = down.size
+        var cut = false
+        if (drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked) {
+            val sx = b.w / asked.first
+            val sy = b.h / asked.second
+            val w = drawn.first * sx
+            val h = drawn.second * sy
+            b = Box(b.x + (b.w - w) / 2, b.y + (b.h - h) / 2, w, h)
+            cut = true
+        }
         // While locked, only the lock screen's views are shown and take input.
         val lockHidden = if (down.lockEnabled) 0.0 else layoutDown.lockPerc
         val alpha = (down.opacity * (1.0 - lockHidden)).coerceIn(0.0, 1.0)
@@ -450,11 +466,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         var clip: Rect? = null
         if (down.mask != Box.NO_MASK) {
             val m = down.mask
-            clip = Rect(Math.floor(b.x + m.x).toInt(), Math.floor(b.y + m.y).toInt(), Math.ceil(m.w).toInt(), Math.ceil(m.h).toInt())
+            clip = Rect(Math.floor(tileBox.x + m.x).toInt(), Math.floor(tileBox.y + m.y).toInt(), Math.ceil(m.w).toInt(), Math.ceil(m.h).toInt())
         }
         down.workspace?.let { ws ->
             val wsRect = Rect(ws.x.toInt(), ws.y.toInt(), ws.w.toInt(), ws.h.toInt())
             clip = (clip ?: wsRect).intersect(wsRect) ?: return null // (outside its workspace: not shown)
+        }
+        if (cut) {
+            val t = Rect(Math.floor(tileBox.x).toInt(), Math.floor(tileBox.y).toInt(), Math.ceil(tileBox.w).toInt(), Math.ceil(tileBox.h).toInt())
+            clip = (clip ?: t).intersect(t) ?: return null
         }
         if (clip?.let { it.width <= 0 || it.height <= 0 } == true) return null
         return WindowPlace(
@@ -1192,10 +1212,23 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // For newm's own tests only (NEWM_TEST_INPUT=1): the pointer moved, clicked, scrolled.
             "test-pointer" -> if (System.getenv("NEWM_TEST_INPUT") == "1") testPointer(arg.orEmpty()) else "Disabled"
             // "56+42" presses Alt and Shift together, then lets them go (evdev codes).
+            "test-card" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
+                // test-card wifi|wired|bluetooth on|off [name]
+                val w = arg.orEmpty().trim().split(Regex("\\s+"), limit = 3)
+                val kind = newm.bar.ConnectionEvent.Kind.valueOf(w.getOrElse(0) { "wifi" }.uppercase())
+                barModel.connectionChanged(newm.bar.ConnectionEvent(kind, w.getOrNull(1) != "off", w.getOrNull(2), "audio-headphones"))
+                null
+            } else "NEWM_TEST_INPUT=1 only"
             "test-ask-password" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
                 barModel.askPassword(newm.bar.WifiNetwork(arg ?: "Test", 70, true, "/", false, false))
                 null
             } else "NEWM_TEST_INPUT=1 only"
+            // `newm cmd test-key-raw <evdev code> down|up`: one key, held or let go (tests only).
+            "test-key-raw" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
+                val w = arg.orEmpty().trim().split(Regex("\\s+"))
+                w.getOrNull(0)?.toIntOrNull()?.let { caulis.simulateKey(it, w.getOrNull(1) != "up") }
+                null
+            } else "Disabled"
             "test-keys" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
                 val codes = arg.orEmpty().trim().split('+').mapNotNull { it.trim().toIntOrNull() }
                 codes.forEach { caulis.simulateKey(it, true) }
@@ -1252,6 +1285,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             "scroll" -> {
                 caulis.simulatePointer(x, y)
                 caulis.simulateScroll(w.getOrNull(3)?.toIntOrNull() ?: 1)
+            }
+            // (Held and let go apart: a drag.)
+            "left-down", "left-up" -> {
+                caulis.simulatePointer(x, y)
+                caulis.simulateButton(272, w[2] == "left-down")
             }
             else -> caulis.simulatePointer(x, y, when (w[2]) { "right" -> 273; "middle" -> 274; else -> 272 })
         }

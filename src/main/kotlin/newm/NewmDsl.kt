@@ -108,6 +108,9 @@ class NewmConfig(
     /** The screenshots' settings (the keys: screenshot(), screenshotScreen(), screenshotWindow() in keys { }). */
     fun screenshots(configure: ScreenshotsSection.() -> Unit) = section("screenshots", ::ScreenshotsSection, configure)
 
+    /** What shows on the screen by itself (a card when Wi-Fi, a cable or Bluetooth comes or goes). */
+    fun osd(configure: OsdSection.() -> Unit) = section("osd", ::OsdSection, configure)
+
     /** The clipboard's history (its key: toggleClipboard() in keys { }). */
     fun clipboard(configure: ClipboardSection.() -> Unit) = section("clipboard", ::ClipboardSection, configure)
 
@@ -156,7 +159,13 @@ class BackgroundSection internal constructor(values: MutableMap<String, Any?>) :
     /** The picture ("~/Pictures/wall.jpg"; "resource:wallpaper.jpg" is newm's own). */
     var path by setting<String>("path")
 
-    /** The wallpaper moves a little with the view (parallax). */
+    /**
+     * "follow" (the default: it moves and zooms with the view, the overview shows more of it)
+     * or "static" (it stands still and fills the screen, whatever the view does).
+     */
+    var mode by setting<String>("mode")
+
+    /** The wallpaper moves a little with the view (parallax); false is mode = "static". */
     var anim by setting<Boolean>("anim")
 
     /** How quickly it follows, in seconds. */
@@ -439,6 +448,37 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
     var save by setting<Boolean>("save")
     var copy by setting<Boolean>("copy")
     var pointer by setting<Boolean>("pointer")
+
+    /** A toast when one is taken (true). */
+    var toast by setting<Boolean>("toast")
+
+    /** What the chooser starts with: "region", "window" or "screen" (the one used last if not set). */
+    var start by setting<String>("start")
+
+    /** Seconds to wait before taking it (0). */
+    var delay by setting<Int>("delay")
+
+    /** A part of the overview (windows drawn small) is put together from the windows at their own size: sharp (true). */
+    var sharpWindows by setting<Boolean>("sharp_windows")
+
+    /** Behind the windows of such a picture: "none" (see-through, the default), "#RRGGBB", or "theme" (the bar's colour). */
+    var sharpBackground by setting<String>("sharp_background")
+
+    /** The file's name: {date}, {time}, {kind} ("Screenshot from {date} {time}"). */
+    var fileName by setting<String>("file_name")
+
+    /** "png" (the default) or "jpg"; the JPEG's quality 0..100 (92). */
+    var format by setting<String>("format")
+    var quality by setting<Int>("quality")
+
+    /** A command run with each file saved, {file} being it (an editor: "satty --filename {file}"). */
+    var then by setting<String>("then")
+}
+
+/** osd { }: what shows on the screen by itself. */
+class OsdSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** Wi-Fi, a cable or a Bluetooth device came or went: "cards" (in the middle, the default), "text" (a short line), "off". */
+    var connections by setting<String>("connections")
 }
 
 /** clipboard { }: the clipboard's history (kept in memory only, never on disk). */
@@ -446,8 +486,25 @@ class ClipboardSection internal constructor(values: MutableMap<String, Any?>) : 
     /** The history at all (false: nothing is kept, the key does nothing). */
     var enabled by setting<Boolean>("enabled")
 
-    /** How many things are kept (50 by default). */
+    /** How many things are kept (50 by default; pinned ones on top of them). */
     var size by setting<Int>("size")
+
+    /** Pictures kept too (true), and copied files (true). */
+    var pictures by setting<Boolean>("pictures")
+    var files by setting<Boolean>("files")
+
+    /** Pinned texts kept after a restart (true; false: in memory only, as everything else). */
+    var keepPins by setting<Boolean>("keep_pins")
+
+    /** Programs whose copies are never kept, by name or app id ("keepassxc", "bitwarden"). */
+    var ignore by setting<List<String>>("ignore")
+
+    /** The biggest picture kept (megabytes, 16) and the longest text (characters, 200000). */
+    var maxPictureMb by setting<Int>("max_picture_mb")
+    var maxText by setting<Int>("max_text")
+
+    /** "Clear" asks nothing (false: it asks again before clearing everything). */
+    var clearAtOnce by setting<Boolean>("clear_at_once")
 }
 
 class EnergySection internal constructor(values: MutableMap<String, Any?>) : Section(values) {

@@ -1,5 +1,15 @@
 package newm
 
+import newm.bar.ListRow
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.draw.drawBehind
+import newm.bar.IconButton
+import newm.bar.ChoiceChip
+import newm.bar.PillKind
+import newm.bar.PillButton
+import newm.bar.GlyphIcon
+import newm.bar.Glyph
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -77,12 +87,61 @@ private val log = Logger("clipboard")
 
 private val confEnabled = configuredValue("clipboard.enabled", true)
 private val confSize = configuredValue("clipboard.size", 50)
+private val confPictures = configuredValue("clipboard.pictures", true)
+private val confFiles = configuredValue("clipboard.files", true)
+private val confKeepPins = configuredValue("clipboard.keep_pins", true)
+private val confIgnore = configuredValue("clipboard.ignore", listOf("keepassxc", "bitwarden", "1password"))
+private val confMaxPictureMb = configuredValue("clipboard.max_picture_mb", 16)
+private val confMaxText = configuredValue("clipboard.max_text", 200_000)
 
-/** One thing copied: text, or a picture (its PNG and a picture of it to show). */
-class ClipEntry(val text: String?, val png: ByteArray?, val picture: ImageBitmap?, val width: Int, val height: Int) {
+/**
+ * One thing copied: text, or a picture (its PNG and a picture of it to show), the program it
+ * came from ([source], its app id [sourceApp] for its icon), when; [pinned] ones stay.
+ */
+class ClipEntry(val text: String?, val png: ByteArray?, val picture: ImageBitmap?, val width: Int, val height: Int,
+                val source: String? = null, val sourceApp: String? = null, val at: Long = System.currentTimeMillis(),
+                /** Copied files (their file:// addresses), or null. */
+                val files: List<String>? = null) {
+    val kind: ClipKind get() = when {
+        files != null -> ClipKind.FILES
+        picture != null -> ClipKind.PICTURES
+        else -> ClipKind.TEXT
+    }
+
+    /** The files' names ("report.pdf"). */
+    val fileNames: List<String> get() = files.orEmpty().map { java.net.URLDecoder.decode(it.substringAfterLast('/'), Charsets.UTF_8) }
+
     val time: String = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+    var pinned by mutableStateOf(false)
 
-    fun same(other: ClipEntry) = text != null && text == other.text || png != null && other.png != null && png.contentEquals(other.png)
+    fun same(other: ClipEntry) = files != null && files == other.files || files == null && other.files == null && text != null && text == other.text ||
+        png != null && other.png != null && png.contentEquals(other.png)
+
+    /** How long ago, in words ("just now", "5 min ago", "14:03"). */
+    fun ago(now: Long = System.currentTimeMillis()): String {
+        val minutes = (now - at) / 60_000
+        return when {
+            minutes < 1 -> newm.bar.tr("just now")
+            minutes < 60 -> newm.bar.tr("%s min ago").replace("%s", minutes.toString())
+            else -> time
+        }
+    }
+}
+
+/** What a copied thing is. */
+enum class ClipKind { TEXT, PICTURES, FILES }
+
+/** Which ones the list shows. */
+private enum class ClipFilter(val title: String) {
+    ALL("All"), TEXT("Text"), PICTURES("Pictures"), FILES("Files"), PINNED("Pinned");
+
+    fun has(e: ClipEntry) = when (this) {
+        ALL -> true
+        TEXT -> e.kind == ClipKind.TEXT
+        PICTURES -> e.kind == ClipKind.PICTURES
+        FILES -> e.kind == ClipKind.FILES
+        PINNED -> e.pinned
+    }
 }
 
 /**
@@ -104,8 +163,13 @@ class ClipboardHistory(private val wm: Layout) {
     // What newm itself put back on the clipboard (not kept again as new).
     private var ours: ClipboardData? = null
 
+    // The programs' names (read once, apart: for "copied from").
+    @Volatile private var apps: List<DesktopApp> = emptyList()
+
     fun start() {
         val caulis = wm.caulis
+        loadPins()
+        Thread({ apps = DesktopApp.installed() }, "newm-clipboard-apps").apply { isDaemon = true }.start()
         caulis.clipboard.onClipboardChanged { data -> if (data != null && data !== ours && confEnabled()) take(data) }
         val w = ComposeWidget(caulis.desktop, { task -> caulis.post { task.run() } }, place = { m ->
             if (!fade.visible) null else {
@@ -137,35 +201,76 @@ class ClipboardHistory(private val wm: Layout) {
         val types = data.mimeTypes
         // A password manager's secret: not kept.
         if (types.any { it.startsWith("x-kde-passwordManagerHint") }) return log.trace { "Not kept: marked secret" }
-        val picture = types.firstOrNull { it == "image/png" } ?: types.firstOrNull { it.startsWith("image/") && it != "image/svg+xml" }
+        val (source, sourceApp) = sourceOf(data.pid)
+        // Programs never kept (password managers).
+        if (confIgnore().any { ignored -> ignored.equals(source, true) || ignored.equals(sourceApp, true) }) return log.trace { "Not kept: from $source" }
+        // Copied files: their addresses.
+        if (confFiles() && "text/uri-list" in types) {
+            readClipboard(data, "text/uri-list", 1 shl 20) { bytes ->
+                val uris = bytes?.let { String(it, Charsets.UTF_8) }?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() && !it.startsWith("#") }.orEmpty()
+                if (uris.isNotEmpty()) wm.caulis.post { add(ClipEntry(uris.joinToString("\n"), null, null, 0, 0, source, sourceApp, files = uris)) }
+            }
+            return
+        }
+        val picture = if (!confPictures()) null else types.firstOrNull { it == "image/png" } ?: types.firstOrNull { it.startsWith("image/") && it != "image/svg+xml" }
         val text = types.firstOrNull { it == "text/plain;charset=utf-8" } ?: types.firstOrNull { it == "UTF8_STRING" } ?: types.firstOrNull { it == "text/plain" } ?: types.firstOrNull { it.startsWith("text/") }
         val mime = picture ?: text ?: return
-        readClipboard(data, mime) { bytes ->
+        val limit = if (mime == picture) confMaxPictureMb().coerceIn(1, 256) shl 20 else confMaxText().coerceAtLeast(1) * 4
+        readClipboard(data, mime, limit) { bytes ->
             if (bytes == null || bytes.isEmpty()) return@readClipboard
             val entry = if (mime == picture) {
                 val image = runCatching { org.jetbrains.skia.Image.makeFromEncoded(bytes) }.getOrNull() ?: return@readClipboard
                 // (Kept as PNG: what is copied back is a PNG.)
                 val png = if (mime == "image/png") bytes else image.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)?.bytes ?: return@readClipboard
-                ClipEntry(null, png, image.toComposeImageBitmap(), image.width, image.height)
+                ClipEntry(null, png, image.toComposeImageBitmap(), image.width, image.height, source, sourceApp)
             } else {
                 val s = String(bytes, Charsets.UTF_8).trimEnd('\u0000')
                 if (s.isBlank()) return@readClipboard
-                ClipEntry(s, null, null, 0, 0)
+                ClipEntry(s, null, null, 0, 0, source, sourceApp)
             }
             wm.caulis.post { add(entry) }
         }
     }
 
+    // The program of [pid]: a window's (its title's program, its app id for the icon), else the process' name.
+    private fun sourceOf(pid: Int): Pair<String?, String?> {
+        if (pid <= 0) return null to null
+        val window = wm.caulis.desktop.allWindows.firstOrNull { it.pid == pid }
+        if (window != null) {
+            val app = window.appId.ifEmpty { null }
+            val name = app?.let { id -> apps.firstOrNull { it.id.equals(id, true) || it.id.substringAfterLast('.').equals(id, true) }?.name } ?: app
+            return name to app
+        }
+        val comm = runCatching { java.nio.file.Files.readString(java.nio.file.Path.of("/proc/$pid/comm")).trim() }.getOrNull()
+        return comm to null
+    }
+
     private fun add(entry: ClipEntry) {
+        val before = entries.firstOrNull { it.same(entry) }
+        if (before?.pinned == true) entry.pinned = true
         entries.removeAll { it.same(entry) }
         entries.add(0, entry)
-        while (entries.size > confSize().coerceIn(1, 500)) entries.removeAt(entries.size - 1)
+        // Pinned ones are never pushed out.
+        while (entries.size > confSize().coerceIn(1, 500)) {
+            val last = entries.indexOfLast { !it.pinned }
+            if (last < 0) break
+            entries.removeAt(last)
+        }
         log.trace { "Kept: ${entry.text?.take(20) ?: "a picture ${entry.width}x${entry.height}"}" }
     }
 
     /** Copies [entry] again (and closes). */
     fun use(entry: ClipEntry) {
-        val data: ClipboardData = entry.png?.let { BytesOnClipboard("image/png", it) } ?: TextOnClipboard(entry.text ?: "")
+        val files = entry.files
+        val data: ClipboardData = when {
+            files != null -> BytesOnClipboard(linkedMapOf(
+                "text/uri-list" to (files.joinToString("\r\n") + "\r\n").toByteArray(),
+                "x-special/gnome-copied-files" to ("copy\n" + files.joinToString("\n")).toByteArray(),
+                "text/plain;charset=utf-8" to files.joinToString("\n").toByteArray(),
+            ))
+            entry.png != null -> BytesOnClipboard("image/png", entry.png)
+            else -> TextOnClipboard(entry.text ?: "")
+        }
         ours = data
         wm.caulis.clipboard.setClipboard(data)
         entries.remove(entry)
@@ -175,9 +280,48 @@ class ClipboardHistory(private val wm: Layout) {
 
     fun remove(entry: ClipEntry) {
         entries.remove(entry)
+        if (entry.pinned) savePins()
     }
 
-    fun clear() = entries.clear()
+    /** Everything (of [kind], or all) but the pinned ones goes. */
+    fun clear(kind: ClipKind? = null) {
+        entries.removeAll { !it.pinned && (kind == null || it.kind == kind) }
+    }
+
+    /** Something of [kind] (or anything) could be cleared. */
+    fun canClear(kind: ClipKind? = null) = entries.any { !it.pinned && (kind == null || it.kind == kind) }
+
+    /** Pins [entry] (it stays, also after a restart: pinned texts are kept on disk) or lets go of it. */
+    fun pin(entry: ClipEntry) {
+        entry.pinned = !entry.pinned
+        savePins()
+    }
+
+    // Pinned texts, kept in ~/.local/state/newm/clipboard-pins.json (what you pinned only).
+    private val pinsFile by lazy {
+        val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") } ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
+        java.nio.file.Path.of(state, "newm", "clipboard-pins.json")
+    }
+
+    private fun savePins() {
+        if (!confKeepPins()) return
+        try {
+            java.nio.file.Files.createDirectories(pinsFile.parent)
+            java.nio.file.Files.writeString(pinsFile, Json.write(entries.filter { it.pinned && it.text != null }.map { it.text }))
+        } catch (e: Exception) {
+            log.warn("The pinned clipboard entries cannot be kept: $e")
+        }
+    }
+
+    private fun loadPins() {
+        if (!confKeepPins()) return
+        val texts = try {
+            (Json.parse(java.nio.file.Files.readString(pinsFile)) as? List<*>).orEmpty().filterIsInstance<String>()
+        } catch (_: Exception) {
+            return
+        }
+        for (t in texts) entries += ClipEntry(t, null, null, 0, 0, at = 0L).also { it.pinned = true }
+    }
 
     fun toggle() = if (shown) close() else open()
 
@@ -196,121 +340,274 @@ class ClipboardHistory(private val wm: Layout) {
         if (wm.caulis.desktop.keyboardWidget === widget) wm.caulis.desktop.focusWidget(null)
     }
 
+    // Where the keys are in the window: the search, the kinds, clearing, the list, the actions.
+    private enum class Zone { SEARCH, KINDS, CLEAR, LIST, ACTIONS }
+
     @Composable
     private fun ClipboardPanel(history: ClipboardHistory) {
         if (!history.shown && !fade.visible) return
         val colors = wm.barModel.colorsNow()
         val text = TextStyle(color = colors.text, fontSize = 14.sp)
         var query by remember(opened) { mutableStateOf("") }
+        var filter by remember(opened) { mutableStateOf(ClipFilter.ALL) }
         var selected by remember(opened) { mutableIntStateOf(0) }
+        var zone by remember(opened) { mutableStateOf(Zone.SEARCH) }
+        var action by remember(opened) { mutableIntStateOf(0) }
+        // The clearing menu: open, and its row in focus (0: everything, then text, pictures, files).
+        var clearMenu by remember(opened) { mutableStateOf(false) }
+        var clearRow by remember(opened) { mutableIntStateOf(0) }
         val focus = remember { FocusRequester() }
         val list = rememberLazyListState()
         LaunchedEffect(opened) { runCatching { focus.requestFocus() } }
-        val shown = history.entries.filter { e -> query.isBlank() || e.text?.contains(query, ignoreCase = true) == true || (e.png != null && "picture image".contains(query.lowercase())) }
-        if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0)
+        // The pinned ones first, then the newest.
+        val shown = history.entries.filter { e ->
+            filter.has(e) && (query.isBlank() || e.text?.contains(query, ignoreCase = true) == true || e.source?.contains(query, ignoreCase = true) == true ||
+                e.fileNames.any { it.contains(query, ignoreCase = true) } || (e.png != null && "picture image картинка изображение".contains(query.lowercase())))
+        }.sortedByDescending { it.pinned }
+        LaunchedEffect(shown.size) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
         var byKeys by remember(opened) { mutableIntStateOf(0) }
-        LaunchedEffect(byKeys) { if (byKeys > 0 && shown.isNotEmpty()) list.animateScrollToItem(selected) }
+        LaunchedEffect(byKeys) { if (byKeys > 0 && shown.isNotEmpty()) list.animateScrollToItem(selected.coerceAtMost(shown.size - 1)) }
         val current = shown.getOrNull(selected)
-        val shape = RoundedCornerShape(20.dp)
+        val clearKinds = listOf<ClipKind?>(null, ClipKind.TEXT, ClipKind.PICTURES, ClipKind.FILES)
+        val actions = listOf<Pair<String, () -> Unit>>(
+            "Copy" to { current?.let(history::use) },
+            "Pin" to { current?.let(history::pin) },
+            "Delete" to { current?.let(history::remove) },
+        )
+        fun clearNow(kind: ClipKind?) {
+            if (history.canClear(kind)) history.clear(kind)
+            clearMenu = false
+            selected = 0
+        }
+        fun ring(on: Boolean) = if (on) Modifier.border(2.dp, colors.accent, RoundedCornerShape(16.dp)) else Modifier
+
+        // All the keys of the window: Tab and Shift+Tab go from part to part; the arrows or
+        // h j k l move within one; Enter does it; Escape closes the menu, then the window.
+        fun onKey(e: androidx.compose.ui.input.key.KeyEvent): Boolean {
+            if (e.type != KeyEventType.KeyDown) return false
+            val left = e.key == Key.DirectionLeft || zone != Zone.SEARCH && e.key == Key.H
+            val right = e.key == Key.DirectionRight || zone != Zone.SEARCH && e.key == Key.L
+            val down = e.key == Key.DirectionDown || zone != Zone.SEARCH && e.key == Key.J
+            val up = e.key == Key.DirectionUp || zone != Zone.SEARCH && e.key == Key.K
+            if (e.key == Key.Escape) {
+                if (clearMenu) clearMenu = false else history.close()
+                return true
+            }
+            if (e.key == Key.Tab) {
+                clearMenu = false
+                val zones = Zone.entries
+                zone = zones[Math.floorMod(zone.ordinal + if (e.isShiftPressed) -1 else 1, zones.size)]
+                return true
+            }
+            if (clearMenu) {
+                when {
+                    down -> clearRow = (clearRow + 1).coerceAtMost(clearKinds.size - 1)
+                    up -> clearRow = (clearRow - 1).coerceAtLeast(0)
+                    e.key == Key.Enter || e.key == Key.NumPadEnter -> clearNow(clearKinds[clearRow])
+                    else -> return zone != Zone.SEARCH
+                }
+                return true
+            }
+            if (e.key == Key.P && e.isCtrlPressed) { current?.let(history::pin); return true }
+            when (zone) {
+                Zone.SEARCH, Zone.LIST -> when {
+                    down -> { selected = (selected + 1).coerceAtMost(shown.size - 1); byKeys++ }
+                    up -> { selected = (selected - 1).coerceAtLeast(0); byKeys++ }
+                    e.key == Key.Enter || e.key == Key.NumPadEnter -> current?.let(history::use)
+                    e.key == Key.Delete -> current?.let(history::remove)
+                    zone == Zone.LIST && (left || right) -> zone = if (right) Zone.ACTIONS else Zone.KINDS
+                    else -> return zone != Zone.SEARCH
+                }
+                Zone.KINDS -> when {
+                    left -> filter = ClipFilter.entries[(filter.ordinal - 1).coerceAtLeast(0)].also { selected = 0 }
+                    right -> filter = ClipFilter.entries[(filter.ordinal + 1).coerceAtMost(ClipFilter.entries.size - 1)].also { selected = 0 }
+                    down -> zone = Zone.LIST
+                    else -> {}
+                }
+                Zone.CLEAR -> when {
+                    e.key == Key.Enter || e.key == Key.NumPadEnter -> clearNow(null)
+                    down || e.key == Key.Spacebar -> { clearMenu = true; clearRow = 0 }
+                    else -> {}
+                }
+                Zone.ACTIONS -> when {
+                    left -> action = (action - 1).coerceAtLeast(0)
+                    right -> action = (action + 1).coerceAtMost(actions.size - 1)
+                    up || down -> { selected = (selected + if (down) 1 else -1).coerceIn(0, (shown.size - 1).coerceAtLeast(0)); byKeys++ }
+                    e.key == Key.Enter || e.key == Key.NumPadEnter -> actions[action].second()
+                    else -> {}
+                }
+            }
+            return true
+        }
+
+        val shape = RoundedCornerShape(22.dp)
         Box(
             Modifier.fillMaxSize().padding(16.dp)
-                .softShadow(20.dp, 14.dp)
+                .softShadow(22.dp, 14.dp)
                 .background(colors.island.copy(alpha = 0.97f), shape)
                 .border(1.dp, colors.edge, shape)
-                .padding(14.dp),
+                .padding(16.dp),
         ) {
             Column(Modifier.fillMaxSize()) {
-                // The search, and what can be done.
+                // The search, and clearing (everything, or one kind from the menu).
                 Row(Modifier.fillMaxWidth().height(46.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f).fillMaxHeight().background(colors.text.copy(alpha = 0.06f), RoundedCornerShape(12.dp)).padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
-                        if (query.isEmpty()) BasicText(newm.bar.tr("Search what was copied"), style = text.copy(color = colors.dim, fontSize = 16.sp))
-                        BasicTextField(
-                            query, { query = it; selected = 0 }, singleLine = true, textStyle = text.copy(fontSize = 16.sp), cursorBrush = SolidColor(colors.accent),
-                            modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
-                                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                when (e.key) {
-                                    Key.DirectionDown, Key.Tab -> { selected = (selected + 1).coerceAtMost(shown.size - 1); byKeys++; true }
-                                    Key.DirectionUp -> { selected = (selected - 1).coerceAtLeast(0); byKeys++; true }
-                                    Key.Enter, Key.NumPadEnter -> { current?.let(history::use); true }
-                                    Key.Delete -> { current?.let(history::remove); true }
-                                    Key.Escape -> { history.close(); true }
-                                    else -> false
-                                }
-                            },
-                        )
+                    Row(Modifier.weight(1f).fillMaxHeight().then(ring(zone == Zone.SEARCH)).background(colors.text.copy(alpha = 0.06f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        GlyphIcon(Glyph.SEARCH, colors.dim, 17.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (query.isEmpty()) BasicText(newm.bar.tr("Search what was copied"), style = text.copy(color = colors.dim, fontSize = 16.sp))
+                            BasicTextField(
+                                query, { if (zone == Zone.SEARCH) { query = it; selected = 0 } }, singleLine = true, textStyle = text.copy(fontSize = 16.sp), cursorBrush = SolidColor(colors.accent),
+                                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent(::onKey),
+                            )
+                        }
                     }
                     Spacer(Modifier.width(10.dp))
-                    if (history.entries.isNotEmpty()) SmallButton("Clear all", colors, text) { history.clear() }
+                    Row(Modifier.then(ring(zone == Zone.CLEAR)).padding(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        PillButton("Clear", colors, text, if (history.canClear()) PillKind.DANGER else PillKind.TONAL, glyph = Glyph.TRASH) { clearNow(null) }
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(Glyph.CHEVRON_DOWN, colors, 30.dp) { clearMenu = !clearMenu; clearRow = 0 }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                // What to show: everything, texts, pictures, files, the pinned ones.
+                Row(Modifier.then(ring(zone == Zone.KINDS)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (f in ClipFilter.entries) {
+                        val count = history.entries.count(f::has)
+                        ChoiceChip("${newm.bar.tr(f.title)}  $count", f == filter, colors, text, Modifier.width(112.dp)) { filter = f; selected = 0 }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
-                if (history.entries.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        BasicText(newm.bar.tr("Nothing copied yet — what you copy shows up here."), style = text.copy(color = colors.dim))
-                    }
-                    return@Column
-                }
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    // The list.
-                    LazyColumn(state = list, modifier = Modifier.width(360.dp).fillMaxHeight()) {
-                        itemsIndexed(shown) { i, entry ->
-                            EntryRow(entry, i == selected, colors, text, onHover = { selected = i }, onClick = { history.use(entry) }, onRemove = { history.remove(entry) })
-                        }
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    // What the chosen one is, whole.
-                    Box(Modifier.weight(1f).fillMaxHeight().background(colors.text.copy(alpha = 0.04f), RoundedCornerShape(14.dp)).padding(14.dp)) {
-                        when {
-                            current == null -> {}
-                            current.picture != null -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Image(current.picture, null, Modifier.weight(1f).fillMaxWidth(), contentScale = ContentScale.Fit, filterQuality = FilterQuality.High)
-                                Spacer(Modifier.height(8.dp))
-                                BasicText(newm.bar.tr("${current.width} × ${current.height} · copied at ${current.time}"), style = text.copy(color = colors.dim, fontSize = 12.sp))
-                            }
-                            else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                                BasicText(current.text ?: "", style = text.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    if (shown.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                GlyphIcon(Glyph.COPY, colors.dim, 40.dp)
+                                Spacer(Modifier.height(12.dp))
+                                BasicText(newm.bar.tr(if (history.entries.isEmpty()) "Nothing copied yet — what you copy shows up here." else "Nothing here"), style = text.copy(color = colors.dim))
                             }
                         }
+                    } else Row(Modifier.fillMaxSize()) {
+                        // The list.
+                        LazyColumn(state = list, modifier = Modifier.width(380.dp).fillMaxHeight().then(ring(zone == Zone.LIST)).padding(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            itemsIndexed(shown, key = { _, e -> System.identityHashCode(e) }) { i, entry ->
+                                EntryRow(entry, { selected == i }, colors, text, onHover = { selected = i }, onClick = { history.use(entry) },
+                                    onPin = { history.pin(entry) }, onRemove = { history.remove(entry) })
+                            }
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        // What the chosen one is, whole, and what can be done with it.
+                        Column(Modifier.weight(1f).fillMaxHeight().background(colors.text.copy(alpha = 0.04f), RoundedCornerShape(16.dp)).padding(16.dp)) {
+                            if (current != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    SourceIcon(current, colors, 22.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        BasicText(current.source ?: newm.bar.tr(when (current.kind) { ClipKind.PICTURES -> "Picture"; ClipKind.FILES -> "Files"; else -> "Text" }),
+                                            style = text.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
+                                        BasicText(listOfNotNull(
+                                            current.ago(),
+                                            current.files?.let { newm.bar.tr("%s files").replace("%s", it.size.toString()) }
+                                                ?: current.text?.let { newm.bar.tr("%s characters").replace("%s", it.length.toString()) },
+                                            current.picture?.let { "${current.width} × ${current.height}" },
+                                        ).joinToString(" · "), style = text.copy(color = colors.dim, fontSize = 12.sp))
+                                    }
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    when {
+                                        current.picture != null -> Image(current.picture, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit, filterQuality = FilterQuality.Medium)
+                                        current.files != null -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            for ((name, uri) in current.fileNames.zip(current.files)) Row(verticalAlignment = Alignment.CenterVertically) {
+                                                GlyphIcon(Glyph.FILE, colors.dim, 16.dp)
+                                                Spacer(Modifier.width(8.dp))
+                                                Column {
+                                                    BasicText(name, style = text.copy(fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    BasicText(java.net.URLDecoder.decode(uri.removePrefix("file://").substringBeforeLast('/'), Charsets.UTF_8), style = text.copy(color = colors.dim, fontSize = 11.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                            }
+                                        }
+                                        else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                                            BasicText(current.text ?: "", style = text.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Row(Modifier.then(ring(zone == Zone.ACTIONS)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    @Composable
+                                    fun lit(i: Int) = if (zone == Zone.ACTIONS && action == i) Modifier.border(2.dp, colors.text.copy(alpha = 0.5f), RoundedCornerShape(15.dp)) else Modifier
+                                    PillButton("Copy", colors, text, PillKind.PRIMARY, glyph = Glyph.COPY, modifier = lit(0)) { history.use(current) }
+                                    PillButton(if (current.pinned) "Unpin" else "Pin", colors, text, glyph = if (current.pinned) Glyph.UNPIN else Glyph.PIN, modifier = lit(1)) { history.pin(current) }
+                                    PillButton("Delete", colors, text, PillKind.DANGER, glyph = Glyph.TRASH, modifier = lit(2)) { history.remove(current) }
+                                }
+                            }
+                        }
+                    }
+                    // The clearing menu, under its button.
+                    if (clearMenu) Column(
+                        Modifier.align(Alignment.TopEnd).width(230.dp).softShadow(14.dp, 8.dp)
+                            .background(colors.island, RoundedCornerShape(14.dp)).border(1.dp, colors.edge, RoundedCornerShape(14.dp)).padding(6.dp),
+                    ) {
+                        val labels = listOf("Clear everything", "Clear text", "Clear pictures", "Clear files")
+                        val glyphs = listOf(Glyph.TRASH, Glyph.COPY, Glyph.PICTURE, Glyph.FILE)
+                        for ((i, kind) in clearKinds.withIndex()) {
+                            val can = history.canClear(kind)
+                            ListRow(labels[i], colors, text, selected = clearRow == i, enabled = can, onClick = { clearNow(kind) },
+                                leading = { GlyphIcon(glyphs[i], if (can) colors.text else colors.dim.copy(alpha = 0.5f), 15.dp) })
+                        }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                BasicText(newm.bar.tr("↑ ↓ choose   ·   Enter copy   ·   Delete remove   ·   Esc close"), style = text.copy(color = colors.dim, fontSize = 11.sp))
+                Spacer(Modifier.height(10.dp))
+                BasicText(newm.bar.tr("Tab part   ·   ↑ ↓ ← → or h j k l move   ·   Enter do   ·   Ctrl+P pin   ·   Delete remove   ·   Esc close"),
+                    style = text.copy(color = colors.dim, fontSize = 11.sp))
             }
         }
     }
 
+    // The program it came from (its icon), or what it is.
     @Composable
-    private fun EntryRow(entry: ClipEntry, selected: Boolean, colors: newm.bar.BarColors, text: TextStyle, onHover: () -> Unit, onClick: () -> Unit, onRemove: () -> Unit) {
+    private fun SourceIcon(entry: ClipEntry, colors: newm.bar.BarColors, size: androidx.compose.ui.unit.Dp) {
+        var icon by remember(entry.sourceApp) { mutableStateOf<ImageBitmap?>(null) }
+        val px = with(androidx.compose.ui.platform.LocalDensity.current) { size.roundToPx() }
+        LaunchedEffect(entry.sourceApp) { entry.sourceApp?.let { app -> newm.bar.IconTheme.load(app, px, null, post = { wm.caulis.post { it() } }) { icon = it } } }
+        val picture = icon
+        if (picture != null) Image(picture, null, Modifier.size(size))
+        else GlyphIcon(when (entry.kind) { ClipKind.PICTURES -> Glyph.PICTURE; ClipKind.FILES -> Glyph.FILE; else -> Glyph.COPY }, colors.dim, size)
+    }
+
+    @Composable
+    private fun EntryRow(entry: ClipEntry, selected: () -> Boolean, colors: newm.bar.BarColors, text: TextStyle, onHover: () -> Unit, onClick: () -> Unit, onPin: () -> Unit, onRemove: () -> Unit) {
         val source = remember { MutableInteractionSource() }
         val hovered by source.collectIsHoveredAsState()
         LaunchedEffect(hovered) { if (hovered) onHover() }
+        val lit = colors.accent.copy(alpha = 0.18f)
         Row(
-            Modifier.fillMaxWidth().height(if (entry.picture != null) 72.dp else 56.dp)
-                .background(if (selected) colors.accent.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(12.dp)).hoverable(source)
+            Modifier.fillMaxWidth().height(if (entry.picture != null) 72.dp else 58.dp)
+                .drawBehind { if (selected()) drawRoundRect(lit, cornerRadius = androidx.compose.ui.geometry.CornerRadius(14.dp.toPx())) }
+                .hoverable(source)
                 .pointerInput(onClick) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onClick() } }
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (entry.picture != null) {
-                Image(entry.picture, null, Modifier.size(56.dp).background(colors.text.copy(alpha = 0.06f), RoundedCornerShape(8.dp)), contentScale = ContentScale.Fit, filterQuality = FilterQuality.High)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    BasicText(newm.bar.tr("Picture"), style = text.copy(fontWeight = FontWeight.Medium))
-                    BasicText("${entry.width} × ${entry.height} · ${entry.time}", style = text.copy(color = colors.dim, fontSize = 12.sp))
-                }
+                Image(entry.picture, null, Modifier.size(56.dp).background(colors.text.copy(alpha = 0.06f), RoundedCornerShape(10.dp)), contentScale = ContentScale.Fit, filterQuality = FilterQuality.Medium)
             } else {
-                Column(Modifier.weight(1f)) {
-                    BasicText(entry.text!!.lines().first { it.isNotBlank() }.trim(), style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val more = entry.text.trimEnd().lines().size
-                    BasicText(if (more > 1) newm.bar.tr("$more lines · ${entry.time}") else entry.time, style = text.copy(color = colors.dim, fontSize = 12.sp))
-                }
+                Box(Modifier.size(34.dp).background(colors.text.copy(alpha = 0.07f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { SourceIcon(entry, colors, 18.dp) }
             }
-            if (hovered || selected) {
-                Spacer(Modifier.width(6.dp))
-                Box(Modifier.size(26.dp).background(colors.text.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                    .pointerInput(onRemove) { awaitPointerEventScope { while (true) { val e = awaitPointerEvent(); if (e.type == PointerEventType.Release) { e.changes.forEach { it.consume() }; onRemove() } } } },
-                    contentAlignment = Alignment.Center) {
-                    BasicText("✕", style = text.copy(color = colors.dim, fontSize = 12.sp))
-                }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                BasicText(if (entry.files != null) entry.fileNames.joinToString(", ") else entry.text?.lines()?.firstOrNull { it.isNotBlank() }?.trim() ?: newm.bar.tr("Picture"), style = text.copy(fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val lines = if (entry.files != null) 0 else entry.text?.trimEnd()?.lines()?.size ?: 0
+                BasicText(listOfNotNull(entry.source, entry.ago(), entry.files?.let { newm.bar.tr("%s files").replace("%s", it.size.toString()) }, if (lines > 1) newm.bar.tr("%s lines").replace("%s", lines.toString()) else null).joinToString(" · "),
+                    style = text.copy(color = colors.dim, fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (entry.pinned) GlyphIcon(Glyph.PIN, colors.accent, 14.dp)
+            if (hovered) {
+                Spacer(Modifier.width(4.dp))
+                IconButton(if (entry.pinned) Glyph.UNPIN else Glyph.PIN, colors, 28.dp, onClick = onPin)
+                Spacer(Modifier.width(4.dp))
+                IconButton(Glyph.TRASH, colors, 28.dp, onClick = onRemove)
             }
         }
     }

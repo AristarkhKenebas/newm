@@ -19,6 +19,11 @@ private const val AP = "org.freedesktop.NetworkManager.AccessPoint"
 private const val SETTINGS = "org.freedesktop.NetworkManager.Settings"
 private const val SETTINGS_PATH = "/org/freedesktop/NetworkManager/Settings"
 
+/** A network or device came ([connected]) or went: Wi-Fi ([name]: the network), a cable, a Bluetooth device. */
+data class ConnectionEvent(val kind: Kind, val connected: Boolean, val name: String?, val icon: String? = null) {
+    enum class Kind { WIFI, WIRED, BLUETOOTH }
+}
+
 /** A Wi-Fi network in reach: its name, strength (0..100), whether it asks for a password, whether it is in use or known. */
 data class WifiNetwork(val ssid: String, val strength: Int, val secure: Boolean, val path: String, val active: Boolean, val known: Boolean)
 
@@ -47,8 +52,8 @@ class NetworkManager(private val caulis: Caulis) {
     var problem by mutableStateOf<String?>(null)
         private set
 
-    /** Told what happened in words ("Connected to Home"): a toast. */
-    var onEvent: (String) -> Unit = {}
+    /** Told when a network comes or goes (a card on the screen). */
+    var onConnection: (ConnectionEvent) -> Unit = {}
 
     // The network in use at the last look (null: not looked yet), and whether a cable was.
     private var activeBefore: String? = null
@@ -99,7 +104,7 @@ class NetworkManager(private val caulis: Caulis) {
                 if (type == 2 && wifiDevice == null) wifiDevice = device
                 if (type == 1 && state == 100) wiredSeen = true
                 if (--pending == 0) {
-                    if (lookedOnce && wiredSeen != wiredBefore) onEvent(if (wiredSeen) "Cable connected" else "Cable disconnected")
+                    if (lookedOnce && wiredSeen != wiredBefore) onConnection(ConnectionEvent(ConnectionEvent.Kind.WIRED, wiredSeen, null))
                     wiredBefore = wiredSeen
                     wired = wiredSeen
                     readNetworks()
@@ -129,7 +134,8 @@ class NetworkManager(private val caulis: Caulis) {
                     if (--pending == 0) {
                         val active = found.firstOrNull { it.active }?.ssid
                         if (lookedOnce && active != activeBefore) {
-                            if (active != null) onEvent("Connected to $active") else activeBefore?.let { onEvent("Disconnected from $it") }
+                            if (active != null) onConnection(ConnectionEvent(ConnectionEvent.Kind.WIFI, true, active))
+                            else activeBefore?.let { onConnection(ConnectionEvent(ConnectionEvent.Kind.WIFI, false, it)) }
                         }
                         activeBefore = active
                         lookedOnce = true

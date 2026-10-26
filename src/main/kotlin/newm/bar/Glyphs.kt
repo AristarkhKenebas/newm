@@ -27,7 +27,7 @@ enum class Glyph {
     WIFI, WIFI_OFF, WIRED, SPEAKER, BATTERY, POWER, LOCK, LOGOUT, MOON, RESTART, CHEVRON_LEFT, CHEVRON_RIGHT,
     BRIGHTNESS, BLUETOOTH, CHECK, MIC, LEAF, BOLT, BALANCE, COFFEE, MENU,
     HEADPHONES, PHONE, MOUSE, KEYBOARD, COMPUTER, MONITOR, GAMEPAD, WATCH, SPEAKER_DEVICE, PRINTER, CAMERA, TABLET,
-    CLOSE, COPY, TRASH, SEARCH, SETTINGS, PALETTE, REFRESH,
+    CLOSE, COPY, TRASH, SEARCH, SETTINGS, PALETTE, REFRESH, UNPLUGGED, PIN, UNPIN, PICTURE, FILE, CHEVRON_DOWN,
 }
 
 /** The Lucide icon of [glyph] at [level] (0..1), crossed out with [slash]. */
@@ -82,6 +82,12 @@ private fun iconName(glyph: Glyph, level: Float, slash: Boolean): String = when 
     Glyph.SETTINGS -> "settings"
     Glyph.PALETTE -> "palette"
     Glyph.REFRESH -> "refresh-cw"
+    Glyph.UNPLUGGED -> "unplug"
+    Glyph.PIN -> "pin"
+    Glyph.UNPIN -> "pin-off"
+    Glyph.PICTURE -> "image"
+    Glyph.FILE -> "file"
+    Glyph.CHEVRON_DOWN -> "chevron-down"
 }
 
 /** The picture for a Bluetooth device's kind (BlueZ's Icon: "audio-headphones", "input-mouse", ...). */

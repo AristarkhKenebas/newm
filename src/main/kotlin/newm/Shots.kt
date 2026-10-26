@@ -15,6 +15,16 @@ private val confFolder = configuredValue<String?>("screenshots.folder", null)
 private val confSave = configuredValue("screenshots.save", true)
 private val confCopy = configuredValue("screenshots.copy", true)
 private val confPointer = configuredValue("screenshots.pointer", false)
+private val confToast = configuredValue("screenshots.toast", true)
+private val confStart = configuredValue<String?>("screenshots.start", null)
+private val confDelay = configuredValue("screenshots.delay", 0)
+private val confSharp = configuredValue("screenshots.sharp_windows", true)
+private val confSharpBackground = configuredValue("screenshots.sharp_background", "none")
+private val confFileName = configuredValue("screenshots.file_name", "Screenshot from {date} {time}")
+private val confFormat = configuredValue("screenshots.format", "png")
+private val confQuality = configuredValue("screenshots.quality", 92)
+private val confThen = configuredValue<String?>("screenshots.then", null)
+private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 
 /**
  * newm's screenshots (Caulis's chooser: the screen stands still, a part, a window or the screen
@@ -28,7 +38,7 @@ internal class Shots(private val wm: Layout) {
         keys(choose = null, screen = null, window = null)
         notify = false
         onTaken = { path ->
-            wm.caulis.post {
+            if (confToast()) wm.caulis.post {
                 wm.barModel.toast(when {
                     path != null && copy -> "Screenshot saved and copied"
                     path != null -> "Screenshot saved"
@@ -44,6 +54,19 @@ internal class Shots(private val wm: Layout) {
         shots.save = confSave()
         shots.copy = confCopy()
         shots.pointer = confPointer()
+        shots.delaySeconds = confDelay().coerceIn(0, 60)
+        confStart()?.let { name -> ShotKind.entries.firstOrNull { it.name.equals(name, true) }?.let { shots.kind = it } }
+        shots.sharpWindows = confSharp()
+        shots.sharpCornerRadius = confCornerRadius().toFloat()
+        shots.sharpBackground = when (val bg = confSharpBackground().trim().lowercase()) {
+            "none", "", "transparent" -> null
+            "theme" -> wm.barModel.colorsNow().island.let { dev.caulis.render.Color(it.red, it.green, it.blue, 1f) }
+            else -> runCatching { dev.caulis.render.Color.hex(bg) }.getOrNull()
+        }
+        shots.fileName = confFileName()
+        shots.format = confFormat()
+        shots.jpegQuality = confQuality().coerceIn(10, 100) / 100f
+        shots.then = confThen()
     }
 
     private fun enabled(): Boolean = confEnabled().also { if (!it) log.info { "Screenshots are off (screenshots { enabled = false })" } }

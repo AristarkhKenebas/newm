@@ -153,6 +153,12 @@ class BarModel(val wm: Layout) {
     var shownPopup by mutableStateOf<Popup?>(null)
         internal set
 
+    /** The card in the middle of the screen (a network or device came or went). */
+    var card by mutableStateOf<OsdCard?>(null)
+
+    /** The card's coming and going (done by the compositor). */
+    val cardFade = Fade(inMillis = 220, outMillis = 260)
+
     /** The window asking for a Wi-Fi password. */
     val passwordDialog = WifiPasswordDialog(this)
 
@@ -203,8 +209,8 @@ class BarModel(val wm: Layout) {
         started = true
         scheme = wm.caulis.colorSchemeNow
         wm.caulis.onColorSchemeChanged { scheme = it }
-        network.onEvent = { toast(it) }
-        bluetooth.onEvent = { toast(it) }
+        network.onConnection = { connectionChanged(it) }
+        bluetooth.onConnection = { connectionChanged(it) }
         tray.start()
         status.start()
         network.start()

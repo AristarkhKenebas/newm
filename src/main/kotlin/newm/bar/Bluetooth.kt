@@ -54,8 +54,8 @@ class Bluetooth(private val caulis: Caulis) {
     var problem by mutableStateOf<String?>(null)
         private set
 
-    /** Told what happened in words ("Connected to Redmi Buds"): a toast. */
-    var onEvent: (String) -> Unit = {}
+    /** Told when a device connects or goes (a card on the screen). */
+    var onConnection: (ConnectionEvent) -> Unit = {}
 
     // The devices connected at the last look (null: not looked yet, nothing to tell).
     private var connectedBefore: Set<String>? = null
@@ -65,6 +65,7 @@ class Bluetooth(private val caulis: Caulis) {
     private var refreshQueued = false
     private var pairing: String? = null
     private val lastNames = HashMap<String, String>()
+    private val lastIcons = HashMap<String, String>()
 
     fun start() {
         if (bus != null) return
@@ -119,11 +120,12 @@ class Bluetooth(private val caulis: Caulis) {
             devices = found.sortedWith(compareByDescending<BluetoothDevice> { it.connected }.thenByDescending { it.paired }.thenBy { it.name.lowercase() })
             val connected = found.filter { it.connected }.associate { it.path to it.name }
             connectedBefore?.let { before ->
-                for ((path, name) in connected) if (path !in before) onEvent("Connected to $name")
-                for (path in before) if (path !in connected) onEvent("${lastNames[path] ?: "A device"} disconnected")
+                for ((path, name) in connected) if (path !in before) onConnection(ConnectionEvent(ConnectionEvent.Kind.BLUETOOTH, true, name, lastIcons[path] ?: found.firstOrNull { it.path == path }?.icon))
+                for (path in before) if (path !in connected) onConnection(ConnectionEvent(ConnectionEvent.Kind.BLUETOOTH, false, lastNames[path], lastIcons[path]))
             }
             connectedBefore = connected.keys
             lastNames.putAll(found.associate { it.path to it.name })
+            lastIcons.putAll(found.associate { it.path to it.icon })
         }
     }
 

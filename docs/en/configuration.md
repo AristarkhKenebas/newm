@@ -246,3 +246,61 @@ A monitor plugged in for the first time is used beside the laptop's screen and t
 modes is shown; the laptop's display key (F7 on many) shows it any time. From a terminal:
 `newm cmd displays mirror` (the same picture on both), `extend`, `laptop` or `other` (only that
 one). The choice is kept for that monitor.
+
+### Cards when Wi-Fi, a cable or Bluetooth comes or goes
+
+A card with a big picture shows in the middle of the screen for a moment (as on a Mac):
+
+```kotlin
+osd { connections = "cards" }   // the default; "text": a short line; "off": nothing
+```
+
+The clipboard's history also keeps pinned entries (Ctrl+P or the pin button): they stay
+on top, are never pushed out, and pinned texts are kept after a restart
+(~/.local/state/newm/clipboard-pins.json). Tab goes through All / Text / Pictures / Pinned.
+
+### Screenshots in detail
+
+```kotlin
+screenshots {
+    enabled = true
+    folder = "~/Pictures/Screenshots"
+    save = true; copy = true        // as a file, on the clipboard
+    pointer = false                 // the pointer in the picture
+    toast = true                    // "Screenshot saved" for a moment
+    start = "region"                // the chooser starts with "region", "window" or "screen"
+    delay = 0                       // seconds before it is taken
+    sharpWindows = true             // a part of the overview: put together from the windows, sharp
+    sharpBackground = "none"        // behind them: "none" (see-through), "#RRGGBB", "theme"
+    fileName = "Screenshot from {date} {time}"   // {date}, {time}, {kind}
+    format = "png"; quality = 92    // or "jpg" (quality 10..100)
+    then = "satty --filename {file}"            // a command with each file (an editor)
+}
+```
+
+In the overview (tap Super) choose a part over the windows: the picture is put together
+from the windows at their own size — each as sharp as if it filled the screen — in the
+places they have there. The power menu of the bar has "Screenshot…" too.
+
+### The wallpaper: following the view or standing still
+
+```kotlin
+background { mode = "static" }   // "follow" (the default): moves and zooms with the view
+```
+
+### The clipboard's history in detail
+
+```kotlin
+clipboard {
+    enabled = true
+    size = 50                       // pinned ones are kept on top of these
+    pictures = true; files = true   // pictures and copied files are kept too
+    keepPins = true                 // pinned texts kept after a restart
+    ignore = listOf("keepassxc", "bitwarden", "1password")   // never kept from these
+    maxPictureMb = 16; maxText = 200000
+}
+```
+
+"Clear" removes everything but the pinned ones; its arrow clears only text, pictures or
+files (grey when there is none). Tab goes from part to part of the window; the arrows or
+h j k l move inside one; Enter does it.

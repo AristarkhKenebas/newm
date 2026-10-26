@@ -14,7 +14,7 @@
 
 background {
     path = "resource:wallpaper.jpg"         // newm's own; or "~/Pictures/wallpaper.jpg"
-    anim = true                             // the wallpaper moves a little with the view
+    mode = "follow"                         // "follow": moves and zooms with the view; "static": stands still
     // timeScale = 0.15                     // how quickly it follows (seconds)
 }
 

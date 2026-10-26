@@ -53,6 +53,33 @@ fun BarModel.toast(text: String) {
     toast = OsdShow(null, tr(text), null, false, ++osdSerial)
 }
 
+/** A card in the middle of the screen (as macOS shows): a big picture, what happened, a name. */
+data class OsdCard(val glyph: Glyph, val slash: Boolean, val title: String, val detail: String?, val serial: Long)
+
+// osd { connections = "cards" (a card in the middle) | "text" (a short line) | "off" }
+private val confConnections = newm.configuredValue("osd.connections", "cards")
+
+/** A network or device came or went: a card, a line or nothing, as osd.connections says. */
+fun BarModel.connectionChanged(e: ConnectionEvent) {
+    val (glyph, slash, title) = when (e.kind) {
+        ConnectionEvent.Kind.WIFI -> Triple(if (e.connected) Glyph.WIFI else Glyph.WIFI_OFF, false, if (e.connected) "Wi-Fi connected" else "Wi-Fi disconnected")
+        ConnectionEvent.Kind.WIRED -> Triple(if (e.connected) Glyph.WIRED else Glyph.UNPLUGGED, false, if (e.connected) "Cable connected" else "Cable disconnected")
+        ConnectionEvent.Kind.BLUETOOTH -> Triple(if (e.connected) e.icon?.let(::glyphOfDevice) ?: Glyph.BLUETOOTH else Glyph.BLUETOOTH, !e.connected, if (e.connected) "Connected" else "Disconnected")
+    }
+    when (confConnections()) {
+        "off", "none", "false" -> {}
+        "text" -> toast(when {
+            e.name == null -> title
+            e.connected -> tr("Connected to %s").replace("%s", e.name)
+            else -> tr("Disconnected from %s").replace("%s", e.name)
+        })
+        else -> {
+            card = OsdCard(glyph, slash, tr(title), e.name, ++osdSerial)
+            cardFade.show()
+        }
+    }
+}
+
 /** The parts of the screen the on-screen display and the toasts are drawn in. */
 fun BarModel.showOsd(): AutoCloseable {
     val caulis = wm.caulis
@@ -67,6 +94,11 @@ fun BarModel.showOsd(): AutoCloseable {
     val toasts = caulis.compose(place = { m ->
         if (toast == null || !target(m)) null else Rect(m.area.x + (m.area.width - 460) / 2, m.area.y + (m.area.height * 0.42).toInt(), 460, 96)
     }) { _ -> toast?.let { ToastCard(this, it) } }
+    // The connections' cards: in the middle, a little below; coming and going done by the compositor.
+    val cards = caulis.compose(place = { m ->
+        if (card == null || !cardFade.visible || !target(m)) null
+        else Rect(m.area.x + (m.area.width - CARD) / 2, m.area.y + (m.area.height - CARD) / 2 + m.area.height / 8, CARD, CARD)
+    }, appearance = { _ -> cardFade.appearance(rise = 0f, smallest = 0.9f) }, moving = { cardFade.moving }) { _ -> card?.let { ConnectionCard(this, it) } }
     // Caulis's own pill (the laptop's keys) is newm's now.
     caulis.onScreenDisplay { title, level, off ->
         val glyph = when {
@@ -81,6 +113,7 @@ fun BarModel.showOsd(): AutoCloseable {
     return AutoCloseable {
         levels.close()
         toasts.close()
+        cards.close()
     }
 }
 
@@ -146,5 +179,38 @@ private fun ToastCard(model: BarModel, show: OsdShow) {
         contentAlignment = Alignment.Center,
     ) {
         BasicText(show.title, style = TextStyle(color = colors.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center), maxLines = 2)
+    }
+}
+
+private const val CARD = 230
+
+@Composable
+private fun ConnectionCard(model: BarModel, show: OsdCard) {
+    val colors = model.colorsNow()
+    val fade = model.cardFade
+    LaunchedEffect(show.serial) {
+        delay(1800)
+        fade.hide()
+        delay(300)
+        if (model.card?.serial == show.serial && !fade.shown) model.card = null
+    }
+    val shape = RoundedCornerShape(32.dp)
+    Box(
+        Modifier.fillMaxSize().padding(16.dp)
+            .softShadow(32.dp, 14.dp)
+            .background(colors.island.copy(alpha = 0.94f), shape)
+            .border(1.dp, colors.edge, shape)
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            GlyphIcon(show.glyph, if (show.slash) colors.dim else colors.text, 76.dp, slash = show.slash)
+            Spacer(Modifier.height(14.dp))
+            BasicText(show.title, style = TextStyle(color = colors.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center), maxLines = 1)
+            show.detail?.let {
+                Spacer(Modifier.height(3.dp))
+                BasicText(it, style = TextStyle(color = colors.dim, fontSize = 12.sp, textAlign = TextAlign.Center), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+        }
     }
 }

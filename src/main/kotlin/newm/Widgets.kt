@@ -72,6 +72,8 @@ fun textureOf(renderer: Renderer, image: BufferedImage): GpuTexture {
 private val confOutputs = configuredValue<List<Map<String, Any?>>>("outputs", emptyList())
 private val confTimeScale = configuredValue("background.time_scale", 0.15)
 private val confAnimDefault = configuredValue("background.anim", true)
+// background { mode = "follow" (moves and zooms with the view, newm's) | "static" (stands still, the whole screen) }
+private val confBackgroundMode = configuredValue<String?>("background.mode", null)
 
 /**
  * newm's BackgroundState: which part of the wallpaper an output shows — the workspace's
@@ -218,7 +220,11 @@ class BackgroundState(layoutState: LayoutState, wsState: WorkspaceState, wallpap
 
 /** newm's Background widget: the wallpaper of one output, gliding behind the view's moves. */
 class Background(private val wm: Layout, val monitor: Monitor, private val workspace: Workspace, private val picture: Wallpaper) : Animatable {
-    private var preventAnim = !confAnimDefault() || workspace.preventAnim
+    private var preventAnim = when (confBackgroundMode()?.lowercase()) {
+        "static", "still", "fixed" -> true
+        "follow", "move", "parallax" -> workspace.preventAnim
+        else -> !confAnimDefault() || workspace.preventAnim
+    }
     private val size = picture.width to picture.height
     private val output get() = monitor.area.width.toDouble() to monitor.area.height.toDouble()
     private var current = state(wm.state)

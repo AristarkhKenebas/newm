@@ -9,6 +9,9 @@ object Json {
 
     fun parseArray(text: String): List<Any?> = Parser(text).value() as? List<Any?> ?: error("not a JSON array: ${text.take(80)}")
 
+    /** Any JSON value: a map, a list, a string, a number, true, false or null. */
+    fun parse(text: String): Any? = Parser(text).value()
+
     fun write(value: Any?): String = buildString { write(this, value) }
 
     private fun write(out: StringBuilder, value: Any?) {

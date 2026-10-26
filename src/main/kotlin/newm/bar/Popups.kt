@@ -300,12 +300,19 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
         Triple("logout", Glyph.LOGOUT, "Log out"),
         Triple("reboot", Glyph.RESTART, "Restart"),
         Triple("poweroff", Glyph.POWER, "Shut down"),
-        Triple("colors", Glyph.BRIGHTNESS, "Colors…"),
+        Triple("screenshot", Glyph.CAMERA, "Screenshot…"),
+        Triple("colors", Glyph.PALETTE, "Colors…"),
     )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((id, glyph, label) in entries) {
             val asking = popup.confirming == id
             MenuRow(colors, onClick = {
+                if (id == "screenshot") {
+                    model.close()
+                    // (A moment later: not the menu in the picture.)
+                    wm.caulis.after(250) { wm.screenshot() }
+                    return@MenuRow
+                }
                 if (id == "colors") {
                     model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX)
                     return@MenuRow
