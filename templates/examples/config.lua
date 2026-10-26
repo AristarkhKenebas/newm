@@ -38,12 +38,13 @@ focus = {
 panels = {
   top_bar = {                        -- newm's own bar (enabled = false: none, or another bar program)
     enabled = true,
-    height = 28,
-    font_size = 12,
-    background = "#ECEFF4B0",
-    foreground = "#2E3440",
-    blur = true,
-    texts = function() return { sys.wifi(), sys.cpu(), sys.memory(), sys.temperature(), sys.battery(), sys.date(), sys.time() } end,
+    height = 32, margin = 6, corner_radius = 12,
+    theme = "auto",                  -- "light", "dark"
+    left = { "wall", "window" },
+    center = { "clock" },
+    right = { "tray", "network", "volume", "battery", "power" },
+    clock = "HH:mm", date = "EEE d MMM",
+    -- style = "classic",            -- the original newm's bar, with texts = function() return { sys.cpu(), sys.time() } end
   },
   -- bar = { cmd = "waybar" },       -- a bar program of your own (waybar in newm's look: bars/waybar)
   lock = { w = 0.6, h = 0.6, corner_radius = 32 },

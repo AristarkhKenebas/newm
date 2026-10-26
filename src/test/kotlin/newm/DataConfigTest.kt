@@ -22,8 +22,8 @@ class DataConfigTest {
         assertEquals("us", (settings["pywm"] as Map<String, Any?>)["xkb_layout"])
         val bindings = (settings["key_bindings"] as (Layout) -> List<Pair<String, () -> Unit>>)(Layout(Caulis()))
         assertTrue(bindings.size > 30 && bindings.any { it.first == "L-Return" }, "${bindings.size}")
-        val texts = (((settings["panels"] as Map<String, Any?>)["top_bar"] as Map<String, Any?>)["native"] as Map<String, Any?>)["texts"] as () -> Any?
-        assertEquals(7, (texts() as List<*>).size)
+        val native = ((settings["panels"] as Map<String, Any?>)["top_bar"] as Map<String, Any?>)["native"] as Map<String, Any?>
+        assertEquals(listOf("tray", "network", "volume", "battery", "power"), native["right"])
     }
 
     @Test
@@ -36,6 +36,17 @@ class DataConfigTest {
         } finally {
             Files.deleteIfExists(file)
         }
+    }
+
+    @Test
+    fun `classic bar texts by name`() {
+        val (settings, problems) = DataConfig.settings(mapOf("panels" to mapOf("top_bar" to mapOf("style" to "classic", "texts" to listOf("time", "newm")))), Caulis(), "config.json")
+        assertEquals(emptyList(), problems)
+        @Suppress("UNCHECKED_CAST")
+        val native = ((settings["panels"] as Map<String, Any?>)["top_bar"] as Map<String, Any?>)["native"] as Map<String, Any?>
+        assertEquals("classic", native["style"])
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("newm", ((native["texts"] as () -> List<String>)())[1])
     }
 
     @Test

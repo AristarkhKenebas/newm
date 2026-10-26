@@ -20,7 +20,10 @@ usable at any zoom.
 - **Made for the touchpad.** Moving, zooming, the overview and the launcher are all gestures,
   with smooth animations.
 - **It looks good from the start.** Rounded windows with smooth edges, blur behind
-  see-through windows, a light bar, and its own lock screen and launcher.
+  see-through windows, and its own lock screen and launcher.
+- **A bar of its own.** Islands floating at the top: a small map of your wall, the window,
+  the clock with a calendar, the tray of background programs with their menus, and the
+  network, volume, battery and power menus. Light or dark, as your programs are.
 - **Change it while it runs.** Save your configuration and newm applies it at once. A
   mistake shows as a card with its line, and newm keeps the settings that worked. A broken
   configuration never gives you a black screen.

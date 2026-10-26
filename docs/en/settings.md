@@ -29,7 +29,7 @@ reference. In Lua and JSON the names are the same, in snake_case (`cornerRadius`
 
 | Part | Settings |
 |---|---|
-| `topBar { }`, `bottomBar { }` | newm's own bars: `enabled`, `height`, `fontSize`, `font`, `background`, `foreground`, `blur`, `texts { }` |
+| `topBar { }`, `bottomBar { }` | newm's own bars: `enabled`, `style` (`"islands"`, `"classic"`), `height`, `margin`, `cornerRadius`, `theme`, `font`, `fontSize`, `left`, `center`, `right`, `clock`, `date`, `islandColor`, `textColor`, `accentColor`, `iconSize`, `showPercent`, `showPassive`, `titleWidth`, `blur`, `texts { }`; the classic look also `background`, `foreground` (see [Bars](bars.md)) |
 | `bar { }` | a bar program: `cmd`, `cwd`, `visibleNormal`, `visibleFullscreen` |
 | `lock { }` | the lock screen: `w`, `h` (parts of the screen), `cornerRadius`, `program` (a screen locker instead: `"swaylock"`, `"gtklock"`, `"hyprlock"`) |
 | `launcher { }` | the launcher: `w`, `h`, `cornerRadius`, `cmd` |
@@ -77,6 +77,7 @@ newm cmd open-launcher
 newm cmd inhibit-idle     # no dimming or locking while it runs (Ctrl+C ends it)
 newm cmd clean            # tidy up the wall
 newm cmd restart          # start newm again (dev/newm-dev uses it)
+newm cmd bar power        # a popup of the bar: calendar, volume, network, battery, power, tray 0, close
 ```
 
 Other commands of `newm`: `newm help`, `newm version`, `newm install-session`.

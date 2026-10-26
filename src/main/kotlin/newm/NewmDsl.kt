@@ -339,7 +339,7 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
     var height by setting<Int>("height")
     var fontSize by setting<Int>("font_size")
 
-    /** A font family installed ("JetBrains Mono"); unset: a monospace one. */
+    /** A font family installed ("Inter", "JetBrains Mono"); unset: the system's sans-serif. */
     var font by setting<String>("font")
 
     /** Its background: "#RRGGBBAA" (see-through with the last two digits). */
@@ -351,10 +351,46 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
     /** What is behind it is blurred. */
     var blur by setting<Boolean>("blur")
 
-    /** What it shows, asked every second: spread evenly over it. */
+    /** What it shows, asked every second (the classic look: spread over it; islands: the module "texts"). */
     fun texts(make: () -> List<String>) {
         values["texts"] = make
     }
+
+    /** "islands" (newm's own, the default) or "classic" (the original newm's strip of texts). */
+    var style by setting<String>("style")
+
+    /** The islands' gap to the screen's edges, and their corners. */
+    var margin by setting<Int>("margin")
+    var cornerRadius by setting<Int>("corner_radius")
+
+    /** "auto" (the light or dark scheme of programs), "light" or "dark". */
+    var theme by setting<String>("theme")
+
+    /** Your own colours for the islands, their text and the accent ("#RRGGBB" or "#RRGGBBAA"). */
+    var islandColor by setting<String>("island_color")
+    var textColor by setting<String>("text_color")
+    var accentColor by setting<String>("accent_color")
+
+    /**
+     * What each island shows, in order: "wall" (the wall, small), "window" (the focused
+     * window), "clock", "tray" (background programs), "network", "volume", "battery",
+     * "power", "texts" (those of texts { }). An empty list: no island there.
+     */
+    var left by setting<List<String>>("left")
+    var center by setting<List<String>>("center")
+    var right by setting<List<String>>("right")
+
+    /** The clock's and the date's patterns (java.time: "HH:mm", "EEE d MMM"; "" for no date). */
+    var clock by setting<String>("clock")
+    var date by setting<String>("date")
+
+    /** The size of icons, whether the volume and battery say their percent, the window title's widest. */
+    var iconSize by setting<Int>("icon_size")
+    var showPercent by setting<Boolean>("show_percent")
+    var titleWidth by setting<Int>("title_width")
+
+    /** Tray icons that say they are not needed now ("Passive") shown too. */
+    var showPassive by setting<Boolean>("show_passive")
 }
 
 class EnergySection internal constructor(values: MutableMap<String, Any?>) : Section(values) {

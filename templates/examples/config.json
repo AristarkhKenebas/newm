@@ -12,8 +12,9 @@
   ],
   "focus": { "enabled": true, "color": "#E5E9F0AA", "distance": 4, "width": 2 },
   "panels": {
-    "top_bar": { "enabled": true, "height": 28, "font_size": 12, "background": "#ECEFF4B0", "foreground": "#2E3440", "blur": true,
-                 "texts": ["wifi", "cpu", "memory", "temperature", "battery", "date", "time"] },
+    "top_bar": { "enabled": true, "height": 32, "margin": 6, "corner_radius": 12, "theme": "auto",
+                 "left": ["wall", "window"], "center": ["clock"], "right": ["tray", "network", "volume", "battery", "power"],
+                 "clock": "HH:mm", "date": "EEE d MMM" },
     "lock": { "w": 0.6, "h": 0.6, "corner_radius": 32 },
     "launcher": { "w": 0.7, "h": 0.7, "corner_radius": 24 }
   },

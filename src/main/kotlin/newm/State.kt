@@ -18,8 +18,6 @@ private val confBarVf = configuredValue<Boolean?>("panels.bar.visible_fullscreen
 
 internal val confNativeTopBarEnabled = configuredValue("panels.top_bar.native.enabled", false)
 internal val confNativeBottomBarEnabled = configuredValue("panels.bottom_bar.native.enabled", false)
-internal val confNativeTopBarHeight = configuredValue("panels.top_bar.native.height", 20)
-internal val confNativeBottomBarHeight = configuredValue("panels.bottom_bar.native.height", 20)
 
 private val confDontValidateFullscreen = configuredValue("view.sticky_fullscreen", false)
 
@@ -239,8 +237,8 @@ class WorkspaceState(
         if (topBarVn() || topBarVf() || bottomBarVn() || bottomBarVf()) {
             var (topBarHeight, bottomBarHeight) = wm.barHeights(ws, wmState)
 
-            if (confNativeTopBarEnabled()) topBarHeight = confNativeTopBarHeight().toDouble()
-            if (confNativeBottomBarEnabled()) bottomBarHeight = confNativeBottomBarHeight().toDouble()
+            if (confNativeTopBarEnabled()) topBarHeight = nativeBarRoom(top = true).toDouble()
+            if (confNativeBottomBarEnabled()) bottomBarHeight = nativeBarRoom(top = false).toDouble()
 
             val fs = isFullscreen()
             val topV = if (fs) topBarVf() else topBarVn()

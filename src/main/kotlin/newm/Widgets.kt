@@ -350,44 +350,119 @@ private fun colorOr(text: String, fallback: String): dev.caulis.render.Color = t
 
 // --- the native bars ----------------------------------------------------------------------------------
 
-private val confTopBarHeight = configuredValue("panels.top_bar.native.height", 20)
-private val confTopBarFontSize = configuredValue("panels.top_bar.native.font_size", 12)
-private val confTopBarText = configuredValue<() -> List<String>>("panels.top_bar.native.texts") { listOf("1", "2", "3") }
-private val confBottomBarHeight = configuredValue("panels.bottom_bar.native.height", 20)
-private val confBottomBarFontSize = configuredValue("panels.bottom_bar.native.font_size", 12)
-private val confBottomBarText = configuredValue<() -> List<String>>("panels.bottom_bar.native.texts") { listOf("4", "5", "6") }
-private val confTopBarFont = configuredValue<String?>("panels.top_bar.native.font", null)
-private val confBottomBarFont = configuredValue<String?>("panels.bottom_bar.native.font", null)
-private val confTopBarBackground = configuredValue("panels.top_bar.native.background", "#000000B3")
-private val confBottomBarBackground = configuredValue("panels.bottom_bar.native.background", "#000000B3")
-private val confTopBarForeground = configuredValue("panels.top_bar.native.foreground", "#FFFFFF")
-private val confBottomBarForeground = configuredValue("panels.bottom_bar.native.foreground", "#FFFFFF")
-private val confTopBarBlur = configuredValue("panels.top_bar.native.blur", false)
-private val confBottomBarBlur = configuredValue("panels.bottom_bar.native.blur", false)
+// A setting of newm's own top or bottom bar (panels.top_bar.native.*, panels.bottom_bar.native.*).
+private class BarSetting<T>(name: String, default: T) {
+    val top = configuredValue("panels.top_bar.native.$name", default)
+    val bottom = configuredValue("panels.bottom_bar.native.$name", default)
+    operator fun invoke(isTop: Boolean): T = if (isTop) top() else bottom()
+}
+
+private val confHeight = BarSetting("height", 32)
+private val confFontSize = BarSetting("font_size", 13)
+private val confTexts = BarSetting<() -> List<String>>("texts") { emptyList() }
+private val confFont = BarSetting<String?>("font", null)
+private val confBackground = BarSetting("background", "#000000B3")
+private val confForeground = BarSetting("foreground", "#FFFFFF")
+private val confBlur = BarSetting("blur", true)
+private val confStyle = BarSetting("style", "islands")
+private val confMargin = BarSetting("margin", 6)
+private val confRadius = BarSetting("corner_radius", 12)
+private val confTheme = BarSetting("theme", "auto")
+private val confLeft = BarSetting("left", listOf("wall", "window"))
+private val confCenter = BarSetting("center", listOf("clock"))
+private val confRight = BarSetting("right", listOf("tray", "network", "volume", "battery", "power"))
+private val confClock = BarSetting("clock", "HH:mm")
+private val confDate = BarSetting("date", "EEE d MMM")
+private val confIslandColor = BarSetting<String?>("island_color", null)
+private val confTextColor = BarSetting<String?>("text_color", null)
+private val confAccentColor = BarSetting<String?>("accent_color", null)
+private val confIconSize = BarSetting("icon_size", 16)
+private val confShowPercent = BarSetting("show_percent", true)
+private val confShowPassive = BarSetting("show_passive", false)
+private val confTitleWidth = BarSetting("title_width", 360)
+
+/** The room newm's own bar keeps at the top ([top]) or bottom: its height, and the gaps around islands. */
+internal fun nativeBarRoom(top: Boolean): Int {
+    val height = confHeight(top).coerceAtLeast(12)
+    return if (confStyle(top) != "classic") height + 2 * confMargin(top).coerceAtLeast(0) else height
+}
 
 /**
- * newm's TopBar and BottomBar: texts spread over a dark strip at an output's edge, sliding in
- * and out with the workspace (gone in fullscreen, there in the overview). Drawn with cairo
- * there, with Compose here; the texts are asked for every second.
+ * newm's own bar at the top or bottom of an output, sliding in and out with the workspace
+ * (gone in fullscreen, there in the overview). Two looks: "islands" (newm's: the wall, the
+ * window, the clock, the tray and the computer's state, see newm.bar) and "classic" (the
+ * original newm's: texts spread over a strip).
  */
 class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Animatable {
     private val workspace = wm.workspaces.firstOrNull { monitor in it.outputs } ?: wm.workspaces[0]
-    private val height get() = if (top) confTopBarHeight() else confBottomBarHeight()
 
-    val fontSize get() = if (top) confTopBarFontSize() else confBottomBarFontSize()
-    val font: String? get() = if (top) confTopBarFont() else confBottomBarFont()
-    val background: dev.caulis.render.Color get() = colorOr(if (top) confTopBarBackground() else confBottomBarBackground(), "#000000B3")
-    val foreground: dev.caulis.render.Color get() = colorOr(if (top) confTopBarForeground() else confBottomBarForeground(), "#FFFFFF")
+    /** The height of the bar (an island's, in the islands look). */
+    val height: Int get() = confHeight(top).coerceAtLeast(12)
+    val fontSize: Int get() = confFontSize(top)
+    val font: String? get() = confFont(top)
+    val fontFamily: FontFamily get() = newm.bar.fontFamilyOf(font)
+    val background: dev.caulis.render.Color get() = colorOr(confBackground(top), "#000000B3")
+    val foreground: dev.caulis.render.Color get() = colorOr(confForeground(top), "#FFFFFF")
 
     /** What is behind it is blurred. */
-    val blur: Boolean get() = if (top) confTopBarBlur() else confBottomBarBlur()
+    val blur: Boolean get() = confBlur(top)
 
-    /** The screen's corners' radius (the bar is rounded there too). */
+    /** "islands" (newm's) or "classic" (the original newm's). */
+    val islands: Boolean get() = confStyle(top) != "classic"
+
+    /** The gap between the islands and the screen's edges. */
+    val margin: Int get() = if (islands) confMargin(top).coerceAtLeast(0) else 0
+    val cornerRadius: Int get() = confRadius(top)
+
+    /** "auto" (the colour scheme of programs), "light" or "dark". */
+    val theme: String get() = confTheme(top)
+    val islandColor: String? get() = confIslandColor(top)
+    val textColor: String? get() = confTextColor(top)
+    val accentColor: String? get() = confAccentColor(top)
+
+    /** The modules of each island ("wall", "window", "clock", "tray", "network", "volume", "battery", "power", "texts"). */
+    val left: List<String> get() = confLeft(top)
+    val center: List<String> get() = confCenter(top)
+    val right: List<String> get() = confRight(top)
+    val clockPattern: String get() = confClock(top)
+    val datePattern: String get() = confDate(top)
+    val iconSize: Int get() = confIconSize(top)
+    val showPercent: Boolean get() = confShowPercent(top)
+    val showPassive: Boolean get() = confShowPassive(top)
+    val titleWidth: Int get() = confTitleWidth(top)
+
+    /** The room it keeps at the edge: windows stay out of it. */
+    val room: Int get() = if (islands) height + 2 * margin else height
+
+    /** The screen's corners' radius (the classic bar is rounded there too). */
     val screenCornerRadius: Int get() = confCornerRadius()
 
-    /** What it says now (Compose redraws when it changes). */
+    /** Its left edge on the desktop (for popups below a part of it). */
+    val originX: Double get() = monitor.area.x.toDouble()
+
+    /** The texts of the configuration (texts { ... }), asked for every second. */
     var texts by mutableStateOf(listOf<String>())
         private set
+
+    /** The wall, small, and the focused window (the islands look). */
+    var wall by mutableStateOf(newm.bar.WallMap.EMPTY)
+        private set
+    var focused by mutableStateOf(newm.bar.Focused("", ""))
+        private set
+
+    // The islands where they are (relative to the bar): blurred behind.
+    private val islandRects = arrayOfNulls<Rect>(3)
+
+    internal fun setIsland(index: Int, rect: Rect) {
+        islandRects[index] = rect
+    }
+
+    /** The parts of the screen behind it to blur, with their corners' radius. */
+    fun blurAreas(): List<Pair<Rect, Float>> {
+        val place = place() ?: return emptyList()
+        if (!islands) return listOf(place to 0f)
+        return islandRects.filterNotNull().map { r -> Rect(place.x + r.x, place.y + r.y, r.width, r.height) to cornerRadius.toFloat() }
+    }
 
     private val animation = object : Animate<WidgetDown>() {
         fun at(default: WidgetDown) = process(default)
@@ -398,7 +473,7 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     fun reducer(state: LayoutState): WidgetDown {
         val wsState = state.workspaceState(workspace)
         val a = monitor.area
-        val h = height.toDouble()
+        val h = room.toDouble()
         val box = if (top) {
             Box(a.x.toDouble(), a.y + wsState.topBarDy * h - h, a.width.toDouble(), h)
         } else {
@@ -422,11 +497,39 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
 
     fun refresh() {
         texts = try {
-            (if (top) confTopBarText() else confBottomBarText())()
+            confTexts(top)()
         } catch (e: Exception) {
             log.warn("The bar's texts failed: $e")
             texts
         }
+    }
+
+    /** The wall and the focused window as they are now (set only when they changed). */
+    fun look() {
+        val wsState = wm.state.workspaceState(workspace)
+        val focusedView = wm.findFocusedView()
+        val tiles = ArrayList<Triple<Double, Double, Pair<Double, Double>>>()
+        val focusedFlags = ArrayList<Boolean>()
+        for ((handle, s) in wsState.viewStates) {
+            if (!s.isTiled || s.w <= 0.0 || s.h <= 0.0) continue
+            tiles += Triple(s.i, s.j, s.w to s.h)
+            focusedFlags += focusedView?.handle == handle
+        }
+        val view = (wsState.stateBeforeOverview?.let { it.i to it.j } ?: (wsState.i to wsState.j)) to (wsState.stateBeforeOverview?.size ?: wsState.size)
+        val minI = (tiles.map { it.first } + view.first.first).min()
+        val minJ = (tiles.map { it.second } + view.first.second).min()
+        val maxI = (tiles.map { it.first + it.third.first } + (view.first.first + view.second)).max()
+        val maxJ = (tiles.map { it.second + it.third.second } + (view.first.second + view.second)).max()
+        val map = newm.bar.WallMap(
+            tiles = tiles.mapIndexed { k, t -> newm.bar.WallMap.Tile((t.first - minI).toFloat(), (t.second - minJ).toFloat(), t.third.first.toFloat(), t.third.second.toFloat(), focusedFlags[k]) },
+            view = newm.bar.WallMap.Tile((view.first.first - minI).toFloat(), (view.first.second - minJ).toFloat(), view.second.toFloat(), view.second.toFloat()),
+            width = (maxI - minI).toFloat().coerceAtLeast(1f),
+            height = (maxJ - minJ).toFloat().coerceAtLeast(1f),
+            aspect = workspace.width.toFloat() / workspace.height.coerceAtLeast(1),
+        )
+        if (map != wall) wall = map
+        val f = focusedView?.let { newm.bar.Focused(it.title, it.appId) } ?: newm.bar.Focused("", "")
+        if (f != focused) focused = f
     }
 }
 
@@ -463,7 +566,7 @@ internal fun Layout.addWidgetDrawings(backgrounds: () -> List<Background>, corne
         override fun draw(monitor: Monitor, canvas: OverlayCanvas) {
             corners.draw(monitor, canvas)
             // Behind a see-through bar: blurred (the bar itself comes above, rounded at the screen's corners).
-            for (bar in bars()) if (bar.monitor === monitor && bar.blur) bar.place()?.let { canvas.blur(it, size = 8, passes = 3) }
+            for (bar in bars()) if (bar.monitor === monitor && bar.blur) for ((area, radius) in bar.blurAreas()) canvas.blur(area, radius = radius, size = 8, passes = 3)
         }
     })
 }

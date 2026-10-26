@@ -161,4 +161,7 @@ object DataConfig {
 }
 
 // The settings of newm's own bar (panels.top_bar.native in newm's names).
-private val NATIVE_BAR_KEYS = setOf("enabled", "height", "font_size", "font", "background", "foreground", "blur", "texts")
+private val NATIVE_BAR_KEYS = setOf(
+    "enabled", "height", "font_size", "font", "background", "foreground", "blur", "texts", "style", "margin", "corner_radius", "theme",
+    "island_color", "text_color", "accent_color", "left", "center", "right", "clock", "date", "icon_size", "show_percent", "show_passive", "title_width",
+)

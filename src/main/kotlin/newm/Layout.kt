@@ -1,6 +1,9 @@
 package newm
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import dev.caulis.compose.compose
+import newm.bar.showPopups
 import dev.caulis.core.Monitor
 import dev.caulis.core.OverlayCanvas
 import dev.caulis.core.Window
@@ -256,8 +259,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     val focusBorders = FocusBorders(this)
     private var backgrounds: List<Background> = emptyList()
-    private var topBars: List<Bar> = emptyList()
-    private var bottomBars: List<Bar> = emptyList()
+    // (Compose state: the bars' parts follow when a reload makes them anew.)
+    private var topBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
+    private var bottomBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
+
+    /** What newm's bars share: the tray, the computer's state, the popups (started with the first islands bar). */
+    val barModel = newm.bar.BarModel(this)
     private val corners = Corners(this)
     private var wallpaper: Pair<String?, Wallpaper?>? = null
     private val queue = LayoutQueue(this)
@@ -482,8 +489,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             workspaces.firstOrNull { w -> w.posX <= m.area.x && m.area.x < w.posX + w.width && w.posY <= m.area.y && m.area.y < w.posY + w.height }
                 ?: workspaces[0].also { log.warn("Workspaces do not cover whole area") }
 
-        topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh) } else emptyList()
-        bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh) } else emptyList()
+        barModel.close()
+        topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh).also(Bar::look) } else emptyList()
+        bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh).also(Bar::look) } else emptyList()
+        // The tray and the rest only with newm's islands bar (else another bar's tray stays its own).
+        if ((topBars + bottomBars).any { it.islands }) barModel.start()
 
         // The wallpaper (newm's background.path; an output may name its own: one picture for all
         // here), read on a thread of its own: shown when it is ready.
@@ -542,12 +552,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         panelsUi.start()
         // The native bars (Compose), their texts asked for every second.
         caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
-            topBars.firstOrNull { it.monitor === m }?.let { BarContent(it) }
+            topBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
         }
         caulis.compose(place = { m -> bottomBars.firstOrNull { it.monitor === m }?.place() }) { m ->
-            bottomBars.firstOrNull { it.monitor === m }?.let { BarContent(it) }
+            bottomBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
         }
+        barModel.showPopups()
         every(1000) { (topBars + bottomBars).forEach(Bar::refresh) }
+        // The wall and the focused window, as the bars show them; a popup goes with its bar.
+        every(200) {
+            val bars = topBars + bottomBars
+            bars.forEach(Bar::look)
+            barModel.popup?.let { p -> if (p.bar !in bars || p.bar.place() == null || isLocked()) barModel.close() }
+        }
         queue.start()
         panelLauncher.start()
         dbusEndpoint.start()
@@ -1068,6 +1085,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 if (overlay is LauncherOverlay) exitOverlay()
                 null
             }
+            "bar" -> barCommand(arg.orEmpty())
+            // For newm's own tests only (NEWM_TEST_INPUT=1): the pointer moved, clicked, scrolled.
+            "test-pointer" -> if (System.getenv("NEWM_TEST_INPUT") == "1") testPointer(arg.orEmpty()) else "Disabled"
             "restart" -> {
                 // For dev/newm-dev: newm ends, and the script starts it again (a new build).
                 restartRequested = true
@@ -1087,6 +1107,45 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             else -> "Unknown command $cmd"
         }
     }
+
+    // `newm cmd bar calendar|volume|network|battery|power|tray <n>|close`: a popup of the bar opened (or closed).
+    private fun barCommand(arg: String): String? {
+        val words = arg.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val bar = (topBars + bottomBars).firstOrNull { it.islands && it.monitor === activeMonitor() } ?: (topBars + bottomBars).firstOrNull { it.islands }
+            ?: return "newm's islands bar is off"
+        val x = bar.originX + bar.monitor.area.width / 2.0
+        when (val what = words.firstOrNull() ?: "close") {
+            "close" -> barModel.close()
+            "tray" -> {
+                val item = barModel.tray.items.getOrNull(words.getOrNull(1)?.toIntOrNull() ?: 0) ?: return "No such tray icon"
+                barModel.toggle(newm.bar.PopupKind.TRAY_MENU, bar, x, item)
+            }
+            else -> {
+                val kind = newm.bar.PopupKind.entries.firstOrNull { it.name.equals(what, ignoreCase = true) } ?: return "Unknown popup $what"
+                barModel.toggle(kind, bar, x)
+            }
+        }
+        return null
+    }
+
+    // "x y" moves the pointer there; "x y left|right|middle" clicks there too; "x y scroll N" scrolls.
+    private fun testPointer(arg: String): String? {
+        val w = arg.trim().split(Regex("\\s+"))
+        val x = w.getOrNull(0)?.toDoubleOrNull() ?: return "x y [left|right|middle|scroll n]"
+        val y = w.getOrNull(1)?.toDoubleOrNull() ?: return "x y [left|right|middle|scroll n]"
+        when (w.getOrNull(2)) {
+            null -> caulis.simulatePointer(x, y)
+            "scroll" -> {
+                caulis.simulatePointer(x, y)
+                caulis.simulateScroll(w.getOrNull(3)?.toIntOrNull() ?: 1)
+            }
+            else -> caulis.simulatePointer(x, y, when (w[2]) { "right" -> 273; "middle" -> 274; else -> 272 })
+        }
+        return null
+    }
+
+    // The monitor with the pointer.
+    private fun activeMonitor(): Monitor? = desktopOrNull()?.let { d -> d.monitors.firstOrNull { m -> d.pointerX >= m.area.x && d.pointerX < m.area.right && d.pointerY >= m.area.y && d.pointerY < m.area.bottom } }
 
     fun launchApp(cmd: String) {
         exitOverlay()

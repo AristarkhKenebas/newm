@@ -52,19 +52,28 @@ focus {
 }
 
 panels {
-    // newm's own bar at the top: see-through, what is behind it blurred.
+    // newm's own bar at the top: three see-through islands floating at the edge — the wall
+    // (each window a tile; click: all windows) and the focused window, the clock (click: the
+    // calendar), the tray (background programs) and the network, volume, battery, power.
     topBar {
         enabled = true
-        height = 28
-        fontSize = 12
-        // font = "JetBrains Mono"
-        background = "#ECEFF4B0"
-        foreground = "#2E3440"
-        blur = true
-        texts { listOf(wifi(), cpu(), memory(), temperature(), battery(), date(), time()) }
+        height = 32                         // an island's height
+        margin = 6                          // the gap to the screen's edges
+        cornerRadius = 12
+        theme = "auto"                      // "auto" (follows light/dark), "light", "dark"
+        fontSize = 13
+        // font = "Inter"
+        left = listOf("wall", "window")
+        center = listOf("clock")
+        right = listOf("tray", "network", "volume", "battery", "power")
+        clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"
+        date = "EEE d MMM"                  // "" for none
+        // accentColor = "#BF616A"          // and islandColor, textColor: your own colours
+        // texts { listOf(cpu(), memory()) }   // shown by the module "texts"
+        // style = "classic"                // the original newm's bar (bars/classic.kts)
     }
     // A bar at the bottom too:
-    // bottomBar { enabled = true; texts { listOf(user(), "newm") } }
+    // bottomBar { enabled = true; left = listOf("window"); center = emptyList(); right = listOf("tray") }
 
     // Or a bar program of your own instead (turn topBar off then; a waybar in newm's look
     // is in bars/waybar of this folder):

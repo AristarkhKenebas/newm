@@ -2,6 +2,7 @@
 // Paste it into ~/.config/newm/config.kts in place of the panels { topBar { ... } } there.
 panels {
     topBar {
+        style = "classic"
         enabled = true
         height = 28
         fontSize = 12
@@ -11,6 +12,7 @@ panels {
         texts { listOf(wifi(), cpu(), memory(), temperature(), battery(), date(), time()) }
     }
     bottomBar {
+        style = "classic"
         enabled = true
         height = 28
         fontSize = 12

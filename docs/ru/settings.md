@@ -29,7 +29,7 @@
 
 | Часть | Настройки |
 |---|---|
-| `topBar { }`, `bottomBar { }` | собственные панели newm: `enabled`, `height`, `fontSize`, `font`, `background`, `foreground`, `blur`, `texts { }` |
+| `topBar { }`, `bottomBar { }` | собственные панели newm: `enabled`, `style` (`"islands"`, `"classic"`), `height`, `margin`, `cornerRadius`, `theme`, `font`, `fontSize`, `left`, `center`, `right`, `clock`, `date`, `islandColor`, `textColor`, `accentColor`, `iconSize`, `showPercent`, `showPassive`, `titleWidth`, `blur`, `texts { }`; у классической ещё `background`, `foreground` (см. [Панели](bars.md)) |
 | `bar { }` | программа-панель: `cmd`, `cwd`, `visibleNormal`, `visibleFullscreen` |
 | `lock { }` | экран блокировки: `w`, `h` (доли экрана), `cornerRadius`, `program` (сторонний локер вместо своего: `"swaylock"`, `"gtklock"`, `"hyprlock"`) |
 | `launcher { }` | лаунчер: `w`, `h`, `cornerRadius`, `cmd` |
@@ -77,6 +77,7 @@ newm cmd open-launcher
 newm cmd inhibit-idle     # без затемнения и блокировки, пока команда работает (Ctrl+C завершает её)
 newm cmd clean            # навести порядок на стене
 newm cmd restart          # перезапустить newm (так делает dev/newm-dev)
+newm cmd bar power        # всплывающее окно панели: calendar, volume, network, battery, power, tray 0, close
 ```
 
 Другие команды `newm`: `newm help`, `newm version`, `newm install-session`.
