@@ -74,7 +74,11 @@ fun BarModel.showPopups(): AutoCloseable {
             } else shownPopup?.takeIf { it.bar.monitor === m }?.let(::popupRect)
         }, takesKeyboard = true,
             sceneSize = { _ -> POPUP_WIDEST + 2 * POPUP_SHADOW to POPUP_TALLEST + 2 * POPUP_SHADOW },
-            appearance = { _ -> popupFade.appearance(rise = if (shownPopup?.bar?.top != false) -6f else 6f, smallest = 0.97f) },
+            // (Not shown until its height is measured: else its top came first, the rest after.)
+            appearance = { _ ->
+                if (shownPopup?.measured == 0) dev.caulis.compose.Appearance(alpha = 0f)
+                else popupFade.appearance(rise = if (shownPopup?.bar?.top != false) -8f else 8f, smallest = 0.97f, unfold = shownPopup?.bar?.top != false)
+            },
             moving = { popupFade.moving },
         ) { m ->
             val open = shownPopup
@@ -92,7 +96,7 @@ fun BarModel.showPopups(): AutoCloseable {
 }
 
 @Composable
-private fun PopupContent(model: BarModel, popup: Popup) {
+internal fun PopupContent(model: BarModel, popup: Popup) {
     val colors = model.colorsFor(popup.bar)
     // Popups are solid (no blur behind them): a little more opaque than the bar.
     val surface = colors.island.copy(alpha = (colors.island.alpha + 0.16f).coerceAtMost(0.97f))
@@ -118,6 +122,7 @@ private fun PopupContent(model: BarModel, popup: Popup) {
             PopupKind.BLUETOOTH -> BluetoothPopup(model, popup, colors, text)
             PopupKind.BATTERY -> BatteryAndPowerPopup(model, colors, text)
             PopupKind.POWER -> PowerPopup(model, popup, colors, text)
+            PopupKind.QUICK -> QuickPopup(model, popup, colors, text)
             PopupKind.COLORS -> ColorsPopup(model, colors, text)
             PopupKind.TRAY_MENU -> TrayMenu(model, popup, colors, text)
             PopupKind.TOOLTIP -> BasicText(popup.text, style = text.copy(fontSize = 12.sp))
@@ -300,8 +305,6 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
         Triple("logout", Glyph.LOGOUT, "Log out"),
         Triple("reboot", Glyph.RESTART, "Restart"),
         Triple("poweroff", Glyph.POWER, "Shut down"),
-        Triple("screenshot", Glyph.CAMERA, "Screenshot…"),
-        Triple("colors", Glyph.PALETTE, "Colors…"),
     )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((id, glyph, label) in entries) {

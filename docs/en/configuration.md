@@ -304,3 +304,10 @@ clipboard {
 "Clear" removes everything but the pinned ones; its arrow clears only text, pictures or
 files (grey when there is none). Tab goes from part to part of the window; the arrows or
 h j k l move inside one; Enter does it.
+
+### Quick actions
+
+The bar's grid button (before the power button) opens quick actions: the screen's
+brightness, caffeine (its arrow: for how long), a screenshot, the clipboard's history, the
+light or dark scheme, the colours and the keys. The wheel over it changes the brightness.
+`bar { quickButton = false }` takes it away; put "quick" into a list to place it yourself.

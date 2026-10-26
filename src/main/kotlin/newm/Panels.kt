@@ -153,6 +153,16 @@ class Panels(private val wm: Layout) {
         if (wm.caulis.desktop.keyboardWidget === launcherWidget) wm.caulis.desktop.focusWidget(null)
     }
 
+    /** Draws the launcher once ahead (its own scene, kept): its first opening is as quick as the next. */
+    fun prewarmLauncher() {
+        val widget = launcherWidget ?: return
+        val m = wm.caulis.desktop.monitors.firstOrNull() ?: return
+        val a = m.area
+        val w = minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
+        val h = minOf(560, (a.height * 0.62).toInt())
+        widget.prewarm(m, w, h)
+    }
+
     /** True while newm's own launcher (not a panel program) is in use. */
     val ownLauncher: Boolean get() = wm.panels().none { it.panel == "launcher" }
 

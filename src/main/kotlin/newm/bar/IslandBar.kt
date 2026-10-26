@@ -100,7 +100,7 @@ data class WallMap(val tiles: List<Tile>, val view: Tile?, val width: Float, val
 data class Focused(val title: String, val appId: String)
 
 /** What a bar's popup shows. */
-enum class PopupKind { CALENDAR, VOLUME, NETWORK, BLUETOOTH, BATTERY, POWER, COLORS, TRAY_MENU, TOOLTIP }
+enum class PopupKind { CALENDAR, VOLUME, NETWORK, BLUETOOTH, BATTERY, POWER, COLORS, QUICK, TRAY_MENU, TOOLTIP }
 
 /** An open popup: below [anchorX] (desktop units) of [bar]. */
 class Popup(val kind: PopupKind, val bar: Bar, val anchorX: Double, val item: TrayItem? = null) {
@@ -157,7 +157,22 @@ class BarModel(val wm: Layout) {
     var card by mutableStateOf<OsdCard?>(null)
 
     /** The card's coming and going (done by the compositor). */
-    val cardFade = Fade(inMillis = 220, outMillis = 260)
+    val cardFade = Fade(inMillis = 260, outMillis = 300)
+
+    // The brightness asked for last and when (quick wheel steps add up before the system says it back).
+    private var brightnessWanted = 0
+    private var brightnessAt = 0L
+
+    /** The screen's brightness [by] percent brighter (darker when negative), shown at the bottom. */
+    fun stepBrightness(by: Int) {
+        val now = System.currentTimeMillis()
+        val base = if (now - brightnessAt < 1500) brightnessWanted else status.brightness ?: return
+        val next = (base + by).coerceIn(1, 100)
+        brightnessWanted = next
+        brightnessAt = now
+        setBrightness(this, next / 100f)
+        showLevel(Glyph.BRIGHTNESS, "Brightness", next / 100.0)
+    }
 
     /** The window asking for a Wi-Fi password. */
     val passwordDialog = WifiPasswordDialog(this)
@@ -174,7 +189,7 @@ class BarModel(val wm: Layout) {
     }
 
     /** The popups' coming and going (done by the compositor). */
-    val popupFade = Fade(inMillis = 190, outMillis = 130)
+    val popupFade = Fade(inMillis = 280, outMillis = 180)
 
     /** The colours made from the wallpaper (or a colour of yours); null: the classic Nord ones. */
     var palette by mutableStateOf<dev.caulis.core.appearance.Palette?>(null)
@@ -362,6 +377,7 @@ class BarModel(val wm: Layout) {
         PopupKind.BATTERY -> 310 to ((if (status.battery != null) 56 + 8 else 0) + (if (status.brightness != null) 26 + 36 + 8 else 0) +
             (if (powerProfiles.profiles.isNotEmpty()) 26 + 8 + powerProfiles.profiles.size * (34 + 8) else 0) + 26).coerceAtLeast(60)
         PopupKind.POWER -> 240 to 228
+        PopupKind.QUICK -> 340 to 260
         PopupKind.COLORS -> 340 to (34 + 6 * 42 + 28)
         PopupKind.TOOLTIP -> (popup.text.lines().maxOfOrNull { it.length } ?: 10).coerceIn(4, 60) * 7 + 28 to popup.text.lines().size * 18 + 18
         PopupKind.TRAY_MENU -> {
@@ -531,6 +547,7 @@ private fun Modules(names: List<String>, bar: Bar, model: BarModel, colors: BarC
         "battery" -> BatteryModule(bar, model, colors, text)
         "power" -> PowerModule(bar, model, colors)
         "menu" -> MenuModule(bar, model, colors)
+        "quick" -> QuickModule(bar, model, colors)
         "texts" -> TextsModule(bar, colors, text)
         else -> Chip(colors) { BasicText(name, style = text) }
     }
@@ -768,6 +785,18 @@ private fun PowerModule(bar: Bar, model: BarModel, colors: BarColors) {
     var x by remember { mutableStateOf(0.0) }
     Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "power") { "Lock, sleep, log out, restart, shut down" } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.POWER, bar, bar.originX + x) }) {
         GlyphIcon(Glyph.POWER, colors.text, bar.iconSize.dp)
+    }
+}
+
+// Quick actions: a grid; a click opens their tiles (caffeine, a screenshot, the clipboard, the scheme, ...).
+@Composable
+private fun QuickModule(bar: Bar, model: BarModel, colors: BarColors) {
+    var x by remember { mutableStateOf(0.0) }
+    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "quick") { "Quick actions" + (model.status.brightness?.let { "\n" + tr("Brightness %s").replace("%s", "$it%") + " · " + tr("the wheel changes it") } ?: "") } },
+        onX = { x = it }, onPrimary = { model.toggle(PopupKind.QUICK, bar, bar.originX + x) },
+        // The wheel: the screen's brightness.
+        onScroll = { dy -> model.stepBrightness(if (dy < 0) 5 else -5) }) {
+        GlyphIcon(if (model.wm.caffeineOn) Glyph.COFFEE else Glyph.GRID, if (model.wm.caffeineOn) colors.accent else colors.text, bar.iconSize.dp)
     }
 }
 

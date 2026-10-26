@@ -243,9 +243,9 @@ internal fun LevelSlider(
     var lastSent by remember { mutableFloatStateOf(-1f) }
     val fill = if (dim) colors.text.copy(alpha = 0.3f) else colors.accent.copy(alpha = 0.85f)
     val onFill = if (fill.luminance() > 0.55f) Color(0xFF1B1B1F) else Color.White
-    val height = 32.dp
+    val height = 26.dp
     Box(
-        modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(12.dp)).background(colors.text.copy(alpha = 0.08f))
+        modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(13.dp)).background(colors.text.copy(alpha = 0.08f))
             .pointerInput(onIcon) {
                 awaitPointerEventScope {
                     var held = false
@@ -278,13 +278,13 @@ internal fun LevelSlider(
         Canvas(Modifier.fillMaxSize()) {
             // The filled part never narrower than the icon's room.
             val w = maxOf(size.height, size.width * shown)
-            drawRoundRect(fill, Offset.Zero, androidx.compose.ui.geometry.Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()))
+            drawRoundRect(fill, Offset.Zero, androidx.compose.ui.geometry.Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(size.height / 2))
         }
         Box(Modifier.size(height).align(Alignment.CenterStart), contentAlignment = Alignment.Center) {
-            GlyphIcon(glyph, onFill, 15.dp, level = shown, slash = dim)
+            GlyphIcon(glyph, onFill, 14.dp, level = shown, slash = dim)
         }
-        BasicText(label, style = text.copy(color = if (shown > 0.86f) onFill else colors.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp))
+        BasicText(label, style = text.copy(color = if (shown > 0.86f) onFill else colors.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 11.dp))
     }
 }
 
@@ -450,5 +450,51 @@ internal fun ScrollingRows(colors: BarColors, count: Int, rows: Int = 5, rowHeig
                 unhoverColor = colors.text.copy(alpha = 0.22f), hoverColor = colors.text.copy(alpha = 0.4f),
             ),
         )
+    }
+}
+
+
+/**
+ * The device in use, a row with an arrow ("🎧 Redmi Buds ▾"): a click unfolds the others below
+ * it (smoothly), each with its picture, the one in use checked; choosing one folds it again.
+ */
+@Composable
+internal fun <T> DevicePicker(
+    current: T?,
+    devices: List<T>,
+    name: (T) -> String,
+    glyph: (T) -> Glyph,
+    chosen: (T) -> Boolean,
+    colors: BarColors,
+    text: TextStyle,
+    onChoose: (T) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val turn by animateFloatAsState(if (open) 180f else 0f, tween(220))
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(if (open) colors.text.copy(alpha = 0.06f) else Color.Transparent)
+            .animateContentSize(androidx.compose.animation.core.spring(stiffness = 600f, dampingRatio = 0.9f)),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(12.dp)).background(if (hovered) colors.hover else Color.Transparent)
+                .hoverable(source).onClick(enabled = devices.size > 1) { open = !open }.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (current != null) GlyphIcon(glyph(current), colors.dim, 16.dp)
+            Spacer(Modifier.width(10.dp))
+            BasicText(current?.let(name) ?: "", style = text.copy(fontSize = 12.5.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (devices.size > 1) Box(Modifier.graphicsLayer { rotationZ = turn }) { GlyphIcon(Glyph.CHEVRON_DOWN, colors.dim, 15.dp) }
+        }
+        if (open) Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp)) {
+            for (d in devices) {
+                val on = chosen(d)
+                ListRow(name(d), colors, text, selected = on, onClick = { onChoose(d); open = false },
+                    leading = { GlyphIcon(glyph(d), if (on) colors.accent else colors.dim, 16.dp) },
+                    trailing = { if (on) GlyphIcon(Glyph.CHECK, colors.accent, 14.dp) })
+            }
+        }
     }
 }

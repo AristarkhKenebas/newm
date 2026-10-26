@@ -1,5 +1,12 @@
 package newm.bar
 
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -140,26 +147,33 @@ private fun DeviceRow(model: BarModel, popup: Popup, d: BluetoothDevice, colors:
 
 // --- sound ---------------------------------------------------------------------------------------
 
-/** Sound from the bar: the volume and the microphone, and which device each uses. */
+/** Sound from the bar: the volume and the device it plays on; the microphone and the device it hears with. */
 @Composable
 internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
     val sound = model.sound
     LaunchedEffect(Unit) { sound.refresh() }
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val out = sound.outputs.firstOrNull { it.isDefault } ?: sound.outputs.firstOrNull()
         Header("Sound", colors, text)
         if (out == null) return@Column Note("No sound device", colors, text)
         LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }) { sound.setVolume(out, it, true) }
-        if (sound.outputs.size > 1) {
-            Section("Output", colors, text)
-            for (d in sound.outputs) DeviceChoice(d.description, outputGlyph(d.description), d.isDefault, colors, text) { sound.use(d, true) }
-        }
+        DevicePicker(out, sound.outputs, { it.description }, { outputGlyph(it.description) }, { it.isDefault }, colors, text) { sound.use(it, true) }
         val mic = sound.inputs.firstOrNull { it.isDefault } ?: sound.inputs.firstOrNull()
         if (mic != null) {
             Section("Microphone", colors, text)
             LevelRow(Glyph.MIC, mic.volume, mic.muted, colors, text, onMute = { sound.toggleMute(mic, false) }) { sound.setVolume(mic, it, false) }
-            if (sound.inputs.size > 1) for (d in sound.inputs) DeviceChoice(d.description, Glyph.MIC, d.isDefault, colors, text) { sound.use(d, false) }
+            DevicePicker(mic, sound.inputs, { it.description }, { inputGlyph(it.description) }, { it.isDefault }, colors, text) { sound.use(it, false) }
         }
+    }
+}
+
+// What kind of input a device's name says it is.
+private fun inputGlyph(name: String): Glyph {
+    val n = name.lowercase()
+    return when {
+        "headset" in n || "buds" in n || "bluez" in n || "headphone" in n -> Glyph.HEADPHONES
+        "camera" in n || "webcam" in n -> Glyph.CAMERA
+        else -> Glyph.MIC
     }
 }
 
@@ -213,16 +227,13 @@ internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: Text
                 }), style = text.copy(color = colors.dim, fontSize = 12.sp))
             }
         }
-        model.status.brightness?.let { level ->
-            LevelRow(Glyph.BRIGHTNESS, level, false, colors, text, onMute = null) { setBrightness(model, it / 100f) }
-        }
         if (profiles.profiles.isNotEmpty()) {
             Section("Power mode", colors, text)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (p in profiles.profiles) {
                     val (glyph, name) = when (p) {
                         "power-saver" -> Glyph.LEAF to "Power saver"
-                        "balanced" -> Glyph.BALANCE to "Balanced"
+                        "balanced" -> Glyph.GAUGE to "Balanced"
                         "performance" -> Glyph.BOLT to "Performance"
                         else -> Glyph.POWER to p
                     }
@@ -230,16 +241,19 @@ internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: Text
                 }
             }
         }
-        CaffeineRow(model, colors, text)
     }
 }
 
-// Caffeine: the screen stays on for a while (or until turned off), whatever the energy settings say.
+// --- quick actions --------------------------------------------------------------------------
+
+/**
+ * Quick actions, as tiles: caffeine (the screen stays on; its arrow chooses for how long), a
+ * screenshot, the clipboard's history, the light or dark scheme, the colours, the keys.
+ */
 @Composable
-private fun CaffeineRow(model: BarModel, colors: BarColors, text: TextStyle) {
+internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val wm = model.wm
     val until = wm.caffeineUntil
-    // The minutes left, looked at again every few seconds while it is on.
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(until) {
         while (until != null) {
@@ -247,28 +261,73 @@ private fun CaffeineRow(model: BarModel, colors: BarColors, text: TextStyle) {
             kotlinx.coroutines.delay(5000)
         }
     }
-    val on = until != null && until > now
-    Section("Caffeine", colors, text)
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        GlyphIcon(Glyph.COFFEE, if (on) colors.accent else colors.text, 18.dp, level = if (on) 1f else 0f)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            BasicText(tr("The screen stays on"), style = text)
-            BasicText(when {
-                !on -> tr("Off")
-                until == Long.MAX_VALUE -> tr("On until turned off")
-                else -> tr("On · %s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
-            }, style = text.copy(color = colors.dim, fontSize = 11.sp))
-        }
-        Switch(on, colors) { wm.caffeine(if (it) 0 else null) }
+    val caffeine = until != null && until > now
+    val dark = wm.caulis.colorSchemeNow != dev.caulis.core.appearance.ColorScheme.LIGHT
+    fun closeThen(action: () -> Unit) {
+        model.close()
+        // (A moment later: not the menu in a screenshot, nor its keys.)
+        wm.caulis.after(220) { action() }
     }
-    Spacer(Modifier.height(6.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        val left = if (on && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
-        for ((minutes, label) in listOf(30 to "30 min", 60 to "1 h", 120 to "2 h", 0 to "∞")) {
-            // The chosen one: the time asked for (what is left is at most that, more than the shorter one).
-            val chosen = on && if (minutes == 0) until == Long.MAX_VALUE else left in (minutes / 2 + 1)..minutes && (minutes != 30 || left <= 30)
-            ChoiceChip(label, chosen, colors, text, Modifier.weight(1f)) { wm.caffeine(if (chosen) null else minutes) }
+    Column(Modifier.animateContentSize(androidx.compose.animation.core.spring(stiffness = 600f, dampingRatio = 0.9f)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Header("Quick actions", colors, text)
+        // The screen's brightness (here, not with the battery: a computer without one has it too).
+        model.status.brightness?.let { level ->
+            LevelRow(Glyph.BRIGHTNESS, level, false, colors, text, onMute = null) { setBrightness(model, it / 100f) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuickTile(Glyph.COFFEE, "Caffeine", when {
+                !caffeine -> "Off"
+                until == Long.MAX_VALUE -> "On"
+                else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
+            }, caffeine, colors, text, Modifier.weight(1f),
+                onMore = { popup.expanded = if (popup.expanded == "caffeine") null else "caffeine" }) { wm.caffeine(if (caffeine) null else 0) }
+            QuickTile(Glyph.CAMERA, "Screenshot", null, false, colors, text, Modifier.weight(1f)) { closeThen { wm.screenshot() } }
+            QuickTile(Glyph.CLIPBOARD, "Clipboard", null, false, colors, text, Modifier.weight(1f)) { closeThen { wm.toggleClipboard() } }
+        }
+        if (popup.expanded == "caffeine") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val left = if (caffeine && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
+            for ((minutes, label) in listOf(30 to "30 min", 60 to "1 h", 120 to "2 h", 0 to "∞")) {
+                val chosen = caffeine && if (minutes == 0) until == Long.MAX_VALUE else left in (minutes / 2 + 1)..minutes && (minutes != 30 || left <= 30)
+                ChoiceChip(label, chosen, colors, text, Modifier.weight(1f)) { wm.caffeine(if (chosen) null else minutes) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuickTile(Glyph.THEME, if (dark) "Dark" else "Light", null, dark, colors, text, Modifier.weight(1f)) {
+                wm.caulis.colorScheme = if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK
+                wm.caulis.applySettings()
+            }
+            QuickTile(Glyph.PALETTE, "Colors", null, false, colors, text, Modifier.weight(1f)) { model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX) }
+            QuickTile(Glyph.KEYBOARD, "Keys", null, false, colors, text, Modifier.weight(1f)) { closeThen { wm.toggleKeyHelp() } }
+        }
+    }
+}
+
+// A quick action's tile: its picture in a circle (the accent's when [on]), its name, a line below; [onMore]: a small arrow for more.
+@Composable
+private fun QuickTile(glyph: Glyph, title: String, subtitle: String?, on: Boolean, colors: BarColors, text: TextStyle, modifier: Modifier,
+                      onMore: (() -> Unit)? = null, onClick: () -> Unit) {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val bg by androidx.compose.animation.animateColorAsState(
+        when {
+            on -> colors.accent.copy(alpha = if (hovered) 0.26f else 0.18f)
+            hovered -> colors.text.copy(alpha = 0.10f)
+            else -> colors.text.copy(alpha = 0.06f)
+        }, androidx.compose.animation.core.tween(140),
+    )
+    androidx.compose.foundation.layout.Box(modifier.height(92.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(bg)
+        .hoverable(source).onClick(onClick = onClick)) {
+        Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            androidx.compose.foundation.layout.Box(Modifier.size(38.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                .background(if (on) colors.accent else colors.text.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+                GlyphIcon(glyph, if (on) onAccent(colors) else colors.text, 18.dp)
+            }
+            Spacer(Modifier.height(6.dp))
+            BasicText(tr(title), style = text.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium), maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (subtitle != null) BasicText(tr(subtitle), style = text.copy(color = colors.dim, fontSize = 10.5.sp), maxLines = 1)
+        }
+        if (onMore != null) androidx.compose.foundation.layout.Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+            IconButton(Glyph.CHEVRON_DOWN, colors, 24.dp, onClick = onMore)
         }
     }
 }

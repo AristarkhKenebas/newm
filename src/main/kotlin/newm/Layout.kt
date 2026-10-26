@@ -445,8 +445,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         var b = down.box
         if (b.w <= 0.0 || b.h <= 0.0) return null
         // The program drew another size than asked (a smallest size of its own, as Spotify's):
-        // its picture at its own size (zoomed as the view is), in the middle of its place and cut
-        // to it, never stretched (stretched it came out blurred and askew). (Not while moving:
+        // its picture at its own size (zoomed as the view is) in the middle of its place, made
+        // smaller to fit when bigger, never stretched (stretched it came out blurred and askew). (Not while moving:
         // there the picture follows the place until the program catches up.)
         val tileBox = b
         val asked = down.size
@@ -454,8 +454,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked) {
             val sx = b.w / asked.first
             val sy = b.h / asked.second
-            val w = drawn.first * sx
-            val h = drawn.second * sy
+            var w = drawn.first * sx
+            var h = drawn.second * sy
+            // Bigger than its place: made smaller as a whole to fit it (never cut, never wider or
+            // taller than it is: only shrunk, which stays sharp).
+            val fit = minOf(1.0, b.w / w, b.h / h)
+            w *= fit
+            h *= fit
             b = Box(b.x + (b.w - w) / 2, b.y + (b.h - h) / 2, w, h)
             cut = true
         }
@@ -615,6 +620,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         addWidgetDrawings({ backgrounds }, corners) { topBars + bottomBars }
         panelsUi.start()
         clipboardHistory.start()
+        Warmup(this).start()
         // The native bars (Compose), their texts asked for every second.
         caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
             topBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
@@ -1519,7 +1525,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
 
     /** The keys' help coming and going (done by the compositor). */
-    internal val keyHelpFade = newm.bar.Fade(inMillis = 200, outMillis = 140)
+    internal val keyHelpFade = newm.bar.Fade(inMillis = 260, outMillis = 180)
 
     fun toggleKeyHelp() {
         keyHelpShown = !keyHelpShown

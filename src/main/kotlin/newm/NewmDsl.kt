@@ -423,6 +423,9 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
     /** The menu's button (three lines, the launcher) first on the left (false: none; or place "menu" yourself). */
     var menuButton by setting<Boolean>("menu_button")
 
+    /** The quick actions' button (caffeine, a screenshot, the clipboard, the scheme) before the power button (false: none; or place "quick" yourself). */
+    var quickButton by setting<Boolean>("quick_button")
+
     /** Tray icons that say they are not needed now ("Passive") shown too. */
     var showPassive by setting<Boolean>("show_passive")
 }

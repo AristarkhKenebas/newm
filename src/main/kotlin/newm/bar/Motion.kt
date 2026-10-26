@@ -12,7 +12,12 @@ class Fade(private val inMillis: Long = 200, private val outMillis: Long = 150) 
     private var to = 0f
     private var since = 0L
 
+    // The clock starts with the first frame shown, not with the press: a first frame that takes
+    // long to draw (a menu opened the first time) would else eat the whole animation.
+    private var waiting = false
+
     private fun raw(now: Long): Float {
+        if (waiting) return from
         val millis = if (to > from) inMillis else outMillis
         val t = ((now - since) / 1_000_000.0 / millis).coerceIn(0.0, 1.0).toFloat()
         return from + (to - from) * t
@@ -28,6 +33,14 @@ class Fade(private val inMillis: Long = 200, private val outMillis: Long = 150) 
         from = raw(now)
         to = target
         since = now
+        waiting = target > from
+    }
+
+    /** Its first frame is on screen now: the clock starts. */
+    fun started(now: Long = System.nanoTime()) {
+        if (!waiting) return
+        waiting = false
+        since = now
     }
 
     /** True once shown (or appearing). */
@@ -40,15 +53,16 @@ class Fade(private val inMillis: Long = 200, private val outMillis: Long = 150) 
     }
 
     /** Still changing. */
-    val moving: Boolean get() = raw(System.nanoTime()) != to
+    val moving: Boolean get() = waiting || raw(System.nanoTime()) != to
 
     /** Visible at all (shown, or still going away). */
     val visible: Boolean get() = to > 0f || moving
 
     /** How it looks now: see-through, a little smaller and moved by [rise] while it comes and goes. */
-    fun appearance(rise: Float = -8f, smallest: Float = 0.96f): Appearance {
+    fun appearance(rise: Float = -8f, smallest: Float = 0.96f, unfold: Boolean = false): Appearance {
+        started()
         val v = value()
         if (v >= 1f) return Appearance.SHOWN
-        return Appearance(alpha = v, scale = smallest + (1f - smallest) * v, dy = (1f - v) * rise)
+        return Appearance(alpha = v, scale = smallest + (1f - smallest) * v, dy = (1f - v) * rise, reveal = if (unfold) 0.55f + 0.45f * v else 1f)
     }
 }

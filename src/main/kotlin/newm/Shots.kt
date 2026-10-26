@@ -67,12 +67,27 @@ internal class Shots(private val wm: Layout) {
         shots.format = confFormat()
         shots.jpegQuality = confQuality().coerceIn(10, 100) / 100f
         shots.then = confThen()
+        shots.style = style()
+    }
+
+    // The chooser in newm's look: the bar's colours (the wallpaper's), a pill, newm's words.
+    private fun style(): dev.caulis.screenshot.ScreenshotStyle {
+        val c = wm.barModel.colorsNow()
+        fun of(x: androidx.compose.ui.graphics.Color, alpha: Float = x.alpha) = dev.caulis.render.Color(x.red, x.green, x.blue, alpha)
+        val words = listOf("Area", "Window", "Screen", "Pointer", "Timer", "Capture", "%s s", "Drag to choose a part first", "Point at a window first",
+            "No window has the focus", "Screenshot in %s")
+        return dev.caulis.screenshot.ScreenshotStyle(
+            background = of(c.island, 0.96f), text = of(c.text), dim = of(c.dim), border = of(c.edge), accent = of(c.accent),
+            onAccent = of(newm.bar.onAccent(c)), cornerRadius = 32f, labels = words.associateWith { newm.bar.tr(it) },
+        )
     }
 
     private fun enabled(): Boolean = confEnabled().also { if (!it) log.info { "Screenshots are off (screenshots { enabled = false })" } }
 
     /** The chooser, starting with a part of the screen. */
     fun choose() {
+        // (Its look again: the colours may have changed with the wallpaper.)
+        shots.style = style()
         if (enabled()) shots.choose(ShotKind.REGION)
     }
 

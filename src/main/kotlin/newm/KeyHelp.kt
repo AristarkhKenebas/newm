@@ -79,7 +79,7 @@ private val GESTURES = listOf(
 )
 
 @Composable
-private fun KeyHelpPanel(wm: Layout) {
+internal fun KeyHelpPanel(wm: Layout) {
     val colors = wm.barModel.colorsNow()
     val surface = colors.island.copy(alpha = 0.96f)
     val text = TextStyle(color = colors.text, fontSize = 13.sp)

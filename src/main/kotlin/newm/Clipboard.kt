@@ -158,7 +158,7 @@ class ClipboardHistory(private val wm: Layout) {
     private var widget: ComposeWidget? = null
 
     // Its coming and going (done by the compositor).
-    private val fade = newm.bar.Fade(inMillis = 200, outMillis = 140)
+    private val fade = newm.bar.Fade(inMillis = 260, outMillis = 180)
 
     // What newm itself put back on the clipboard (not kept again as new).
     private var ours: ClipboardData? = null
@@ -328,13 +328,29 @@ class ClipboardHistory(private val wm: Layout) {
     fun open() {
         if (!confEnabled()) return run { wm.caulis.notify(newm.bar.tr("The clipboard's history is off (clipboard { enabled = true } turns it on)."), title = "newm") }
         opened++
+        if (!hintsLoaded) {
+            hintsLoaded = true
+            hintsSeen = java.nio.file.Files.exists(hintsFile)
+        }
         shown = true
         fade.show()
         widget?.let { wm.caulis.desktop.focusWidget(it) }
     }
 
+    // The hints were shown once (~/.local/state/newm/clipboard-hints-seen): not again.
+    private val hintsFile by lazy {
+        val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") } ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
+        java.nio.file.Path.of(state, "newm", "clipboard-hints-seen")
+    }
+    private var hintsSeen by mutableStateOf(false)
+    private var hintsLoaded = false
+
     fun close() {
         if (!shown) return
+        if (!hintsSeen) runCatching {
+            java.nio.file.Files.createDirectories(hintsFile.parent)
+            java.nio.file.Files.writeString(hintsFile, "")
+        }
         shown = false
         fade.hide()
         if (wm.caulis.desktop.keyboardWidget === widget) wm.caulis.desktop.focusWidget(null)
@@ -344,8 +360,8 @@ class ClipboardHistory(private val wm: Layout) {
     private enum class Zone { SEARCH, KINDS, CLEAR, LIST, ACTIONS }
 
     @Composable
-    private fun ClipboardPanel(history: ClipboardHistory) {
-        if (!history.shown && !fade.visible) return
+    private fun ClipboardPanel(history: ClipboardHistory, warm: Boolean = false) {
+        if (!warm && !history.shown && !fade.visible) return
         val colors = wm.barModel.colorsNow()
         val text = TextStyle(color = colors.text, fontSize = 14.sp)
         var query by remember(opened) { mutableStateOf("") }
@@ -462,21 +478,12 @@ class ClipboardHistory(private val wm: Layout) {
                                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent(::onKey),
                             )
                         }
+                        // Which kind: everything, texts, pictures, files, the pinned ones (a click: the next).
+                        KindSwitch(filter, zone == Zone.KINDS, colors, text) { filter = ClipFilter.entries[(filter.ordinal + 1) % ClipFilter.entries.size]; selected = 0 }
                     }
                     Spacer(Modifier.width(10.dp))
-                    Row(Modifier.then(ring(zone == Zone.CLEAR)).padding(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        PillButton("Clear", colors, text, if (history.canClear()) PillKind.DANGER else PillKind.TONAL, glyph = Glyph.TRASH) { clearNow(null) }
-                        Spacer(Modifier.width(4.dp))
-                        IconButton(Glyph.CHEVRON_DOWN, colors, 30.dp) { clearMenu = !clearMenu; clearRow = 0 }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                // What to show: everything, texts, pictures, files, the pinned ones.
-                Row(Modifier.then(ring(zone == Zone.KINDS)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (f in ClipFilter.entries) {
-                        val count = history.entries.count(f::has)
-                        ChoiceChip("${newm.bar.tr(f.title)}  $count", f == filter, colors, text, Modifier.width(112.dp)) { filter = f; selected = 0 }
-                    }
+                    // Clearing, one button: the bin and the word, a line, the arrow (one kind only).
+                    ClearButton(history.canClear(), zone == Zone.CLEAR, colors, text, onClear = { clearNow(null) }, onMenu = { clearMenu = !clearMenu; clearRow = 0 })
                 }
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -513,6 +520,14 @@ class ClipboardHistory(private val wm: Layout) {
                                             current.picture?.let { "${current.width} × ${current.height}" },
                                         ).joinToString(" · "), style = text.copy(color = colors.dim, fontSize = 12.sp))
                                     }
+                                    // What can be done: copy, pin, delete (pictures alone; Tab reaches them too).
+                                    Row(Modifier.then(ring(zone == Zone.ACTIONS)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        @Composable
+                                        fun lit(i: Int) = zone == Zone.ACTIONS && action == i
+                                        ActionIcon(Glyph.COPY, lit(0), true, colors) { history.use(current) }
+                                        ActionIcon(if (current.pinned) Glyph.UNPIN else Glyph.PIN, lit(1), current.pinned, colors) { history.pin(current) }
+                                        ActionIcon(Glyph.TRASH, lit(2), false, colors, danger = true) { history.remove(current) }
+                                    }
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -533,14 +548,6 @@ class ClipboardHistory(private val wm: Layout) {
                                         }
                                     }
                                 }
-                                Spacer(Modifier.height(12.dp))
-                                Row(Modifier.then(ring(zone == Zone.ACTIONS)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    @Composable
-                                    fun lit(i: Int) = if (zone == Zone.ACTIONS && action == i) Modifier.border(2.dp, colors.text.copy(alpha = 0.5f), RoundedCornerShape(15.dp)) else Modifier
-                                    PillButton("Copy", colors, text, PillKind.PRIMARY, glyph = Glyph.COPY, modifier = lit(0)) { history.use(current) }
-                                    PillButton(if (current.pinned) "Unpin" else "Pin", colors, text, glyph = if (current.pinned) Glyph.UNPIN else Glyph.PIN, modifier = lit(1)) { history.pin(current) }
-                                    PillButton("Delete", colors, text, PillKind.DANGER, glyph = Glyph.TRASH, modifier = lit(2)) { history.remove(current) }
-                                }
                             }
                         }
                     }
@@ -558,12 +565,77 @@ class ClipboardHistory(private val wm: Layout) {
                         }
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                BasicText(newm.bar.tr("Tab part   ·   ↑ ↓ ← → or h j k l move   ·   Enter do   ·   Ctrl+P pin   ·   Delete remove   ·   Esc close"),
-                    style = text.copy(color = colors.dim, fontSize = 11.sp))
+                // How to use it: the first time only.
+                if (!hintsSeen) {
+                    Spacer(Modifier.height(10.dp))
+                    BasicText(newm.bar.tr("Tab part   ·   ↑ ↓ ← → or h j k l move   ·   Enter do   ·   Ctrl+P pin   ·   Delete remove   ·   Esc close"),
+                        style = text.copy(color = colors.dim, fontSize = 11.sp))
+                }
             }
         }
     }
+
+    // "🗑 Clear | ▾": one rounded button, a thin line between its two parts.
+    @Composable
+    private fun ClearButton(can: Boolean, ringed: Boolean, colors: newm.bar.BarColors, text: TextStyle, onClear: () -> Unit, onMenu: () -> Unit) {
+        val fg = if (can) colors.danger else colors.dim
+        val bg = if (can) colors.danger.copy(alpha = 0.12f) else colors.text.copy(alpha = 0.06f)
+        Row(
+            Modifier.height(38.dp).then(if (ringed) Modifier.border(2.dp, colors.accent, RoundedCornerShape(19.dp)) else Modifier)
+                .background(bg, RoundedCornerShape(19.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(Modifier.fillMaxHeight().pointerInput(onClear) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onClear() } }
+                .padding(start = 14.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                GlyphIcon(Glyph.TRASH, fg, 15.dp)
+                Spacer(Modifier.width(7.dp))
+                BasicText(newm.bar.tr("Clear"), style = text.copy(color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+            }
+            Box(Modifier.width(1.dp).height(20.dp).background(fg.copy(alpha = 0.35f)))
+            Box(Modifier.fillMaxHeight().pointerInput(onMenu) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onMenu() } }
+                .padding(start = 8.dp, end = 12.dp), contentAlignment = Alignment.Center) {
+                GlyphIcon(Glyph.CHEVRON_DOWN, fg, 15.dp)
+            }
+        }
+    }
+
+    // The kind shown, a small pill at the search's end ("All ▾").
+    @Composable
+    private fun KindSwitch(filter: ClipFilter, ringed: Boolean, colors: newm.bar.BarColors, text: TextStyle, onClick: () -> Unit) {
+        Row(
+            Modifier.height(30.dp).then(if (ringed) Modifier.border(2.dp, colors.accent, RoundedCornerShape(15.dp)) else Modifier)
+                .background(colors.text.copy(alpha = 0.07f), RoundedCornerShape(15.dp))
+                .pointerInput(onClick) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onClick() } }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicText(newm.bar.tr(filter.title), style = text.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium))
+            Spacer(Modifier.width(6.dp))
+            GlyphIcon(Glyph.CHEVRON_DOWN, colors.dim, 13.dp)
+        }
+    }
+
+    // An action as a picture alone, round (lit when [on]; ringed when the keys are on it).
+    @Composable
+    private fun ActionIcon(glyph: Glyph, ringed: Boolean, on: Boolean, colors: newm.bar.BarColors, danger: Boolean = false, onClick: () -> Unit) {
+        val source = remember { MutableInteractionSource() }
+        val hovered by source.collectIsHoveredAsState()
+        val fg = when {
+            danger -> colors.danger
+            on -> colors.accent
+            else -> colors.text
+        }
+        Box(
+            Modifier.size(34.dp).then(if (ringed) Modifier.border(2.dp, colors.accent, RoundedCornerShape(17.dp)) else Modifier)
+                .background(if (hovered) fg.copy(alpha = 0.16f) else colors.text.copy(alpha = 0.06f), RoundedCornerShape(17.dp)).hoverable(source)
+                .pointerInput(onClick) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onClick() } },
+            contentAlignment = Alignment.Center,
+        ) { GlyphIcon(glyph, fg, 16.dp) }
+    }
+
+    /** The window as it looks, for drawing it once ahead (see Warmup). */
+    @Composable
+    internal fun WarmPanel() = ClipboardPanel(this, warm = true)
 
     // The program it came from (its icon), or what it is.
     @Composable

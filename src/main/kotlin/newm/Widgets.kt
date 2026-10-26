@@ -431,6 +431,7 @@ private val confShowPassive = BarSetting("show_passive", false)
 private val confTitleWidth = BarSetting("title_width", 360)
 private val confTrayHide = BarSetting("tray_hide", listOf("nm-applet", "blueman"))
 private val confMenuButton = BarSetting("menu_button", true)
+private val confQuickButton = BarSetting("quick_button", true)
 
 // "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
 private fun layoutLabel(name: String): String = when (val code = name.substringBefore('(').trim().lowercase()) {
@@ -483,7 +484,11 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
         if (confMenuButton(top) && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
     }
     val center: List<String> get() = confCenter(top)
-    val right: List<String> get() = confRight(top)
+    val right: List<String> get() = confRight(top).let { right ->
+        // Quick actions' button before the power button, unless placed elsewhere or turned off.
+        if (!confQuickButton(top) || "quick" in right || "quick" in confLeft(top) || "quick" in confCenter(top)) right
+        else right.indexOf("power").let { at -> if (at < 0) right + "quick" else right.take(at) + "quick" + right.drop(at) }
+    }
     val clockPattern: String get() = confClock(top)
     val datePattern: String get() = confDate(top)
     val iconSize: Int get() = confIconSize(top)
