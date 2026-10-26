@@ -20,7 +20,7 @@ private const val SETTINGS = "org.freedesktop.NetworkManager.Settings"
 private const val SETTINGS_PATH = "/org/freedesktop/NetworkManager/Settings"
 
 /** A network or device came ([connected]) or went: Wi-Fi ([name]: the network), a cable, a Bluetooth device. */
-data class ConnectionEvent(val kind: Kind, val connected: Boolean, val name: String?, val icon: String? = null) {
+data class ConnectionEvent(val kind: Kind, val connected: Boolean, val name: String?, val icon: String? = null, val connecting: Boolean = false) {
     enum class Kind { WIFI, WIRED, BLUETOOTH }
 }
 
@@ -54,6 +54,12 @@ class NetworkManager(private val caulis: Caulis) {
 
     /** Told when a network comes or goes (a card on the screen). */
     var onConnection: (ConnectionEvent) -> Unit = {}
+
+    /** The network asks for a password (none saved, or a wrong one): a window asks for it. */
+    var onPasswordWanted: (WifiNetwork) -> Unit = {}
+
+    // The Wi-Fi device's state (NetworkManager's: 100 connected, 40..90 on the way, 120 failed).
+    private var wifiState = 0
 
     // The network in use at the last look (null: not looked yet), and whether a cable was.
     private var activeBefore: String? = null
@@ -102,6 +108,7 @@ class NetworkManager(private val caulis: Caulis) {
                 val type = (props?.get("DeviceType") as? Number)?.toInt()
                 val state = (props?.get("State") as? Number)?.toInt() ?: 0
                 if (type == 2 && wifiDevice == null) wifiDevice = device
+                if (device == wifiDevice) wifiState = state
                 if (type == 1 && state == 100) wiredSeen = true
                 if (--pending == 0) {
                     if (lookedOnce && wiredSeen != wiredBefore) onConnection(ConnectionEvent(ConnectionEvent.Kind.WIRED, wiredSeen, null))
@@ -119,7 +126,8 @@ class NetworkManager(private val caulis: Caulis) {
         val bus = bus ?: return
         val device = wifiDevice ?: return run { networks = emptyList() }
         bus.getAll(NM, device, WIRELESS) { wprops ->
-            val activeAp = (wprops?.get("ActiveAccessPoint") as? ObjectPath)?.value
+            // (In use only once connected: while connecting the access point is chosen already.)
+            val activeAp = (wprops?.get("ActiveAccessPoint") as? ObjectPath)?.value?.takeIf { wifiState == 100 }
             bus.call(NM, ObjectPath(device), WIRELESS, "GetAllAccessPoints") { reply ->
                 val aps = (reply.body.firstOrNull() as? List<*>).orEmpty().map { (it as ObjectPath).value }
                 if (aps.isEmpty()) return@call run { networks = emptyList() }
@@ -203,6 +211,14 @@ class NetworkManager(private val caulis: Caulis) {
         connecting = network.ssid
         log.info { "Connecting to Wi-Fi \"${network.ssid}\"" } // (never the password)
         val known = knownSsids[network.ssid]
+        // A password given for a saved network (its saved one was wrong or none): its profile goes, a new one comes.
+        if (known != null && password != null) {
+            bus.call(NM, ObjectPath(known), "$SETTINGS.Connection", "Delete") { _ ->
+                knownSsids = knownSsids - network.ssid
+                connect(network.copy(known = false), password)
+            }
+            return
+        }
         if (known != null) {
             bus.call(NM, ObjectPath(NM_PATH), NM, "ActivateConnection", "ooo", listOf(ObjectPath(known), ObjectPath(device), ObjectPath(network.path))) { reply ->
                 errorOf(reply)?.let { failed(it) }
@@ -231,17 +247,27 @@ class NetworkManager(private val caulis: Caulis) {
         log.info { "Wi-Fi \"${network.ssid}\" forgotten" }
     }
 
-    // The Wi-Fi device's state: 100 connected, 120 failed (reason 7: no or wrong password).
+    // The Wi-Fi device's state: 100 connected, 40..90 on the way, 120 failed (reason 7: no
+    // password saved; 8: the password was refused).
     private fun deviceState(body: List<Any?>) {
         val state = (body.getOrNull(0) as? Number)?.toInt() ?: return
+        val before = wifiState
+        wifiState = state
         val reason = (body.getOrNull(2) as? Number)?.toInt() ?: 0
-        when (state) {
-            100 -> {
+        when {
+            state == 100 -> {
                 connecting = null
                 newProfile = null
                 problem = null
             }
-            120 -> failed(if (reason == 7 || reason == 8) "Wrong password" else "Could not connect (reason $reason)")
+            // On the way (said once, as it starts): a card says "Connecting".
+            state in 40..90 && before !in 40..90 -> connecting?.let { onConnection(ConnectionEvent(ConnectionEvent.Kind.WIFI, false, it, connecting = true)) }
+            state == 120 -> {
+                val wanted = connecting?.let { name -> networks.firstOrNull { it.ssid == name } }
+                failed(if (reason == 7 || reason == 8) "Wrong password" else "Could not connect (reason $reason)")
+                // No password, or a wrong one: asked for in a window.
+                if ((reason == 7 || reason == 8) && wanted != null && wanted.secure) onPasswordWanted(wanted)
+            }
         }
         refreshSoon()
     }

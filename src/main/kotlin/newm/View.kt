@@ -462,6 +462,19 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         return result
     }
 
+    /**
+     * The fewest tiles across and down the program's smallest size needs (Spotify will not be
+     * smaller than 800 x 600): its tile is never made smaller than that (drawn smaller it came
+     * out squeezed or cut).
+     */
+    fun minTiles(wsState: WorkspaceState): Pair<Double, Double> {
+        val up = upState ?: return 1.0 to 1.0
+        val size = wsState.sizeOrigin ?: wsState.size
+        val w = up.sizeConstraints[0].toDouble() * size / wsState.usableWidth()
+        val h = up.sizeConstraints[2].toDouble() * size / wsState.usableHeight()
+        return maxOf(kotlin.math.ceil(w - 0.05), 1.0) to maxOf(kotlin.math.ceil(h - 0.05), 1.0)
+    }
+
     internal fun showTiled(ws: Workspace, state: LayoutState, wsState: WorkspaceState): Pair<LayoutState?, LayoutState?> {
         log.trace { "Show - tiled: $this" }
         val up = upState

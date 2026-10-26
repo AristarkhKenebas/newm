@@ -62,10 +62,18 @@ private val confConnections = newm.configuredValue("osd.connections", "cards")
 /** A network or device came or went: a card, a line or nothing, as osd.connections says. */
 fun BarModel.connectionChanged(e: ConnectionEvent) {
     val (glyph, slash, title) = when (e.kind) {
-        ConnectionEvent.Kind.WIFI -> Triple(if (e.connected) Glyph.WIFI else Glyph.WIFI_OFF, false, if (e.connected) "Wi-Fi connected" else "Wi-Fi disconnected")
+        ConnectionEvent.Kind.WIFI -> when {
+            e.connecting -> Triple(Glyph.WIFI, true, "Connecting…")
+            e.connected -> Triple(Glyph.WIFI, false, "Wi-Fi connected")
+            else -> Triple(Glyph.WIFI_OFF, false, "Wi-Fi disconnected")
+        }
         ConnectionEvent.Kind.WIRED -> Triple(if (e.connected) Glyph.WIRED else Glyph.UNPLUGGED, false, if (e.connected) "Cable connected" else "Cable disconnected")
         ConnectionEvent.Kind.BLUETOOTH -> Triple(if (e.connected) e.icon?.let(::glyphOfDevice) ?: Glyph.BLUETOOTH else Glyph.BLUETOOTH, !e.connected, if (e.connected) "Connected" else "Disconnected")
     }
+    // A window fills the screen (a film, a game): nobody would see it, and it would only be in the way.
+    val fullscreen = runCatching { wm.state.workspaceState(wm.activeWorkspace()).isFullscreen() }.getOrDefault(false) ||
+        wm.caulis.desktop.focusedWindow?.fullscreen == true
+    if (fullscreen) return
     when (confConnections()) {
         "off", "none", "false" -> {}
         "text" -> toast(when {
@@ -189,7 +197,7 @@ private fun ConnectionCard(model: BarModel, show: OsdCard) {
     val colors = model.colorsNow()
     val fade = model.cardFade
     LaunchedEffect(show.serial) {
-        delay(1800)
+        delay(2800)
         fade.hide()
         delay(300)
         if (model.card?.serial == show.serial && !fade.shown) model.card = null

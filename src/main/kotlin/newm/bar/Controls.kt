@@ -472,11 +472,11 @@ internal fun <T> DevicePicker(
     var open by remember { mutableStateOf(false) }
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
-    val turn by animateFloatAsState(if (open) 180f else 0f, tween(220))
+    val turn by animateFloatAsState(if (open) 180f else 0f, tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing))
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(if (open) colors.text.copy(alpha = 0.06f) else Color.Transparent)
-            .animateContentSize(androidx.compose.animation.core.spring(stiffness = 600f, dampingRatio = 0.9f)),
+            .animateContentSize(tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
     ) {
         Row(
             Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(12.dp)).background(if (hovered) colors.hover else Color.Transparent)

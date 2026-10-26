@@ -153,6 +153,27 @@ class BarModel(val wm: Layout) {
     var shownPopup by mutableStateOf<Popup?>(null)
         internal set
 
+    // The battery's percent at the bar, as chosen in its popup (~/.local/state/newm/battery-percent; null: the configuration's).
+    private val percentFile by lazy {
+        val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") } ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
+        java.nio.file.Path.of(state, "newm", "battery-percent")
+    }
+    var batteryPercent by mutableStateOf(runCatching { java.nio.file.Files.readString(percentFile).trim().toBooleanStrictOrNull() }.getOrNull())
+        private set
+
+    /** Shows the battery's percent at the bar or not (kept). */
+    fun showBatteryPercent(on: Boolean) {
+        batteryPercent = on
+        runCatching {
+            java.nio.file.Files.createDirectories(percentFile.parent)
+            java.nio.file.Files.writeString(percentFile, on.toString())
+        }
+    }
+
+    /** The computer can hibernate (the power menu offers it). */
+    var canHibernate by mutableStateOf(false)
+        private set
+
     /** The card in the middle of the screen (a network or device came or went). */
     var card by mutableStateOf<OsdCard?>(null)
 
@@ -225,9 +246,18 @@ class BarModel(val wm: Layout) {
         scheme = wm.caulis.colorSchemeNow
         wm.caulis.onColorSchemeChanged { scheme = it }
         network.onConnection = { connectionChanged(it) }
+        network.onPasswordWanted = { askPassword(it) }
         bluetooth.onConnection = { connectionChanged(it) }
         tray.start()
         status.start()
+        // Hibernation offered only where the computer can (logind says "yes").
+        wm.caulis.systemBus?.call("org.freedesktop.login1", dev.caulis.core.dbus.ObjectPath("/org/freedesktop/login1"), "org.freedesktop.login1.Manager", "CanHibernate") { reply ->
+            canHibernate = reply.body.firstOrNull() == "yes"
+        }
+        // The charger plugged in or out, the level changed: read at once (not at the next look, seconds later).
+        wm.caulis.systemBus?.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m ->
+            if (m.path?.startsWith("/org/freedesktop/UPower") == true) status.refreshSoon()
+        }
         network.start()
         bluetooth.start()
         powerProfiles.start()
@@ -772,7 +802,7 @@ private fun BatteryModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
                 Spacer(Modifier.width(6.dp))
             }
             GlyphIcon(Glyph.BATTERY, colors.text, (bar.iconSize + 4).dp, level = b.percent / 100f, bolt = b.plugged, accent = fill)
-            if (bar.showPercent) {
+            if (model.batteryPercent ?: bar.showPercent) {
                 Spacer(Modifier.width(4.dp))
                 BasicText("${b.percent}%", style = text.copy(color = if (b.percent <= 10 && !b.charging) colors.danger else colors.text))
             }

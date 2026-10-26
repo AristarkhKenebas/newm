@@ -24,7 +24,7 @@ class Sound(private val caulis: Caulis) {
     var inputs by mutableStateOf<List<SoundDevice>>(emptyList())
         private set
 
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "newm-sound").apply { isDaemon = true } }
+    private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "newm-sound").apply { isDaemon = true } }
 
     /** Reads the devices again (on the worker; the state follows on the compositor's thread). */
     fun refresh() = worker.execute {
@@ -53,19 +53,54 @@ class Sound(private val caulis: Caulis) {
         }
     }
 
+    // Shown at once as it is about to be (pactl and the reading after it take a moment: the
+    // popup waited for them, as if it was not listening).
+    private fun change(output: Boolean, edit: (SoundDevice) -> SoundDevice) {
+        if (output) outputs = outputs.map(edit) else inputs = inputs.map(edit)
+    }
+
     /** Sound now goes to (or comes from) [device]. */
-    fun use(device: SoundDevice, output: Boolean) = act("pactl", if (output) "set-default-sink" else "set-default-source", device.name)
+    fun use(device: SoundDevice, output: Boolean) {
+        change(output) { it.copy(isDefault = it.name == device.name) }
+        act("pactl", if (output) "set-default-sink" else "set-default-source", device.name)
+    }
 
-    fun setVolume(device: SoundDevice, percent: Int, output: Boolean) =
-        act("pactl", if (output) "set-sink-volume" else "set-source-volume", device.name, "${percent.coerceIn(0, 150)}%")
+    fun setVolume(device: SoundDevice, percent: Int, output: Boolean) {
+        val p = percent.coerceIn(0, 150)
+        change(output) { if (it.name == device.name) it.copy(volume = p, muted = false) else it }
+        // (While dragging only the last one counts.)
+        val serial = ++volumeSerial
+        worker.execute {
+            if (serial != volumeSerial) return@execute
+            run("pactl", if (output) "set-sink-volume" else "set-source-volume", device.name, "$p%")
+            if (output) run("pactl", "set-sink-mute", device.name, "0")
+            refreshLater()
+        }
+    }
 
-    fun toggleMute(device: SoundDevice, output: Boolean) = act("pactl", if (output) "set-sink-mute" else "set-source-mute", device.name, "toggle")
+    @Volatile private var volumeSerial = 0
+
+    fun toggleMute(device: SoundDevice, output: Boolean) {
+        change(output) { if (it.name == device.name) it.copy(muted = !it.muted) else it }
+        act("pactl", if (output) "set-sink-mute" else "set-source-mute", device.name, "toggle")
+    }
 
     private fun act(vararg command: String) = worker.execute {
         run(*command)
         log.trace { command.joinToString(" ") }
-        // (And what it changed shows.)
-        worker.execute { refresh() }
+        refreshLater()
+    }
+
+    // What it changed read back, once for many changes in a row.
+    @Volatile private var refreshQueued = false
+
+    private fun refreshLater() {
+        if (refreshQueued) return
+        refreshQueued = true
+        worker.schedule({
+            refreshQueued = false
+            refresh()
+        }, 300, TimeUnit.MILLISECONDS)
     }
 
     private fun run(vararg command: String): String? = try {

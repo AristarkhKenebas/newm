@@ -337,7 +337,8 @@ class ClipboardHistory(private val wm: Layout) {
         widget?.let { wm.caulis.desktop.focusWidget(it) }
     }
 
-    // The hints were shown once (~/.local/state/newm/clipboard-hints-seen): not again.
+    // The hints: never again once "not again" was ticked (~/.local/state/newm/clipboard-hints-seen);
+    // else once a session.
     private val hintsFile by lazy {
         val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") } ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
         java.nio.file.Path.of(state, "newm", "clipboard-hints-seen")
@@ -345,12 +346,16 @@ class ClipboardHistory(private val wm: Layout) {
     private var hintsSeen by mutableStateOf(false)
     private var hintsLoaded = false
 
-    fun close() {
-        if (!shown) return
-        if (!hintsSeen) runCatching {
+    private fun hintsDone(never: Boolean) {
+        hintsSeen = true
+        if (never) runCatching {
             java.nio.file.Files.createDirectories(hintsFile.parent)
             java.nio.file.Files.writeString(hintsFile, "")
         }
+    }
+
+    fun close() {
+        if (!shown) return
         shown = false
         fade.hide()
         if (wm.caulis.desktop.keyboardWidget === widget) wm.caulis.desktop.focusWidget(null)
@@ -401,6 +406,11 @@ class ClipboardHistory(private val wm: Layout) {
         // h j k l move within one; Enter does it; Escape closes the menu, then the window.
         fun onKey(e: androidx.compose.ui.input.key.KeyEvent): Boolean {
             if (e.type != KeyEventType.KeyDown) return false
+            // The hints first: Enter or Escape is "Got it".
+            if (!hintsSeen && (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Escape)) {
+                hintsDone(false)
+                return true
+            }
             val left = e.key == Key.DirectionLeft || zone != Zone.SEARCH && e.key == Key.H
             val right = e.key == Key.DirectionRight || zone != Zone.SEARCH && e.key == Key.L
             val down = e.key == Key.DirectionDown || zone != Zone.SEARCH && e.key == Key.J
@@ -565,11 +575,48 @@ class ClipboardHistory(private val wm: Layout) {
                         }
                     }
                 }
-                // How to use it: the first time only.
-                if (!hintsSeen) {
-                    Spacer(Modifier.height(10.dp))
-                    BasicText(newm.bar.tr("Tab part   ·   ↑ ↓ ← → or h j k l move   ·   Enter do   ·   Ctrl+P pin   ·   Delete remove   ·   Esc close"),
-                        style = text.copy(color = colors.dim, fontSize = 11.sp))
+
+            }
+            // How to use it: once, over the window, until "not again" is ticked (else again next session).
+            if (!hintsSeen) HintsCard(colors, text)
+        }
+    }
+
+    @Composable
+    private fun androidx.compose.foundation.layout.BoxScope.HintsCard(colors: newm.bar.BarColors, text: TextStyle) {
+        var never by remember { mutableStateOf(false) }
+        Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.18f), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.width(430.dp).softShadow(20.dp, 12.dp).background(colors.island, RoundedCornerShape(20.dp)).border(1.dp, colors.edge, RoundedCornerShape(20.dp)).padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                BasicText(newm.bar.tr("The clipboard's history"), style = text.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+                for ((keys, what) in listOf(
+                    "Enter" to "Copy the chosen one again",
+                    "↑ ↓  ·  j k" to "Choose",
+                    "Tab" to "Go to the next part (kinds, Clear, the list, its buttons)",
+                    "Ctrl+P" to "Pin, so it stays",
+                    "Delete" to "Remove it",
+                    "Esc" to "Close",
+                )) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(110.dp)) {
+                        BasicText(keys, style = text.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.background(colors.text.copy(alpha = 0.08f), RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 3.dp))
+                    }
+                    BasicText(newm.bar.tr(what), style = text.copy(fontSize = 12.5.sp))
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).pointerInput(Unit) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) never = !never } },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(18.dp).background(if (never) colors.accent else Color.Transparent, RoundedCornerShape(5.dp))
+                            .border(1.5.dp, if (never) colors.accent else colors.dim, RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) {
+                            if (never) GlyphIcon(Glyph.CHECK, newm.bar.onAccent(colors), 12.dp)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        BasicText(newm.bar.tr("Don't show again"), style = text.copy(fontSize = 12.5.sp))
+                    }
+                    PillButton("Got it", colors, text, PillKind.PRIMARY) { hintsDone(never) }
                 }
             }
         }

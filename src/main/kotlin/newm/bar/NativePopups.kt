@@ -227,6 +227,10 @@ internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: Text
                 }), style = text.copy(color = colors.dim, fontSize = 12.sp))
             }
         }
+        if (b != null) Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicText(tr("Percent at the bar"), style = text, modifier = Modifier.weight(1f))
+            Switch(model.batteryPercent ?: true, colors) { model.showBatteryPercent(it) }
+        }
         if (profiles.profiles.isNotEmpty()) {
             Section("Power mode", colors, text)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -268,21 +272,20 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
         // (A moment later: not the menu in a screenshot, nor its keys.)
         wm.caulis.after(220) { action() }
     }
-    Column(Modifier.animateContentSize(androidx.compose.animation.core.spring(stiffness = 600f, dampingRatio = 0.9f)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Header("Quick actions", colors, text)
-        // The screen's brightness (here, not with the battery: a computer without one has it too).
-        model.status.brightness?.let { level ->
-            LevelRow(Glyph.BRIGHTNESS, level, false, colors, text, onMute = null) { setBrightness(model, it / 100f) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            QuickTile(Glyph.COFFEE, "Caffeine", when {
+    Column(Modifier.animateContentSize(androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Two switches, wide: caffeine (its arrow: for how long) and the scheme.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ToggleCard(Glyph.COFFEE, "Caffeine", when {
                 !caffeine -> "Off"
                 until == Long.MAX_VALUE -> "On"
                 else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
             }, caffeine, colors, text, Modifier.weight(1f),
                 onMore = { popup.expanded = if (popup.expanded == "caffeine") null else "caffeine" }) { wm.caffeine(if (caffeine) null else 0) }
-            QuickTile(Glyph.CAMERA, "Screenshot", null, false, colors, text, Modifier.weight(1f)) { closeThen { wm.screenshot() } }
-            QuickTile(Glyph.CLIPBOARD, "Clipboard", null, false, colors, text, Modifier.weight(1f)) { closeThen { wm.toggleClipboard() } }
+            ToggleCard(Glyph.THEME, "Theme", if (dark) "Dark" else "Light", dark, colors, text, Modifier.weight(1f)) {
+                wm.caulis.colorScheme = if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK
+                wm.caulis.applySettings()
+            }
         }
         if (popup.expanded == "caffeine") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             val left = if (caffeine && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
@@ -291,44 +294,63 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
                 ChoiceChip(label, chosen, colors, text, Modifier.weight(1f)) { wm.caffeine(if (chosen) null else minutes) }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            QuickTile(Glyph.THEME, if (dark) "Dark" else "Light", null, dark, colors, text, Modifier.weight(1f)) {
-                wm.caulis.colorScheme = if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK
-                wm.caulis.applySettings()
+        // The screen's brightness (here, not with the battery: a computer without one has it too).
+        model.status.brightness?.let { level ->
+            Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(colors.text.copy(alpha = 0.05f)).padding(12.dp)) {
+                BasicText(tr("Screen"), style = text.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.dim), modifier = Modifier.padding(start = 2.dp, bottom = 8.dp))
+                LevelSlider(Glyph.BRIGHTNESS, level / 100f, colors, text, "$level%") { setBrightness(model, it) }
             }
-            QuickTile(Glyph.PALETTE, "Colors", null, false, colors, text, Modifier.weight(1f)) { model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX) }
-            QuickTile(Glyph.KEYBOARD, "Keys", null, false, colors, text, Modifier.weight(1f)) { closeThen { wm.toggleKeyHelp() } }
+        }
+        // Things to do at once: round buttons with their names.
+        Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            ActionButton(Glyph.CAMERA, "Screenshot", colors, text) { closeThen { wm.screenshot() } }
+            ActionButton(Glyph.CLIPBOARD, "Clipboard", colors, text) { closeThen { wm.toggleClipboard() } }
+            ActionButton(Glyph.PALETTE, "Colors", colors, text) { model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX) }
+            ActionButton(Glyph.KEYBOARD, "Keys", colors, text) { closeThen { wm.toggleKeyHelp() } }
         }
     }
 }
 
-// A quick action's tile: its picture in a circle (the accent's when [on]), its name, a line below; [onMore]: a small arrow for more.
+// A switch as a wide card: its picture in a circle (the accent's when [on]), its name and state; [onMore]: an arrow at its right.
 @Composable
-private fun QuickTile(glyph: Glyph, title: String, subtitle: String?, on: Boolean, colors: BarColors, text: TextStyle, modifier: Modifier,
-                      onMore: (() -> Unit)? = null, onClick: () -> Unit) {
+private fun ToggleCard(glyph: Glyph, title: String, state: String, on: Boolean, colors: BarColors, text: TextStyle, modifier: Modifier,
+                       onMore: (() -> Unit)? = null, onClick: () -> Unit) {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     val bg by androidx.compose.animation.animateColorAsState(
         when {
             on -> colors.accent.copy(alpha = if (hovered) 0.26f else 0.18f)
-            hovered -> colors.text.copy(alpha = 0.10f)
-            else -> colors.text.copy(alpha = 0.06f)
-        }, androidx.compose.animation.core.tween(140),
+            hovered -> colors.text.copy(alpha = 0.09f)
+            else -> colors.text.copy(alpha = 0.05f)
+        }, androidx.compose.animation.core.tween(160),
     )
-    androidx.compose.foundation.layout.Box(modifier.height(92.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(bg)
-        .hoverable(source).onClick(onClick = onClick)) {
-        Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            androidx.compose.foundation.layout.Box(Modifier.size(38.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                .background(if (on) colors.accent else colors.text.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
-                GlyphIcon(glyph, if (on) onAccent(colors) else colors.text, 18.dp)
-            }
-            Spacer(Modifier.height(6.dp))
-            BasicText(tr(title), style = text.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium), maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            if (subtitle != null) BasicText(tr(subtitle), style = text.copy(color = colors.dim, fontSize = 10.5.sp), maxLines = 1)
+    Row(modifier.height(62.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(bg).hoverable(source).onClick(onClick = onClick)
+        .padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.Box(Modifier.size(38.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (on) colors.accent else colors.text.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+            GlyphIcon(glyph, if (on) onAccent(colors) else colors.text, 18.dp)
         }
-        if (onMore != null) androidx.compose.foundation.layout.Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-            IconButton(Glyph.CHEVRON_DOWN, colors, 24.dp, onClick = onMore)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            BasicText(tr(title), style = text.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), maxLines = 1, softWrap = false)
+            BasicText(tr(state), style = text.copy(color = if (on) colors.accent else colors.dim, fontSize = 11.5.sp), maxLines = 1, softWrap = false)
         }
+        if (onMore != null) IconButton(Glyph.CHEVRON_DOWN, colors, 26.dp, onClick = onMore)
+    }
+}
+
+// An action: a round button, its name below.
+@Composable
+private fun ActionButton(glyph: Glyph, title: String, colors: BarColors, text: TextStyle, onClick: () -> Unit) {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    Column(Modifier.width(72.dp).hoverable(source).onClick(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        androidx.compose.foundation.layout.Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            .background(colors.text.copy(alpha = if (hovered) 0.12f else 0.07f)), contentAlignment = Alignment.Center) {
+            GlyphIcon(glyph, colors.text, 19.dp)
+        }
+        Spacer(Modifier.height(5.dp))
+        BasicText(tr(title), style = text.copy(fontSize = 11.sp, color = colors.dim), maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 

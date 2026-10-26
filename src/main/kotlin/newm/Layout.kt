@@ -1733,8 +1733,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 val vs = s.viewState(view)
                 var i = vs.i
                 var j = vs.j
-                var w = vs.w + di
-                var h = vs.h + dj
+                // (Never smaller than the program can be.)
+                val (minW, minH) = view.minTiles(s.workspaceState(workspaces.first { it.handle == s.findView(view).third }))
+                var w = (vs.w + di).let { if (di < 0) maxOf(it, minW) else it }
+                var h = (vs.h + dj).let { if (dj < 0) maxOf(it, minH) else it }
+                if (w == vs.w && h == vs.h && (di < 0 || dj < 0)) return@animateTo null to s
                 if (w == 0.0) {
                     w = 2.0
                     i -= 1

@@ -302,10 +302,11 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
     val entries = listOf(
         Triple("lock", Glyph.LOCK, "Lock"),
         Triple("suspend", Glyph.MOON, "Suspend"),
+        Triple("hibernate", Glyph.HIBERNATE, "Hibernate"),
         Triple("logout", Glyph.LOGOUT, "Log out"),
         Triple("reboot", Glyph.RESTART, "Restart"),
         Triple("poweroff", Glyph.POWER, "Shut down"),
-    )
+    ).filter { it.first != "hibernate" || model.canHibernate }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((id, glyph, label) in entries) {
             val asking = popup.confirming == id
@@ -320,7 +321,7 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
                     model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX)
                     return@MenuRow
                 }
-                val final = id == "lock" || id == "suspend" || asking
+                val final = id == "lock" || id == "suspend" || id == "hibernate" || asking
                 if (!final) {
                     popup.confirming = id
                     return@MenuRow
@@ -330,6 +331,7 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
                 when (id) {
                     "lock" -> wm.ensureLocked()
                     "suspend" -> wm.caulis.launch("systemctl suspend")
+                    "hibernate" -> wm.caulis.launch("systemctl hibernate")
                     "logout" -> wm.terminate()
                     "reboot" -> wm.caulis.launch("systemctl reboot")
                     "poweroff" -> wm.caulis.launch("systemctl poweroff")

@@ -27,7 +27,7 @@ enum class Glyph {
     WIFI, WIFI_OFF, WIRED, SPEAKER, BATTERY, POWER, LOCK, LOGOUT, MOON, RESTART, CHEVRON_LEFT, CHEVRON_RIGHT,
     BRIGHTNESS, BLUETOOTH, CHECK, MIC, LEAF, BOLT, BALANCE, COFFEE, MENU,
     HEADPHONES, PHONE, MOUSE, KEYBOARD, COMPUTER, MONITOR, GAMEPAD, WATCH, SPEAKER_DEVICE, PRINTER, CAMERA, TABLET,
-    CLOSE, COPY, TRASH, SEARCH, SETTINGS, PALETTE, REFRESH, UNPLUGGED, PIN, UNPIN, PICTURE, FILE, CHEVRON_DOWN, GRID, GAUGE, CLIPBOARD, THEME,
+    CLOSE, COPY, TRASH, SEARCH, SETTINGS, PALETTE, REFRESH, UNPLUGGED, PIN, UNPIN, PICTURE, FILE, CHEVRON_DOWN, GRID, GAUGE, CLIPBOARD, THEME, HIBERNATE,
 }
 
 /** The Lucide icon of [glyph] at [level] (0..1), crossed out with [slash]. */
@@ -92,6 +92,7 @@ private fun iconName(glyph: Glyph, level: Float, slash: Boolean): String = when 
     Glyph.GAUGE -> "gauge"
     Glyph.CLIPBOARD -> "clipboard-list"
     Glyph.THEME -> "sun-moon"
+    Glyph.HIBERNATE -> "snowflake"
 }
 
 /** The picture for a Bluetooth device's kind (BlueZ's Icon: "audio-headphones", "input-mouse", ...). */
@@ -152,14 +153,34 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 16.dp, level: Float = 1f, s
     val l = level.coerceIn(0f, 1f)
     val name = if (glyph == Glyph.BATTERY && bolt) "battery-charging" else iconName(glyph, l, slash)
     val argb = color.toArgb()
+    if (glyph == Glyph.BATTERY) return Canvas(Modifier.size(size)) { drawBattery(color, accent, l, bolt) }
     Canvas(Modifier.size(size)) {
         val px = size.toPx().toInt().coerceAtLeast(1)
         Icons.get(name, argb, px)?.let { drawImage(it, dstOffset = IntOffset.Zero, dstSize = IntSize(px, px)) }
-        // The battery's level inside its body (Lucide's: x 2..18, y 6..18 of 24).
-        if (glyph == Glyph.BATTERY && !bolt && l > 0f) {
-            val u = this.size.minDimension / 24f
-            val inset = 2.6f * u
-            drawRoundRect(accent, Offset(2f * u + inset, 6f * u + inset), Size((16f * u - 2 * inset) * l, 12f * u - 2 * inset), CornerRadius(1.2f * u))
+    }
+}
+
+// The battery, round as the other pictures: a soft body, its level inside in [accent], a small
+// cap; plugged in, a bolt in the middle (cut out of the level, so it reads on any colour).
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBattery(color: Color, accent: Color, level: Float, bolt: Boolean) {
+    val u = size.minDimension / 24f
+    val stroke = 1.8f * u
+    val body = androidx.compose.ui.geometry.Rect(2f * u, 7f * u, 19.5f * u, 17f * u)
+    val r = 3.2f * u
+    drawRoundRect(color, Offset(body.left, body.top), Size(body.width, body.height), CornerRadius(r), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+    drawRoundRect(color, Offset(body.right + 1.2f * u, 10f * u), Size(1.8f * u, 4f * u), CornerRadius(0.9f * u))
+    val inset = stroke + 1.1f * u
+    val inner = androidx.compose.ui.geometry.Rect(body.left + inset, body.top + inset, body.right - inset, body.bottom - inset)
+    if (level > 0f) drawRoundRect(accent, Offset(inner.left, inner.top), Size(maxOf(inner.height * 0.6f, inner.width * level), inner.height), CornerRadius(1.6f * u))
+    if (bolt) {
+        val cx = body.center.x
+        val cy = body.center.y
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(cx + 1.4f * u, cy - 4.6f * u); lineTo(cx - 2.6f * u, cy + 0.8f * u); lineTo(cx - 0.2f * u, cy + 0.8f * u)
+            lineTo(cx - 1.4f * u, cy + 4.6f * u); lineTo(cx + 2.6f * u, cy - 0.8f * u); lineTo(cx + 0.2f * u, cy - 0.8f * u); close()
         }
+        // An outline the colour of what is around it, then the bolt.
+        drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(1.4f * u, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        drawPath(path, if (level > 0.5f) Color.White else color)
     }
 }

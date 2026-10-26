@@ -134,12 +134,23 @@ object IconTheme {
         val surface = Surface.makeRasterN32Premul(size, size)
         val canvas = surface.canvas
         if (file.toString().endsWith(".svg")) {
+            // At its own size (its viewBox, else width and height), scaled to the square, in the middle
+            // (given the square alone it drew at its own size: of a big one only its top left showed).
             val svg = SVGDOM(Data.makeFromBytes(bytes))
-            svg.setContainerSize(size.toFloat(), size.toFloat())
+            val root = svg.root
+            val box = root?.viewBox
+            val w = (box?.width ?: root?.width?.value ?: size.toFloat()).takeIf { it > 0f } ?: size.toFloat()
+            val h = (box?.height ?: root?.height?.value ?: size.toFloat()).takeIf { it > 0f } ?: size.toFloat()
+            svg.setContainerSize(w, h)
+            val scale = size / maxOf(w, h)
+            canvas.translate((size - w * scale) / 2f, (size - h * scale) / 2f)
+            canvas.scale(scale, scale)
             svg.render(canvas)
         } else {
+            // Made smaller smoothly (through smaller copies of it: a 256 px icon at 40 px came out jagged).
             val image = Image.makeFromEncoded(bytes)
-            canvas.drawImageRect(image, Rect.makeWH(image.width.toFloat(), image.height.toFloat()), Rect.makeWH(size.toFloat(), size.toFloat()), SamplingMode.LINEAR, Paint(), true)
+            canvas.drawImageRect(image, Rect.makeWH(image.width.toFloat(), image.height.toFloat()), Rect.makeWH(size.toFloat(), size.toFloat()),
+                org.jetbrains.skia.FilterMipmap(org.jetbrains.skia.FilterMode.LINEAR, org.jetbrains.skia.MipmapMode.LINEAR), Paint(), true)
         }
         return surface.makeImageSnapshot().toComposeImageBitmap()
     }

@@ -135,6 +135,9 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
     private var wsState = layout.state.workspaceState(workspace)
     private var i = 0.0
     private var j = 0.0
+    // The fewest tiles it may have (the program's smallest size).
+    private var minW = 1.0
+    private var minH = 1.0
     private var w = 1.0
     private var h = 1.0
     private var hystW: (Double) -> Double = { it }
@@ -173,8 +176,12 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
         }
         iGrid = Grid("i", pyRound(i - 3), pyRound(i + 3), i, confMoveGridOvr(), confMoveGridM())
         jGrid = Grid("j", pyRound(j - 3), pyRound(j + 3), j, confMoveGridOvr(), confMoveGridM())
-        wGrid = Grid("w", 1, pyRound(w + 3), w, confResizeGridOvr(), confResizeGridM())
-        hGrid = Grid("h", 1, pyRound(h + 3), h, confResizeGridOvr(), confResizeGridM())
+        // (Never smaller than the program can be.)
+        val (mw, mh) = view.minTiles(wsState)
+        minW = mw
+        minH = mh
+        wGrid = Grid("w", mw.toInt(), maxOf(pyRound(w + 3), mw.toInt()), w, confResizeGridOvr(), confResizeGridM())
+        hGrid = Grid("h", mh.toInt(), maxOf(pyRound(h + 3), mh.toInt()), h, confResizeGridOvr(), confResizeGridM())
     }
 
     override fun onGesture(values: Map<String, Double>) {
@@ -184,20 +191,20 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
         val dh = factor * (values["delta_y"] ?: 0.0)
         val ni: Double
         val nw: Double
-        if (w + dw < 1) {
-            val d = 1 - (w + dw)
+        if (w + dw < minW) {
+            val d = minW - (w + dw)
             ni = i - d
-            nw = 1 + d
+            nw = minW + d
         } else {
             ni = i
             nw = w + dw
         }
         val nj: Double
         val nh: Double
-        if (h + dh < 1) {
-            val d = 1 - (h + dh)
+        if (h + dh < minH) {
+            val d = minH - (h + dh)
             nj = j - d
-            nh = 1 + d
+            nh = minH + d
         } else {
             nj = j
             nh = h + dh

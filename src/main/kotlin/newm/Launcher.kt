@@ -224,8 +224,6 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                     AppRow(app, { selected == i }, colors, text, icons, wm, intro = -1, onHover = { selected = i }, onClick = { start(app) })
                 }
             }
-            Spacer(Modifier.height(6.dp))
-            BasicText(newm.bar.tr("↑ ↓ choose   ·   Enter start   ·   Esc close"), style = text.copy(color = colors.dim, fontSize = 11.sp), modifier = Modifier.padding(start = 6.dp))
         }
     }
 }
@@ -253,7 +251,7 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
     // the whole list composed anew (that cost a heavy frame at each row the pointer passed).
     val lit = colors.accent.copy(alpha = 0.18f)
     val key = app.icon.ifEmpty { app.id }
-    val iconPixels = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.roundToPx() }
+    val iconPixels = with(androidx.compose.ui.platform.LocalDensity.current) { 40.dp.roundToPx() }
     LaunchedEffect(key) {
         if (key.isNotEmpty() && key !in icons) {
             icons[key] = null
@@ -262,7 +260,7 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
         }
     }
     Row(
-        Modifier.fillMaxWidth().height(52.dp)
+        Modifier.fillMaxWidth().height(58.dp)
             // A layer of its own only while it comes in (each one costs a picture drawn apart).
             .then(if (come.value < 1f) Modifier.graphicsLayer {
                 alpha = come.value
@@ -275,9 +273,9 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
     ) {
         val picture = icons[key]
         if (picture != null) {
-            Image(picture, null, Modifier.size(32.dp), filterQuality = FilterQuality.Low)
+            Image(picture, null, Modifier.size(40.dp), filterQuality = FilterQuality.Low)
         } else {
-            Box(Modifier.size(32.dp).background(colors.accent.copy(alpha = 0.25f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(40.dp).background(colors.accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
                 BasicText(app.name.take(1).uppercase(), style = text.copy(fontWeight = FontWeight.Bold))
             }
         }
