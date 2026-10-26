@@ -173,3 +173,34 @@ abstract class Animate<T> {
 
     protected abstract fun animDamage()
 }
+
+/** pywm's widget downstream state: where a widget of newm's own is drawn, how strongly, in which order. */
+data class WidgetDown(
+    val zIndex: Double,
+    val box: Box,
+    val opacity: Double = 1.0,
+    val lockEnabled: Boolean = false,
+    val workspace: Box? = null,
+    val cornerRadius: Double = 0.0,
+)
+
+/** newm's WidgetDownstreamInterpolation ([preventAnim]: the widget's workspace shows changes at once). */
+class WidgetDownInterpolation(state0: WidgetDown, state1: WidgetDown, private val preventAnim: Boolean = false) : Interpolation<WidgetDown> {
+    private val from = state0
+    private val to = state1
+
+    override fun get(at: Double): WidgetDown {
+        val t = (if (preventAnim) 1.0 else at).coerceIn(0.0, 1.0)
+        return WidgetDown(
+            zIndex = if (t > 0.5) to.zIndex else from.zIndex,
+            box = from.box.mix(to.box, t),
+            opacity = from.opacity + (to.opacity - from.opacity) * t,
+            lockEnabled = from.lockEnabled,
+            workspace = if (t > 0.5) to.workspace else from.workspace,
+            cornerRadius = from.cornerRadius + (to.cornerRadius - from.cornerRadius) * t,
+        )
+    }
+}
+
+/** A colour as newm's configuration writes it: "#RRGGBB" or "#RRGGBBAA". */
+fun color(text: String): dev.caulis.render.Color = dev.caulis.render.Color.hex(text)

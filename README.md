@@ -6,6 +6,22 @@
 
 [![IMAGE](https://github.com/jbuchermn/newm/blob/master/newm/resources/screenshot.png)](https://youtu.be/4I_IHbP-iNQ)
 
+## newm on Caulis (Kotlin)
+
+This fork carries a port of newm to Kotlin, on the [Caulis](https://github.com/AristarkhKenebas/caulis)
+compositor library instead of pywm (`src/main/kotlin`; the Python original stays in `newm/`
+for reference). The same layout, gestures, animations, overlays, native bars, lock screen
+authentication (PAM, greetd) and D-Bus interfaces; Caulis draws and handles input.
+
+```sh
+./gradlew installDist -Pcaulis.local=true     # build/install/newm/bin/newm (needs Caulis's sources next to it until Caulis 0.1.2)
+build/install/newm/bin/newm                   # on a text console, or nested inside a Wayland session
+build/install/newm/bin/newm cmd debug         # newm-cmd
+```
+
+It is a port in progress: the user's own configuration file and newm-panel-basic are not
+ported yet. Licensed MIT, as newm.
+
 ## Current state
 
 Unfortunately I no longer have time to spend on this project. So, this repo is currently unmaintained. Check out [newm-atha](https://sr.ht/~atha/newm-atha/)!

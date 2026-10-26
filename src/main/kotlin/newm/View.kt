@@ -188,7 +188,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         height = max(minH, min(maxH, height))
         result.floating = true
         result.size = width to height
-        log.debug { "Floating size decision: ${up.size} (${up.sizeConstraints.toList()}) --> ${width}x$height" }
+        log.trace { "Floating size decision: ${up.size} (${up.sizeConstraints.toList()}) --> ${width}x$height" }
         return result
     }
 
@@ -252,7 +252,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     }
 
     private fun showFloating(ws: Workspace, state: LayoutState, wsState: WorkspaceState, posHint: Pair<Double, Double>?): Pair<LayoutState?, LayoutState?> {
-        log.debug { "Show - floating: $this" }
+        log.trace { "Show - floating: $this" }
         val initial = initialState ?: return null to null
 
         val referenceState = when {
@@ -269,7 +269,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         if (posHint != null) {
             ci = referenceWsState.i + posHint.first * referenceWsState.size
             cj = referenceWsState.j + posHint.second * referenceWsState.size
-            log.debug { "Respecting position hint $posHint -> $ci $cj" }
+            log.trace { "Respecting position hint $posHint -> $ci $cj" }
         } else if (parentView != null) {
             val pState = referenceState.findViewOrNull(parentView)?.first
             if (pState == null) {
@@ -447,7 +447,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     }
 
     internal fun showTiled(ws: Workspace, state: LayoutState, wsState: WorkspaceState): Pair<LayoutState?, LayoutState?> {
-        log.debug { "Show - tiled: $this" }
+        log.trace { "Show - tiled: $this" }
         val up = upState
         var minW = (up?.sizeConstraints?.get(0) ?: 0).toDouble()
         var minH = (up?.sizeConstraints?.get(2) ?: 0).toDouble()
@@ -494,9 +494,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             val r = confRulesCallback()(this)
             if (r != null) {
                 rules = r
-                log.debug { "View $this rules: $rules" }
+                log.trace { "View $this rules: $rules" }
             } else {
-                log.debug { "No rules for view $this" }
+                log.trace { "No rules for view $this" }
             }
             (rules["opacity"] as? Number)?.let { opacity = it.toDouble() }
         } catch (e: Exception) {
@@ -550,7 +550,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             return null to null
         }
         if (destroyed) {
-            log.debug { "Preventing show of destroyed view" }
+            log.trace { "Preventing show of destroyed view" }
             return null to null
         }
         log.info { "Show: $this" }
@@ -581,7 +581,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         val initial = initialState ?: return ViewDown()
 
         if (kind != initialKind) {
-            log.debug { "View $this changed kind: $kind -> $initialKind" }
+            log.trace { "View $this changed kind: $kind -> $initialKind" }
             return initial
         }
 
@@ -735,7 +735,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
                 }
             }
         }
-        log.debug { "View outside of workspaces - defaulting" }
+        log.trace { "View outside of workspaces - defaulting" }
         return ws to doubleArrayOf(i0, j0, w0, h0)
     }
 
@@ -745,7 +745,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
     /** The program asked for fullscreen (true) or to leave it. */
     fun onFullscreenRequest(fullscreen: Boolean) {
-        log.debug { "Client requested ${if (fullscreen) "" else "no "}fullscreen - following" }
+        log.trace { "Client requested ${if (fullscreen) "" else "no "}fullscreen - following" }
         if (isFocused() && confAcceptFullscreenFromViews()) wm.toggleFullscreen(fullscreen)
         setFullscreen(fullscreen)
     }

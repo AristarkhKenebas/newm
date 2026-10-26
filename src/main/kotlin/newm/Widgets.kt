@@ -1,0 +1,416 @@
+package newm
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
+import dev.caulis.core.Drawing
+import dev.caulis.core.DrawingLevel
+import dev.caulis.core.Monitor
+import dev.caulis.core.OverlayCanvas
+import dev.caulis.geometry.Rect
+import dev.caulis.log.Logger
+import dev.caulis.render.GpuTexture
+import dev.caulis.render.Renderer
+import java.awt.image.BufferedImage
+import java.lang.foreign.Arena
+import java.lang.foreign.ValueLayout
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.min
+
+private val log = Logger("widgets")
+
+/** A picture on the GPU, from [image] (BGRA, alpha premultiplied, as Caulis draws them). */
+fun textureOf(renderer: Renderer, image: BufferedImage): GpuTexture {
+    val w = image.width
+    val h = image.height
+    val texture = renderer.createTexture(w, h)
+    Arena.ofConfined().use { arena ->
+        val pixels = arena.allocate(w.toLong() * h * 4)
+        var at = 0L
+        for (y in 0 until h) for (x in 0 until w) {
+            val argb = image.getRGB(x, y)
+            val a = argb ushr 24 and 0xff
+            fun pre(c: Int) = (c * a + 127) / 255
+            pixels.set(ValueLayout.JAVA_BYTE, at, pre(argb and 0xff).toByte())
+            pixels.set(ValueLayout.JAVA_BYTE, at + 1, pre(argb ushr 8 and 0xff).toByte())
+            pixels.set(ValueLayout.JAVA_BYTE, at + 2, pre(argb ushr 16 and 0xff).toByte())
+            pixels.set(ValueLayout.JAVA_BYTE, at + 3, a.toByte())
+            at += 4
+        }
+        texture.upload(pixels, 0, h)
+    }
+    return texture
+}
+
+// --- the background --------------------------------------------------------------------------------
+
+private val confOutputs = configuredValue<List<Map<String, Any?>>>("outputs", emptyList())
+private val confTimeScale = configuredValue("background.time_scale", 0.15)
+private val confPathDefault = configuredValue<String?>("background.path", null)
+private val confAnimDefault = configuredValue("background.anim", true)
+
+/**
+ * newm's BackgroundState: which part of the wallpaper an output shows — the workspace's
+ * extent is the whole picture, the view in it a part, so moving and zooming the view moves
+ * the wallpaper a little (parallax).
+ */
+class BackgroundState(layoutState: LayoutState, wsState: WorkspaceState, wallpaperSize: Pair<Int, Int>, outputSize: Pair<Double, Double>, outputScale: Double) {
+    var box: DoubleArray
+    var opacity: Double
+
+    init {
+        val extent = wsState.extent()
+        val x1 = extent[0] - 1
+        val y1 = extent[1] - 1
+        val x2 = extent[2] + 1 + 1
+        val y2 = extent[3] + 1 + 1
+        var vx = wsState.i
+        var vy = wsState.j
+        var vw = wsState.size
+        var vh = wsState.size
+        if (vx < x1) {
+            vw -= (x1 - vx)
+            vx = x1
+        }
+        if (vy < y1) {
+            vy -= (y1 - vy) // (as newm has it)
+            vy = y1
+        }
+        if (vx + vw > x2) vw = x2 - vx
+        if (vy + vh > y2) vh = y2 - vy
+
+        val ex = x1
+        val ey = y1
+        val ew = x2 - x1
+        val eh = y2 - y1
+        opacity = layoutState.backgroundOpacity
+
+        // 1., 2.: the viewport within [0, 1] x [0, 1].
+        vx = (vx - ex) / ew
+        vy = (vy - ey) / eh
+        vw /= ew
+        vh /= eh
+        // 3.
+        vw = min(1.0, vw)
+        vh = min(1.0, vh)
+        vx = max(0.0, min(1 - vw, vx))
+        vy = max(0.0, min(1 - vh, vy))
+        // 4.: within the picture's pixels.
+        val (width, height) = wallpaperSize.first.toDouble() to wallpaperSize.second.toDouble()
+        val (outputWidth, outputHeight) = outputSize
+        vx *= width
+        vy *= height
+        vw *= width
+        vh *= height
+
+        val w0 = width / ew
+        val h0 = height / eh
+        val w1 = outputWidth * outputScale
+        val h1 = outputHeight * outputScale
+        var vxp: Double
+        var vyp: Double
+        var vwp: Double
+        var vhp: Double
+        if (abs(w0 - width) > 0.1 && abs(h0 - height) > 0.1 && width > w1 && height > h1) {
+            // 5a., 5b.
+            vwp = width + (w1 - width) / (w0 - width) * (vw - width)
+            vhp = height + (h1 - height) / (h0 - height) * (vh - height)
+            if (abs(vw - vwp) < 0.1 || abs(vh - vhp) < 0.1) {
+                vxp = vx
+                vyp = vy
+            } else {
+                vxp = (width - vwp) / (width - vw) * vx
+                vyp = (height - vhp) / (height - vh) * vy
+            }
+        } else {
+            vxp = vx
+            vyp = vy
+            vwp = vw
+            vhp = vh
+        }
+
+        // 6.: the output's aspect ratio.
+        var x = vxp
+        var y = vyp
+        var w = vwp
+        var h = vhp
+        if (w / h < outputWidth / outputHeight) {
+            val newH = outputHeight * w / outputWidth
+            y -= (newH - h) / 2.0
+            h = newH
+        } else {
+            val newW = outputWidth * h / outputHeight
+            x -= (newW - w) / 2.0
+            w = newW
+        }
+        // (A safety net: should not be needed.)
+        var scaleFac = 1.0
+        if (w > width) scaleFac = width / w
+        if (h > height) scaleFac = min(scaleFac, height / h)
+        w *= scaleFac
+        h *= scaleFac
+        if (x < 0) x = 0.0
+        if (y < 0) y = 0.0
+        if (x + w > width) x = width - w
+        if (y + h > height) y = height - h
+
+        // 7.: in output coordinates.
+        val fx = -x * outputWidth / w
+        val fy = -y * outputHeight / h
+        val fw = width * outputWidth / w
+        val fh = height * outputHeight / h
+        box = doubleArrayOf(fx, fy, ceil(fw), ceil(fh))
+    }
+
+    fun setMax(wallpaperSize: Pair<Int, Int>, outputSize: Pair<Double, Double>) {
+        opacity = 1.0
+        var x = 0.0
+        var y = 0.0
+        var w = outputSize.first
+        var h = outputSize.second
+        if (w / h > wallpaperSize.first.toDouble() / wallpaperSize.second) {
+            val newH = wallpaperSize.second * w / wallpaperSize.first
+            y -= (newH - h) / 2.0
+            h = newH
+        } else {
+            val newW = wallpaperSize.first * h / wallpaperSize.second
+            x -= (newW - w) / 2.0
+            w = newW
+        }
+        box = doubleArrayOf(x, y, ceil(w), ceil(h))
+    }
+
+    fun delta(other: BackgroundState): Double =
+        (0 until 4).sumOf { abs(box[it] - other.box[it]) } + 1000 * abs(opacity - other.opacity)
+
+    fun approach(other: BackgroundState, timeScale: Double, dt: Double) {
+        val factor = min(1.0, dt / timeScale)
+        opacity += (other.opacity - opacity) * factor
+        for (k in 0 until 4) box[k] += (other.box[k] - box[k]) * factor
+    }
+
+    override fun toString() = "<BackgroundState box=${box.toList()} opacity=$opacity>"
+}
+
+/** newm's Background widget: the wallpaper of one output, gliding behind the view's moves. */
+class Background(private val wm: Layout, val monitor: Monitor, private val workspace: Workspace, private val picture: Wallpaper) : Animatable {
+    private var preventAnim = !confAnimDefault() || workspace.preventAnim
+    private val size = picture.width to picture.height
+    private val output get() = monitor.area.width.toDouble() to monitor.area.height.toDouble()
+    private var current = state(wm.state)
+    private var target = state(wm.state)
+    private var lastFrame = 0.0
+    private var animCaught: Double? = null
+
+    init {
+        for (o in confOutputs()) {
+            if (o["name"] == monitor.name) {
+                val bg = o["background"] as? Map<*, *>
+                if (bg?.get("anim") == false) preventAnim = true
+            }
+        }
+        if (preventAnim) current.setMax(size, output)
+    }
+
+    private fun state(s: LayoutState) = BackgroundState(s, s.workspaceState(workspace), size, output, monitor.scale)
+
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
+        if (preventAnim) return
+        animCaught = -dt
+        target = state(newState)
+        wm.damage()
+    }
+
+    override fun flushAnimation() {
+        animCaught = null
+    }
+
+    /** True while it glides towards where the view says. */
+    val moving: Boolean get() = !preventAnim && current.delta(target) > 1
+
+    fun draw(canvas: OverlayCanvas) {
+        if (!preventAnim) {
+            val t = now()
+            val caught = animCaught
+            if (caught == null) {
+                val next = state(wm.state)
+                if (next.delta(target) > 1) target = next
+            } else if (caught < 0) {
+                animCaught = t - 1.0 / 120.0 - caught
+                lastFrame = t - 1.0 / 120.0
+            }
+            if (current.delta(target) > 1) {
+                current.approach(target, confTimeScale(), t - lastFrame)
+            } else if (current !== target) {
+                current = target
+            }
+            lastFrame = t
+        }
+        val b = current.box
+        val rect = Rect(monitor.area.x + Math.round(b[0]).toInt(), monitor.area.y + Math.round(b[1]).toInt(), Math.round(b[2]).toInt(), Math.round(b[3]).toInt())
+        canvas.image(picture.texture, rect, current.opacity.toFloat())
+    }
+}
+
+/** A wallpaper picture on the GPU ("resource:wallpaper.jpg": newm's own). */
+class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
+    companion object {
+        fun load(renderer: Renderer, path: String): Wallpaper? = try {
+            val image = if (path.startsWith("resource:")) {
+                Wallpaper::class.java.getResourceAsStream("/newm/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
+            } else {
+                javax.imageio.ImageIO.read(java.io.File(path.replaceFirst("~", System.getProperty("user.home"))))
+            } ?: error("not a picture")
+            log.info { "Wallpaper $path: ${image.width}x${image.height}" }
+            Wallpaper(textureOf(renderer, image), image.width, image.height)
+        } catch (e: Exception) {
+            log.warn("The wallpaper $path cannot be shown: $e")
+            null
+        }
+    }
+}
+
+// --- the screen's corners ----------------------------------------------------------------------------
+
+private val confCornerRadius = configuredValue("corner_radius", 18)
+
+/** newm's Corner widgets: each output's corners rounded off in black, above everything. */
+class Corners(private val wm: Layout) {
+    // The four corners at a size in pixels: top-left, top-right, bottom-left, bottom-right.
+    private var textures: Pair<Int, List<GpuTexture>>? = null
+
+    private fun texturesFor(pixels: Int): List<GpuTexture> {
+        textures?.let { (p, list) -> if (p == pixels) return list else list.forEach(GpuTexture::close) }
+        val list = listOf(true to true, false to true, true to false, false to false).map { (left, top) ->
+            val image = BufferedImage(pixels, pixels, BufferedImage.TYPE_INT_ARGB)
+            // The circle's middle is the corner's inner point: outside it, black.
+            val cx = if (left) pixels.toDouble() else 0.0
+            val cy = if (top) pixels.toDouble() else 0.0
+            for (y in 0 until pixels) for (x in 0 until pixels) {
+                val dx = x + 0.5 - cx
+                val dy = y + 0.5 - cy
+                val d = Math.sqrt(dx * dx + dy * dy)
+                val a = (d - pixels + 0.5).coerceIn(0.0, 1.0)
+                image.setRGB(x, y, (Math.round(a * 255).toInt() shl 24))
+            }
+            textureOf(wm.caulis.desktop.renderer, image)
+        }
+        textures = pixels to list
+        return list
+    }
+
+    fun draw(monitor: Monitor, canvas: OverlayCanvas) {
+        val r = confCornerRadius()
+        if (r <= 0) return
+        val list = texturesFor(Math.round(monitor.scale * r).toInt())
+        val a = monitor.area
+        canvas.image(list[0], Rect(a.x, a.y, r, r))
+        canvas.image(list[1], Rect(a.right - r, a.y, r, r))
+        canvas.image(list[2], Rect(a.x, a.bottom - r, r, r))
+        canvas.image(list[3], Rect(a.right - r, a.bottom - r, r, r))
+    }
+}
+
+// --- the native bars ----------------------------------------------------------------------------------
+
+private val confTopBarHeight = configuredValue("panels.top_bar.native.height", 20)
+private val confTopBarFontSize = configuredValue("panels.top_bar.native.font_size", 12)
+private val confTopBarText = configuredValue<() -> List<String>>("panels.top_bar.native.texts") { listOf("1", "2", "3") }
+private val confBottomBarHeight = configuredValue("panels.bottom_bar.native.height", 20)
+private val confBottomBarFontSize = configuredValue("panels.bottom_bar.native.font_size", 12)
+private val confBottomBarText = configuredValue<() -> List<String>>("panels.bottom_bar.native.texts") { listOf("4", "5", "6") }
+
+/**
+ * newm's TopBar and BottomBar: texts spread over a dark strip at an output's edge, sliding in
+ * and out with the workspace (gone in fullscreen, there in the overview). Drawn with cairo
+ * there, with Compose here; the texts are asked for every second.
+ */
+class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Animatable {
+    private val workspace = wm.workspaces.firstOrNull { monitor in it.outputs } ?: wm.workspaces[0]
+    private val height get() = if (top) confTopBarHeight() else confBottomBarHeight()
+
+    val fontSize get() = if (top) confTopBarFontSize() else confBottomBarFontSize()
+
+    /** What it says now (Compose redraws when it changes). */
+    var texts by mutableStateOf(listOf<String>())
+        private set
+
+    private val animation = object : Animate<WidgetDown>() {
+        fun at(default: WidgetDown) = process(default)
+        fun start(from: WidgetDown, to: WidgetDown, dt: Double) = startAnimation(WidgetDownInterpolation(from, to, workspace.preventAnim), dt)
+        override fun animDamage() = wm.damage()
+    }
+
+    fun reducer(state: LayoutState): WidgetDown {
+        val wsState = state.workspaceState(workspace)
+        val a = monitor.area
+        val h = height.toDouble()
+        val box = if (top) {
+            Box(a.x.toDouble(), a.y + wsState.topBarDy * h - h, a.width.toDouble(), h)
+        } else {
+            Box(a.x.toDouble(), a.y + a.height - wsState.bottomBarDy * h, a.width.toDouble(), h)
+        }
+        return WidgetDown(1000.0, box)
+    }
+
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) = animation.start(reducer(oldState), reducer(newState), dt)
+
+    override fun flushAnimation() = animation.flushAnimationOwn()
+
+    val animating: Boolean get() = animation.animating
+
+    /** Where it is this frame (null: out of sight). */
+    fun place(): Rect? {
+        val b = animation.at(reducer(wm.state)).box
+        val rect = Rect(Math.round(b.x).toInt(), Math.round(b.y).toInt(), Math.round(b.w).toInt(), Math.round(b.h).toInt())
+        return rect.intersect(monitor.area)?.takeIf { it.height > 0 }?.let { rect }
+    }
+
+    fun refresh() {
+        texts = try {
+            (if (top) confTopBarText() else confBottomBarText())()
+        } catch (e: Exception) {
+            log.warn("The bar's texts failed: $e")
+            texts
+        }
+    }
+}
+
+/** A bar's look: the texts spread evenly, white on a dark strip (Compose). */
+@androidx.compose.runtime.Composable
+fun BarContent(bar: Bar) {
+    Row(
+        Modifier.fillMaxSize().background(Color(0f, 0f, 0f, .7f)),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (t in bar.texts) BasicText(t, style = TextStyle(color = Color.White, fontSize = bar.fontSize.sp, fontFamily = FontFamily.Monospace))
+    }
+}
+
+/** The background and the screen's corners as Caulis drawings (one each, every output). */
+internal fun Layout.addWidgetDrawings(backgrounds: () -> List<Background>, corners: Corners) {
+    caulis.addDrawing(DrawingLevel.BELOW_WINDOWS, object : Drawing {
+        override fun draw(monitor: Monitor, canvas: OverlayCanvas) {
+            backgrounds().filter { it.monitor === monitor }.forEach { it.draw(canvas) }
+        }
+
+        override fun animating(now: Long): Boolean = backgrounds().any { it.moving }
+    })
+    caulis.addDrawing(DrawingLevel.ON_TOP, object : Drawing {
+        override fun draw(monitor: Monitor, canvas: OverlayCanvas) = corners.draw(monitor, canvas)
+    })
+}

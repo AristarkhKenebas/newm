@@ -4,6 +4,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    // The native bars are Compose.
+    alias(libs.plugins.kotlin.compose)
     application
 }
 
@@ -26,6 +28,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 dependencies {
     implementation(libs.caulis.wm)
+    implementation(libs.caulis.compose)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
