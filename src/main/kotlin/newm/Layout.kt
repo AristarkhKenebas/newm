@@ -401,6 +401,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } else if (previous != null && previous.size != up.size && up.size != requestedSize[window]) {
                 view.onResized(up.size.first, up.size.second, clientLeading = true)
             }
+            // Drew bigger than asked (Spotify says 800 x 600 but will not be lower than ~700):
+            // its real smallest size, used for what it is asked next.
+            // (Only from its answer to the last size asked: an older picture is not its smallest.)
+            if (window.caughtUp && !animating) requestedSize[window]?.let { (aw, ah) -> view.learnSmallest(aw, ah, up.size.first, up.size.second) }
             return placeOf(down, up.size, steady = !animating && !view.animating)
         }
 
@@ -461,7 +465,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (down.resizeScale > 0.0 && drawn != null && drawn.first > 0 && drawn.second > 0) {
             b = Box(b.x, b.y, drawn.first * down.resizeScale, drawn.second * down.resizeScale)
             cut = true
-        } else if (steady && drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked) {
+        } else if (drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked &&
+            // (Bigger than asked, it will stay so: fitted while the view moves too, never stretched to
+            // its place and back — a harmonica. Smaller: it is catching up, it follows its place.)
+            (steady || drawn.first >= asked.first && drawn.second >= asked.second)
+        ) {
             val sx = b.w / asked.first
             val sy = b.h / asked.second
             var w = drawn.first * sx
@@ -722,6 +730,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         for ((i, v) in views) {
             val found = state.findViewOrNull(v)
             append("%2d: %s on workspace %d\n      %s\n".format(i, v, found?.third ?: -1, found?.first))
+            // The size it was asked for and the one it drew (they differ: it is fitted or shrunk).
+            append("      asked ${requestedSize[v.window]?.let { "${it.first}x${it.second}" } ?: "-"}, drawn ${Up(v.window, false).size.let { "${it.first}x${it.second}" }}\n")
         }
     }
 

@@ -419,7 +419,8 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
         // Override: Keep aspect-ratio of windows
         if (!ignoreMinSize) {
-            val (minW, maxW, minH, maxH) = up.sizeConstraints.toList()
+            val (_, maxW, _, maxH) = up.sizeConstraints.toList()
+            val (minW, minH) = smallest(up)
             // Smaller than the program can be (Spotify: 800 x 600): it is asked for the same shape
             // as its place, only as much bigger as it needs, and drawn shrunk to fill its place
             // exactly — no empty sides, no stretching while the view moves.
@@ -482,13 +483,49 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
      * smaller than 800 x 600): its tile is never made smaller than that (drawn smaller it came
      * out squeezed or cut).
      */
+    // The smallest size it really drew when asked for less (0: none seen beyond its own word).
+    private var smallestW = 0
+    private var smallestH = 0
+
+    // A size seen bigger than asked, to be learned if it stays so for a moment.
+    private var seenBigger: List<Int>? = null
+
+    /** It drew [dw] x [dh] when asked for [aw] x [ah]: bigger than asked (still so a moment later) is its real smallest size. */
+    fun learnSmallest(aw: Int, ah: Int, dw: Int, dh: Int) {
+        if (dw <= 0 || dh <= 0) return
+        if (!(dw > aw + 8 && dw > smallestW) && !(dh > ah + 8 && dh > smallestH)) return
+        val seen = listOf(aw, ah, dw, dh)
+        if (seenBigger == seen) return
+        seenBigger = seen
+        wm.caulis.after(400) {
+            if (seenBigger != seen) return@after
+            seenBigger = null
+            val now = Up(window, false).size
+            if (window.caughtUp && now == dw to dh && window.configuredSize == aw to ah) keepSmallest(aw, ah, dw, dh)
+        }
+    }
+
+    private fun keepSmallest(aw: Int, ah: Int, dw: Int, dh: Int) {
+        var changed = false
+        if (dw > aw + 8 && dw > smallestW) { smallestW = dw; changed = true }
+        if (dh > ah + 8 && dh > smallestH) { smallestH = dh; changed = true }
+        if (changed) {
+            log.info { "$this cannot be smaller than ${maxOf(smallestW, upState?.sizeConstraints?.get(0) ?: 0)} x ${maxOf(smallestH, upState?.sizeConstraints?.get(2) ?: 0)} (asked $aw x $ah, drew $dw x $dh)" }
+            wm.damage()
+        }
+    }
+
+    // Its smallest size: what it says, or what it was seen to need.
+    private fun smallest(up: Up): Pair<Int, Int> = maxOf(up.sizeConstraints[0], smallestW) to maxOf(up.sizeConstraints[2], smallestH)
+
     fun minTiles(wsState: WorkspaceState): Pair<Double, Double> {
         val up = upState ?: return 1.0 to 1.0
         val size = wsState.sizeOrigin ?: wsState.size
         // Drawn shrunk in its own shape (minSizeKeepsShape): down to this much of its smallest size.
         val shrink = if (confMinSizeKeepsShape()) confMinSizeShrink().coerceIn(0.3, 1.0) else 1.0
-        val w = up.sizeConstraints[0].toDouble() * shrink * size / wsState.usableWidth()
-        val h = up.sizeConstraints[2].toDouble() * shrink * size / wsState.usableHeight()
+        val (sw, sh) = smallest(up)
+        val w = sw.toDouble() * shrink * size / wsState.usableWidth()
+        val h = sh.toDouble() * shrink * size / wsState.usableHeight()
         return maxOf(kotlin.math.ceil(w - 0.05), 1.0) to maxOf(kotlin.math.ceil(h - 0.05), 1.0)
     }
 

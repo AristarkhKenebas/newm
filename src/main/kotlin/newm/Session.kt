@@ -92,7 +92,11 @@ internal class SessionKeeper(private val wm: Layout) {
     /** A window came: if one like it is waited for, it goes to that one's place. */
     fun shown(view: View) {
         if (pending.isEmpty()) return
-        val entry = pending.firstOrNull { (it["app"] as? String).equals(view.appId, ignoreCase = true) } ?: return
+        val same = pending.filter { (it["app"] as? String).equals(view.appId, ignoreCase = true) }
+        if (same.isEmpty()) return
+        // Several of one program (two terminals): the one in the same folder, else of the same title.
+        val dir = if (same.size > 1) folderOf(view.pid, view.appId) else null
+        val entry = same.firstOrNull { dir != null && it["dir"] == dir } ?: same.firstOrNull { it["title"] == view.title } ?: same.first()
         pending.remove(entry)
         // (A moment later: after newm's own placing and its animation.)
         wm.caulis.after(350) {
@@ -110,11 +114,23 @@ internal class SessionKeeper(private val wm: Layout) {
                         floatPos = fx to fy
                     }
                 }
-                null to s.settingWorkspaceState(ws, next)
+                // The view as it was too (the places are in its grid: without it they came out
+                // too big, the camera elsewhere, until all windows were back).
+                null to s.settingWorkspaceState(ws, withView(next, wm.workspaces.indexOf(ws)))
             }, 0.25)
             if ((entry["app"] as? String).equals(focusApp, ignoreCase = true)) view.focus()
             if (pending.isEmpty()) wm.caulis.after(400) { finish() }
         }
+    }
+
+    // [wsState] seen as the workspace at [index] was seen when kept: where, how far, its grid.
+    private fun withView(wsState: WorkspaceState, index: Int): WorkspaceState {
+        val v = viewsToRestore.getOrNull(index) ?: return wsState
+        val i = (v["i"] as? Number)?.toDouble() ?: return wsState
+        val j = (v["j"] as? Number)?.toDouble() ?: return wsState
+        val size = (v["size"] as? Number)?.toDouble() ?: return wsState
+        val unit = (v["unit"] as? Number)?.toDouble()
+        return wsState.copy(i = i, j = j, size = size, sizeOrigin = null).also { c -> unit?.let { c.unit = it } }
     }
 
     // All back (or waited enough): each workspace's view as it was.
@@ -145,7 +161,12 @@ internal class SessionKeeper(private val wm: Layout) {
             val name = Files.readAllLines(flatpak).firstOrNull { it.startsWith("name=") }?.substringAfter('=')
             name?.let { listOf("flatpak", "run", it) }
         } else {
-            String(Files.readAllBytes(Path.of("/proc/$pid/cmdline"))).split('\u0000').filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }
+            val args = String(Files.readAllBytes(Path.of("/proc/$pid/cmdline"))).split('\u0000').filter { it.isNotEmpty() }
+            // Some programs (Spotify, Chromium's) rewrite theirs into one line with spaces:
+            // "…/spotify --ozone-platform=wayland" is no file — split again at the spaces.
+            val first = args.firstOrNull()
+            if (args.size == 1 && first != null && ' ' in first && !Files.exists(Path.of(first))) first.trim().split(Regex("\\s+"))
+            else args.takeIf { it.isNotEmpty() }
         }
     } catch (_: Exception) {
         null

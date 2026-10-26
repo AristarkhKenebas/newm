@@ -93,16 +93,20 @@ class FocusBorders(private val wm: Layout) : Animatable {
     }
 
     override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
-        if (skipNextAnimate) {
-            skipNextAnimate = false
-            return
-        }
-        val view = currentView ?: return
-        val up = view.upState ?: return
+        val view = currentView
+        val up = view?.upState
         fun of(state: LayoutState): Current {
-            val down = view.reducer(up, state)
+            val down = view!!.reducer(up!!, state)
             return if (down.isFullscreen) Current.NONE else Current(down.zIndex - 0.01, down.logicalBox, down.workspace, down.opacity)
         }
+        if (skipNextAnimate) {
+            skipNextAnimate = false
+            // (Its own glide runs already; but where it ends is this state's — else, the glide
+            // over, it stayed where the window was before: a frame around nothing.)
+            if (view != null && up != null && !border.animating) current = of(newState)
+            return
+        }
+        if (view == null || up == null) return
         var old = of(oldState)
         val new = of(newState)
         if (old.box.w <= 0.0 || old.box.h <= 0.0) old = new.copy(alpha = 0.0)
@@ -127,6 +131,8 @@ class FocusBorders(private val wm: Layout) : Animatable {
         if (wm.caulis.desktop.keyboardWidget != null) return
         // A window being moved or resized: it is chosen plainly, no border (it lagged behind it).
         if (wm.overlay is MoveResizeOverlay || wm.overlay is MoveResizeFloatingOverlay) return
+        // At rest: around the window where it is now (never where it was).
+        if (!border.animating) setBoxAndRadius()
         val down = border.at(reducer(current, 1.0))
         if (down.opacity <= 0.0 || down.box.w <= 0.0 || down.box.h <= 0.0) return
         val b = down.box
