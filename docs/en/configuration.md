@@ -45,6 +45,7 @@ background { path = "~/Pictures/wallpaper.jpg" }
 ```
 
 `anim = false` keeps it still (by default it moves a little with the view).
+An SVG works too (`wallpaper.svg`): it stays sharp when the view zooms in.
 
 ### Keyboard layouts
 
@@ -212,3 +213,36 @@ newm's menus speak Russian when the system's language is Russian. To choose:
 ```kotlin
 language = "en"     // "auto" (the system's, the default), "en" or "ru"
 ```
+
+### A scratchpad (a terminal that drops down)
+
+A window kept apart from the wall that one key shows above everything and hides again, as
+sway's scratchpad. Its program starts on the first press:
+
+```kotlin
+caulis.scratchpad("drop", command = "foot --app-id drop",
+    style = dev.caulis.core.Scratchpad.Center(width = 0.7, height = 0.6))
+keys {
+    "L-grave"("Terminal that drops down") { scratchpad("drop") }
+}
+```
+
+Windows belong to it by their app id (here "drop"). Other looks: `Scratchpad.Edge()` slides in
+from the top (`Edge(side = Side.RIGHT)` from the right), `Scratchpad.Overlay()` is a whole
+workspace above the current one. From a terminal: `newm cmd scratchpad drop`.
+
+### Wider windows push their neighbours
+
+Making a window wider (Super+Ctrl+L) or taller moves the windows beside it out of the way; made
+smaller again, the room is closed. To stack them on each other as newm did:
+
+```kotlin
+view { resizePushes = false }
+```
+
+### A projector or a second monitor: mirror or extend
+
+A monitor plugged in for the first time is used beside the laptop's screen and the choice of
+modes is shown; the laptop's display key (F7 on many) shows it any time. From a terminal:
+`newm cmd displays mirror` (the same picture on both), `extend`, `laptop` or `other` (only that
+one). The choice is kept for that monitor.

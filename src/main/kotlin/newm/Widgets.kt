@@ -298,13 +298,43 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
             val image = if (path.startsWith("resource:")) {
                 Wallpaper::class.java.getResourceAsStream("/newm/templates/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
             } else {
-                javax.imageio.ImageIO.read(java.io.File(path.replaceFirst("~", System.getenv("HOME") ?: System.getProperty("user.home"))))
+                val file = java.io.File(path.replaceFirst("~", System.getenv("HOME") ?: System.getProperty("user.home")))
+                if (file.name.lowercase().endsWith(".svg")) svg(file.readBytes()) else javax.imageio.ImageIO.read(file)
             } ?: error("not a picture")
             log.info { "Wallpaper $path: ${image.width}x${image.height}, read in ${(System.nanoTime() - t0) / 1_000_000} ms" }
             image
         } catch (e: Exception) {
             log.warn("The wallpaper $path cannot be shown: $e")
             null
+        }
+
+        // The long side an SVG wallpaper is drawn at: sharp on a 4K screen and when zoomed in a little (newm issue 86).
+        private const val SVG_LONG_SIDE = 5120
+
+        // An SVG drawn by Skia at [SVG_LONG_SIDE] pixels along its long side, in its own proportions.
+        private fun svg(bytes: ByteArray): BufferedImage? {
+            val dom = org.jetbrains.skia.svg.SVGDOM(org.jetbrains.skia.Data.makeFromBytes(bytes))
+            val root = dom.root ?: return null
+            val viewBox = root.viewBox
+            var w = viewBox?.width ?: root.width.value
+            var h = viewBox?.height ?: root.height.value
+            if (w <= 0f || h <= 0f) { w = 16f; h = 9f }
+            val scale = SVG_LONG_SIDE / maxOf(w, h)
+            val width = (w * scale).toInt().coerceAtLeast(1)
+            val height = (h * scale).toInt().coerceAtLeast(1)
+            dom.setContainerSize(width.toFloat(), height.toFloat())
+            val bitmap = org.jetbrains.skia.Bitmap()
+            bitmap.allocPixels(org.jetbrains.skia.ImageInfo(width, height, org.jetbrains.skia.ColorType.BGRA_8888, org.jetbrains.skia.ColorAlphaType.UNPREMUL))
+            org.jetbrains.skia.Canvas(bitmap).use { canvas ->
+                canvas.clear(0xFF000000.toInt())
+                dom.render(canvas)
+            }
+            val bytesOut = bitmap.readPixels() ?: return null
+            bitmap.close()
+            dom.close()
+            val ints = IntArray(width * height)
+            java.nio.ByteBuffer.wrap(bytesOut).order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(ints)
+            return BufferedImage(width, height, BufferedImage.TYPE_INT_RGB).also { it.setRGB(0, 0, width, height, ints, 0, width) }
         }
 
         /** The picture of [image] on the GPU (on the compositor's thread). */

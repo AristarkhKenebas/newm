@@ -51,6 +51,7 @@ private val confEnableDBusGestures = configuredValue("gestures.dbus.enabled", tr
 private val confEnableUnlockCommand = configuredValue("enable_unlock_command", true)
 private val confGestureBindingSwipeToZoom = configuredValue<List<String?>>("gesture_bindings.swipe_to_zoom", listOf(null, "swipe-4"))
 private val confGestureBindingSwipe = configuredValue<List<String?>>("gesture_bindings.swipe", listOf(null, "swipe-3"))
+private val confResizePushes = configuredValue("view.resize_pushes", true)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
 private val confGestureBindingLauncher = configuredValue<List<String?>>("gesture_bindings.launcher", listOf(null, "swipe-5"))
 
@@ -344,6 +345,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun viewOf(window: Window): View? = viewsByWindow[window]
 
     fun focusWindow(window: Window) {
+        // (A window waiting for a modal dialog: Caulis gives the dialog the focus.)
         caulis.desktop.focus(window)
     }
 
@@ -372,6 +374,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // Where each view is drawn: newm's downstream state of it, as Caulis places windows.
     private fun director() = object : WindowDirector {
+        // Windows of Caulis's scratchpads (caulis.scratchpad(...) in the configuration) are the
+        // desktop's: they slide in above newm's wall and away again (newm issue 70).
+        override fun manages(window: Window): Boolean = caulis.desktop.scratchpadOf(window) == null
+
         override fun place(window: Window, now: Long): WindowPlace? {
             val view = viewsByWindow.getOrPut(window) {
                 View(this@Layout, window, nextHandle++).also { views[it.handle] = it }
@@ -674,7 +680,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     fun findFocusedBox(): Pair<Workspace, DoubleArray> {
-        val view = findFocusedView() ?: return workspaces[0] to doubleArrayOf(0.0, 0.0, 1.0, 1.0)
+        // A dialog's place is its window's (moving from it goes from there, newm issue 140).
+        val view = findFocusedView()?.let { v -> generateSequence(v) { it.parent }.last() } ?: return workspaces[0] to doubleArrayOf(0.0, 0.0, 1.0, 1.0)
         val (s, _, wsHandle) = state.findViewOrNull(view) ?: return workspaces[0] to doubleArrayOf(0.0, 0.0, 1.0, 1.0)
         val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return workspaces[0] to doubleArrayOf(0.0, 0.0, 1.0, 1.0)
         return ws to doubleArrayOf(s.i, s.j, s.w, s.h)
@@ -1131,6 +1138,18 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 idleInhibitUser = true
                 null
             }
+            // `newm cmd displays extend|mirror|laptop|other`: how the laptop's screen and a monitor are used (newm issue 169).
+            "displays" -> {
+                val word = arg?.trim()?.lowercase().orEmpty().let { if (it == "other") "external" else it }
+                val mode = dev.caulis.wm.DisplayMode.of(word) ?: return "displays extend | mirror | laptop | other"
+                caulis.useDisplays(mode)
+                null
+            }
+            // `newm cmd scratchpad <name>`: shows or hides one of caulis.scratchpad(...).
+            "scratchpad" -> {
+                arg?.trim()?.takeIf { it.isNotEmpty() }?.let(::scratchpad)
+                null
+            }
             "caffeine" -> {
                 // caffeine [minutes | on | off]
                 when (val a = arg?.trim()?.ifEmpty { null }) {
@@ -1430,6 +1449,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     /** A screenshot of the focused window, at once. */
     fun screenshotWindow() = shotsNow().window()
 
+    /**
+     * Shows the scratchpad [name] (one of caulis.scratchpad(...) of the configuration) above
+     * the wall, or hides it; its program is started on the first press (newm issue 70).
+     */
+    fun scratchpad(name: String) = caulis.toggleScratchpad(name)
+
     /** The clipboard's history (Logo+V): what was copied lately, to copy again. */
     val clipboardHistory by lazy { ClipboardHistory(this) }
 
@@ -1620,13 +1645,44 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 }
                 val (_, wsState, wsHandle) = s.findView(view)
                 val ws = workspaces.first { it.handle == wsHandle }
-                val next = wsState.replacingViewState(view) { this.i = i; this.j = j; this.w = w; this.h = h }.focusingView(view)
+                val next = wsState.replacingViewState(view) { this.i = i; this.j = j; this.w = w; this.h = h }
+                if (confResizePushes()) makeRoom(next, view.handle, vs, i, j, w, h)
                 s.validateStackIndices(view)
-                null to s.settingWorkspaceState(ws, next)
+                null to s.settingWorkspaceState(ws, next.focusingView(view))
             } catch (e: Exception) {
                 null to s
             }
         }, confAnimT())
+    }
+
+    // A window grown over its neighbours pushes them aside (the columns right of it, the rows
+    // below it) instead of stacking on them; shrunk, the room it leaves is closed again when
+    // nothing else is there (newm issue 160; view { resizePushes = false }: as newm did).
+    private fun makeRoom(ws: WorkspaceState, handle: Int, before: ViewState, i: Double, j: Double, w: Double, h: Double) {
+        val others = ws.viewStates.filter { (k, v) -> k != handle && v.isTiled }.values
+        val oldRight = before.i + before.w
+        val oldBottom = before.j + before.h
+        fun overlapsRows(v: ViewState) = v.j < j + h && v.j + v.h > j
+        fun overlapsCols(v: ViewState) = v.i < i + w && v.i + v.w > i
+        when {
+            // Wider to the right: what was right of it in its rows moves on.
+            i + w > oldRight && i == before.i -> if (others.any { it.i >= oldRight && it.i < i + w && overlapsRows(it) })
+                others.filter { it.i >= oldRight }.forEach { it.i += (i + w) - oldRight }
+            // Wider to the left (from a width of one): what was left of it moves away.
+            i < before.i -> if (others.any { it.i + it.w > i && it.i < before.i && overlapsRows(it) })
+                others.filter { it.i + it.w <= before.i }.forEach { it.i -= before.i - i }
+            // Narrower: the column it left is closed when nothing is in it.
+            i + w < oldRight -> if (others.none { it.i < oldRight && it.i + it.w > i + w })
+                others.filter { it.i >= oldRight }.forEach { it.i -= oldRight - (i + w) }
+        }
+        when {
+            j + h > oldBottom && j == before.j -> if (others.any { it.j >= oldBottom && it.j < j + h && overlapsCols(it) })
+                others.filter { it.j >= oldBottom }.forEach { it.j += (j + h) - oldBottom }
+            j < before.j -> if (others.any { it.j + it.h > j && it.j < before.j && overlapsCols(it) })
+                others.filter { it.j + it.h <= before.j }.forEach { it.j -= before.j - j }
+            j + h < oldBottom -> if (others.none { it.j < oldBottom && it.j + it.h > j + h })
+                others.filter { it.j >= oldBottom }.forEach { it.j -= oldBottom - (j + h) }
+        }
     }
 
     fun swallowFocusedView() {

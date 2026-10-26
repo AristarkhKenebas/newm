@@ -97,6 +97,7 @@ class LayoutApi(private val layout: Layout) : PyConfig.Handler {
             "screenshot_window" -> layout.screenshotWindow()
             "toggle_key_help" -> layout.toggleKeyHelp()
             "toggle_clipboard" -> layout.toggleClipboard()
+            "scratchpad" -> (arg(0, "name") as? String)?.let(layout::scratchpad)
             "toggle_fullscreen" -> layout.toggleFullscreen(arg(0, "defined_state") as? Boolean)
             "toggle_focused_view_floating" -> layout.toggleFocusedViewFloating()
             "change_focused_view_workspace" -> layout.changeFocusedViewWorkspace(int(0, "ds", 1))

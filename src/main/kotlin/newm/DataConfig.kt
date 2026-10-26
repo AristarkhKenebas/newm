@@ -107,7 +107,7 @@ object DataConfig {
         "move_workspace", "toggle_overview", "toggle_fullscreen", "toggle_focused_view_floating", "change_focused_view_workspace",
         "move_focused_view", "resize_focused_view", "close_focused_view", "close_view", "swallow_focused_view",
         "enter_launcher_overlay", "exit_overlay", "update_config", "terminate", "ensure_locked", "command", "launch_app",
-        "fit_focused_view", "toggle_key_help", "toggle_clipboard", "side_by_side", "screenshot", "screenshot_screen", "screenshot_window",
+        "fit_focused_view", "toggle_key_help", "toggle_clipboard", "scratchpad", "side_by_side", "screenshot", "screenshot_screen", "screenshot_window",
     )
 
     private fun parseAction(text: String, caulis: Caulis, where: String, problems: MutableList<String>): ((Layout) -> Unit)? {

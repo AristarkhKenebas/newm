@@ -229,6 +229,9 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
     /** How opaque windows without the focus are (1.0: as they are; 0.85: a little see-through). */
     var unfocusedOpacity by setting<Double>("unfocused_opacity")
 
+    /** A window made wider or taller pushes its neighbours aside instead of stacking on them (default true). */
+    var resizePushes by setting<Boolean>("resize_pushes")
+
     /** The first window of an empty workspace takes the whole screen (false: a quarter, as newm had it). */
     var fillFirst by setting<Boolean>("fill_first")
 
