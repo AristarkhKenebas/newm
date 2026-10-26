@@ -235,6 +235,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     val keyProcessor = KeyProcessor()
     val dbusEndpoint = DBusEndpoint(this)
+
+    /** newm's own lock screen and launcher. */
+    val panelsUi = Panels(this)
     val authBackend = AuthBackend(this)
     val panelLauncher = PanelsLauncher(::every) { command, directory -> caulis.spawn(command, directory) }
     private var gestureProviders: List<GestureProvider> = emptyList()
@@ -268,7 +271,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private var constantDamage = 0
     private var modifiers = 0
     private val requestedSize = java.util.IdentityHashMap<Window, Pair<Int, Int>>()
-    private var layoutDown = LayoutDown(0.0)
+    /** The layout's state of this frame (the lock screen's and the launcher's way in). */
+    var layoutDown = LayoutDown(0.0)
+        private set
 
     init {
         caulis.director = director()
@@ -343,7 +348,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
 
         override fun decorate(window: Window, place: WindowPlace, canvas: OverlayCanvas, above: Boolean) {
-            if (!above && focusBorders.currentView?.window === window) focusBorders.draw(canvas)
+            if (above) return
+            // What is behind it blurred (a see-through terminal), if its rule says so.
+            viewsByWindow[window]?.blur?.let { (size, passes) ->
+                val area = place.clip?.let { place.rect.intersect(it) } ?: place.rect
+                if (area != null) canvas.blur(area, radius = place.cornerRadius ?: 0f, size = size, passes = passes)
+            }
+            if (focusBorders.currentView?.window === window) focusBorders.draw(canvas)
         }
 
         // Asked once a frame: the layout's own state of this frame (pywm processed it every frame).
@@ -457,11 +468,23 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh) } else emptyList()
         bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh) } else emptyList()
 
-        // The wallpaper (newm's background.path; an output may name its own: one picture for all here).
+        // The wallpaper (newm's background.path; an output may name its own: one picture for all
+        // here), read on a thread of its own: shown when it is ready.
         val path = confBackgroundPath()
         if (wallpaper?.first != path) {
             wallpaper?.second?.texture?.close()
-            wallpaper = path to path?.let { Wallpaper.load(caulis.desktop.renderer, it) }
+            wallpaper = path to null
+            if (path != null) {
+                Thread({
+                    val image = Wallpaper.read(path)
+                    caulis.post {
+                        if (image != null && wallpaper?.first == path) {
+                            wallpaper = path to Wallpaper.of(caulis.desktop.renderer, image)
+                            setupWidgets()
+                        }
+                    }
+                }, "newm-wallpaper").apply { isDaemon = true }.start()
+            }
         }
         backgrounds = wallpaper?.second?.let { picture -> monitors.map { Background(this, it, workspaceFor(it), picture) } } ?: emptyList()
 
@@ -484,7 +507,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (reconfigure) views.values.forEach(View::update)
     }
 
-    fun reducer(state: LayoutState): LayoutDown = LayoutDown(state.lockPerc)
+    fun reducer(state: LayoutState): LayoutDown = LayoutDown(state.lockPerc, state.launcherPerc)
 
     override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
         startAnimation(LayoutDownInterpolation(reducer(oldState), reducer(newState)), dt)
@@ -498,7 +521,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         log.info { "Layout main" }
         setupWorkspaces()
         setup(reconfigure = false)
-        addWidgetDrawings({ backgrounds }, corners)
+        addWidgetDrawings({ backgrounds }, corners) { topBars + bottomBars }
+        panelsUi.start()
         // The native bars (Compose), their texts asked for every second.
         caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
             topBars.firstOrNull { it.monitor === m }?.let { BarContent(it) }
@@ -560,7 +584,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun finalTimeAll(): Double? = (allAnimates().filterIsInstance<Animate<*>>() + listOf(this)).mapNotNull { it.finalTime() }.maxOrNull()
 
     internal fun trustedUnlock() {
-        if (isLocked()) animateTo({ s -> null to s.copy(lockPerc = 0.0, backgroundOpacity = 1.0) }, confAnimT())
+        if (isLocked()) {
+            panelsUi.unlocked()
+            safelyEnterMode(null)
+            animateTo({ s -> null to s.copy(lockPerc = 0.0, backgroundOpacity = 1.0) }, confAnimT())
+        }
     }
 
     // --- utilities ---------------------------------------------------------------------------------
@@ -963,6 +991,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 idleInhibitUser = false
                 null
             }
+            "open-launcher" -> {
+                enterLauncherOverlay()
+                null
+            }
             "close-launcher" -> {
                 if (overlay is LauncherOverlay) exitOverlay()
                 null
@@ -1008,24 +1040,26 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // --- 2. general purpose ----------------------------------------------------------------------------
 
-    /** Loads the configuration again (config.py, as newm's update_config); set by main. */
-    var reloadConfig: () -> Unit = {}
+    /**
+     * Loads the configuration again (as newm's update_config), calling what it is given once
+     * the new one is in (later: config.kts is compiled meanwhile); set by main.
+     */
+    var reloadConfig: (then: () -> Unit) -> Unit = { then -> then() }
 
     fun updateConfig() {
-        try {
-            reloadConfig()
-        } catch (e: Exception) {
-            log.error("Error loading config", e)
+        reloadConfig {
+            setup()
+            damage()
+            confOnReconfigure()()
         }
-        setup()
-        damage()
-        confOnReconfigure()()
     }
 
     fun ensureLocked(anim: Boolean = true, dim: Boolean = false) {
         fun focusLock() {
+            // Meanwhile no keys of newm's or Caulis's but the laptop's (XF86) ones.
+            safelyEnterMode(LOCKED_MODE)
             val lockScreen = panels().filter { it.panel == "lock" }
-            if (lockScreen.isNotEmpty()) lockScreen[0].focus() else log.error("Locking without lock panel - not a good idea")
+            if (lockScreen.isNotEmpty()) lockScreen[0].focus() else panelsUi.locked()
         }
         authBackend.lock()
         animateTo({ s -> (if (anim) null else s.copy(lockPerc = 1.0, backgroundOpacity = 0.5)) to s.copy(lockPerc = 1.0, backgroundOpacity = 0.5) }, confAnimT(), ::focusLock)
@@ -1153,6 +1187,20 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
     }
 
+    /** The next (or, with -1, the previous) window in turn (CRAG666's cycle_views, newm PR #180). */
+    fun cycleViews(steps: Int = 1, activeWorkspace: Boolean = true) = moveNextView(steps, activeWorkspace)
+
+    /** The window before (newm PR #165's move_prev_view). */
+    fun movePrevView(activeWorkspace: Boolean = true) = moveNextView(-1, activeWorkspace)
+
+    /** The window at [index] in turn, from 0 (newm PR #165's goto_view). */
+    fun gotoView(index: Int, activeWorkspace: Boolean = true) {
+        views(if (activeWorkspace) activeWorkspace() else null).getOrNull(index)?.let(::focusView)
+    }
+
+    /** Starts [command] inside newm (as in a shell). */
+    fun launch(command: String) = caulis.launch(command)
+
     fun moveWorkspace(ds: Int = 1) {
         val ws = activeWorkspace()
         val i = workspaces.indexOfFirst { it.handle == ws.handle }
@@ -1273,6 +1321,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }, confAnimT())
     }
 
+    private fun safelyEnterMode(mode: String?) {
+        try {
+            caulis.enterMode(mode)
+        } catch (e: Exception) {
+            log.warn("Key mode $mode: $e")
+        }
+    }
+
     /** The view with [handle] (as config.py's functions know it), if it is still there. */
     fun viewByHandle(handle: Int): View? = views[handle]
 
@@ -1280,5 +1336,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     fun closeView() = closeFocusedView()
 }
+
+/** Caulis's key mode while newm is locked: no keys of its own (the emergency ones neither). */
+const val LOCKED_MODE = "newm-locked"
 
 private fun Double.toMillis(): Int = (this * 1000).toLong().toInt()

@@ -54,6 +54,10 @@ class Up(window: Window, focused: Boolean) {
 class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDown>(), Animatable {
 
     private var rules: Map<String, Any?> = emptyMap()
+
+    /** Blur behind it, from its rule: (how far it spreads, passes), or null. */
+    val blur: Pair<Int, Int>?
+        get() = (rules["blur"] as? Map<*, *>)?.let { b -> ((b["radius"] as? Number)?.toInt() ?: 6) to ((b["passes"] as? Number)?.toInt() ?: 4) }
     private var opacity = 1.0
 
     // State machine

@@ -3,34 +3,55 @@ package newm
 import dev.caulis.wm.caulis
 
 /**
- * newm on Caulis: the compositor with newm's layout, configured by a config.py as newm was
- * (~/.config/newm/config.py, else /etc/newm/config.py, else newm's default configuration),
- * loaded again whenever it is saved. `newm cmd <command>` talks to a running one instead.
+ * newm on Caulis: the compositor with newm's layout, configured by ~/.config/newm/config.kts
+ * (or a config.py of before), loaded again whenever it is saved. `newm cmd <command>` talks
+ * to a running newm instead.
  */
 fun main(args: Array<String>) {
-    if (args.firstOrNull() == "cmd") return newmCmd(args.drop(1))
+    when (args.firstOrNull()) {
+        "cmd" -> return newmCmd(args.drop(1))
+        "install-session" -> kotlin.system.exitProcess(installSession())
+        "-h", "--help", "help" -> return println(USAGE)
+        "-v", "--version", "version" -> return println("newm ${Layout::class.java.`package`?.implementationVersion ?: "(from sources)"} on Caulis")
+        null -> {}
+        else -> {
+            System.err.println("newm: \"${args.first()}\" is not a command\n\n$USAGE")
+            kotlin.system.exitProcess(2)
+        }
+    }
     caulis {
         configName = "newm"
         desktopName = "newm"
+        // newm reads its own configuration (not Caulis's config.json or config.kts).
+        useConfigFile = false
+        // The log in a file too: ~/.local/state/newm/newm.log (the one before as newm.log.old).
+        logFile = logPath()
+        // No title bars: newm's look (a config may want programs' own: titleBars = true).
+        titleBars = dev.caulis.core.TitleBars.NONE
+        // While newm is locked: none of Caulis's keys (see Layout.ensureLocked).
+        mode(LOCKED_MODE) {}
         lateinit var layout: Layout
-        val config = PyConfig.path()?.let { NewmConfig(this, it, DeferredApi { LayoutApi(layout) }) }
-        // Before newm's own start (on_startup): programs config.py starts run inside newm.
-        config?.let { c -> onStart { c.started() } }
+        val config = ConfigLoader(this, DeferredApi { LayoutApi(layout) })
+        // Before newm's own start (on_startup): programs the configuration starts run inside newm.
+        onStart { config.started() }
+        // On the real screen and not among the login screen's sessions yet: told once how.
+        onStart { if (System.getenv("WAYLAND_DISPLAY") == null) sessionHint()?.let { notify(it, title = "newm") } }
         layout = Layout(this)
 
-        val settings = config?.load() ?: defaultConfig(layout)
+        val settings = config.load() ?: config.loadDefault() ?: defaultConfig(layout)
         Config.loadConfig(settings)
         applyHostSettings(settings)
 
-        // update_config, and every save of config.py: on a mistake the settings stay as they were.
-        layout.reloadConfig = {
-            config?.load()?.let { next ->
+        // updateConfig, and every save: on a mistake the settings stay as they were.
+        layout.reloadConfig = { apply ->
+            config.loadAgain { next ->
                 Config.loadConfig(next)
                 applyHostSettings(next)
+                apply()
             }
         }
-        config?.reload = { layout.updateConfig() }
-        config?.let { c -> onUnload { c.close() } }
+        config.reload = { layout.updateConfig() }
+        onUnload { config.close() }
     }
 }
 
@@ -48,4 +69,17 @@ private class DeferredApi(make: () -> LayoutApi) : PyConfig.Handler {
     override fun view(handle: Int, method: String, args: List<Any?>, kwargs: Map<String, Any?>) = api.view(handle, method, args, kwargs)
     override fun viewData(view: View) = api.viewData(view)
     override fun viewOf(handle: Int) = api.viewOf(handle)
+}
+
+// ~/.local/state/newm/newm.log, the last start's moved to newm.log.old (null if it cannot be made).
+private fun logPath(): java.nio.file.Path? = try {
+    val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") }
+        ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
+    val dir = java.nio.file.Path.of(state, "newm")
+    java.nio.file.Files.createDirectories(dir)
+    val file = dir.resolve("newm.log")
+    if (java.nio.file.Files.exists(file)) java.nio.file.Files.move(file, dir.resolve("newm.log.old"), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    file
+} catch (_: Exception) {
+    null
 }

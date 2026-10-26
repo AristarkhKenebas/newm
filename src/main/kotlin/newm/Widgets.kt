@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.caulis.core.Drawing
 import dev.caulis.core.DrawingLevel
@@ -24,6 +25,7 @@ import dev.caulis.render.GpuTexture
 import dev.caulis.render.Renderer
 import java.awt.image.BufferedImage
 import java.lang.foreign.Arena
+import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -37,19 +39,29 @@ fun textureOf(renderer: Renderer, image: BufferedImage): GpuTexture {
     val w = image.width
     val h = image.height
     val texture = renderer.createTexture(w, h)
-    Arena.ofConfined().use { arena ->
-        val pixels = arena.allocate(w.toLong() * h * 4)
-        var at = 0L
-        for (y in 0 until h) for (x in 0 until w) {
-            val argb = image.getRGB(x, y)
+    val row = IntArray(w)
+    val bytes = ByteArray(w * h * 4)
+    var at = 0
+    for (y in 0 until h) {
+        image.getRGB(0, y, w, 1, row, 0, w)
+        for (argb in row) {
             val a = argb ushr 24 and 0xff
-            fun pre(c: Int) = (c * a + 127) / 255
-            pixels.set(ValueLayout.JAVA_BYTE, at, pre(argb and 0xff).toByte())
-            pixels.set(ValueLayout.JAVA_BYTE, at + 1, pre(argb ushr 8 and 0xff).toByte())
-            pixels.set(ValueLayout.JAVA_BYTE, at + 2, pre(argb ushr 16 and 0xff).toByte())
-            pixels.set(ValueLayout.JAVA_BYTE, at + 3, a.toByte())
+            if (a == 255) {
+                bytes[at] = argb.toByte()
+                bytes[at + 1] = (argb ushr 8).toByte()
+                bytes[at + 2] = (argb ushr 16).toByte()
+            } else {
+                bytes[at] = ((argb and 0xff) * a / 255).toByte()
+                bytes[at + 1] = ((argb ushr 8 and 0xff) * a / 255).toByte()
+                bytes[at + 2] = ((argb ushr 16 and 0xff) * a / 255).toByte()
+            }
+            bytes[at + 3] = a.toByte()
             at += 4
         }
+    }
+    Arena.ofConfined().use { arena ->
+        val pixels = arena.allocate(bytes.size.toLong())
+        MemorySegment.copy(bytes, 0, pixels, ValueLayout.JAVA_BYTE, 0, bytes.size)
         texture.upload(pixels, 0, h)
     }
     return texture
@@ -268,18 +280,23 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
 /** A wallpaper picture on the GPU ("resource:wallpaper.jpg": newm's own). */
 class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
     companion object {
-        fun load(renderer: Renderer, path: String): Wallpaper? = try {
+        // The picture read from [path] (slow for a big one: not on the compositor's thread).
+        fun read(path: String): BufferedImage? = try {
+            val t0 = System.nanoTime()
             val image = if (path.startsWith("resource:")) {
                 Wallpaper::class.java.getResourceAsStream("/newm/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
             } else {
-                javax.imageio.ImageIO.read(java.io.File(path.replaceFirst("~", System.getProperty("user.home"))))
+                javax.imageio.ImageIO.read(java.io.File(path.replaceFirst("~", System.getenv("HOME") ?: System.getProperty("user.home"))))
             } ?: error("not a picture")
-            log.info { "Wallpaper $path: ${image.width}x${image.height}" }
-            Wallpaper(textureOf(renderer, image), image.width, image.height)
+            log.info { "Wallpaper $path: ${image.width}x${image.height}, read in ${(System.nanoTime() - t0) / 1_000_000} ms" }
+            image
         } catch (e: Exception) {
             log.warn("The wallpaper $path cannot be shown: $e")
             null
         }
+
+        /** The picture of [image] on the GPU (on the compositor's thread). */
+        fun of(renderer: Renderer, image: BufferedImage) = Wallpaper(textureOf(renderer, image), image.width, image.height)
     }
 }
 
@@ -324,6 +341,14 @@ class Corners(private val wm: Layout) {
     }
 }
 
+// A colour of the configuration, or [fallback] when it is not one.
+private fun colorOr(text: String, fallback: String): dev.caulis.render.Color = try {
+    color(text)
+} catch (_: IllegalArgumentException) {
+    log.warn("\"$text\" is not a colour (#RRGGBB or #RRGGBBAA)")
+    color(fallback)
+}
+
 // --- the native bars ----------------------------------------------------------------------------------
 
 private val confTopBarHeight = configuredValue("panels.top_bar.native.height", 20)
@@ -332,6 +357,14 @@ private val confTopBarText = configuredValue<() -> List<String>>("panels.top_bar
 private val confBottomBarHeight = configuredValue("panels.bottom_bar.native.height", 20)
 private val confBottomBarFontSize = configuredValue("panels.bottom_bar.native.font_size", 12)
 private val confBottomBarText = configuredValue<() -> List<String>>("panels.bottom_bar.native.texts") { listOf("4", "5", "6") }
+private val confTopBarFont = configuredValue<String?>("panels.top_bar.native.font", null)
+private val confBottomBarFont = configuredValue<String?>("panels.bottom_bar.native.font", null)
+private val confTopBarBackground = configuredValue("panels.top_bar.native.background", "#000000B3")
+private val confBottomBarBackground = configuredValue("panels.bottom_bar.native.background", "#000000B3")
+private val confTopBarForeground = configuredValue("panels.top_bar.native.foreground", "#FFFFFF")
+private val confBottomBarForeground = configuredValue("panels.bottom_bar.native.foreground", "#FFFFFF")
+private val confTopBarBlur = configuredValue("panels.top_bar.native.blur", false)
+private val confBottomBarBlur = configuredValue("panels.bottom_bar.native.blur", false)
 
 /**
  * newm's TopBar and BottomBar: texts spread over a dark strip at an output's edge, sliding in
@@ -343,6 +376,15 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     private val height get() = if (top) confTopBarHeight() else confBottomBarHeight()
 
     val fontSize get() = if (top) confTopBarFontSize() else confBottomBarFontSize()
+    val font: String? get() = if (top) confTopBarFont() else confBottomBarFont()
+    val background: dev.caulis.render.Color get() = colorOr(if (top) confTopBarBackground() else confBottomBarBackground(), "#000000B3")
+    val foreground: dev.caulis.render.Color get() = colorOr(if (top) confTopBarForeground() else confBottomBarForeground(), "#FFFFFF")
+
+    /** What is behind it is blurred. */
+    val blur: Boolean get() = if (top) confTopBarBlur() else confBottomBarBlur()
+
+    /** The screen's corners' radius (the bar is rounded there too). */
+    val screenCornerRadius: Int get() = confCornerRadius()
 
     /** What it says now (Compose redraws when it changes). */
     var texts by mutableStateOf(listOf<String>())
@@ -392,17 +434,25 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
 /** A bar's look: the texts spread evenly, white on a dark strip (Compose). */
 @androidx.compose.runtime.Composable
 fun BarContent(bar: Bar) {
+    val bg = bar.background
+    val fg = bar.foreground
+    val family = bar.font?.let { name ->
+        org.jetbrains.skia.FontMgr.default.matchFamilyStyle(name, org.jetbrains.skia.FontStyle.NORMAL)?.let { FontFamily(androidx.compose.ui.text.platform.Typeface(it)) }
+    } ?: FontFamily.Monospace
+    // (Rounded where the screen's corners are: they show through.)
+    val r = bar.screenCornerRadius.dp
+    val shape = if (bar.top) androidx.compose.foundation.shape.RoundedCornerShape(topStart = r, topEnd = r) else androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = r, bottomEnd = r)
     Row(
-        Modifier.fillMaxSize().background(Color(0f, 0f, 0f, .7f)),
+        Modifier.fillMaxSize().background(Color(bg.red, bg.green, bg.blue, bg.alpha), shape),
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        for (t in bar.texts) BasicText(t, style = TextStyle(color = Color.White, fontSize = bar.fontSize.sp, fontFamily = FontFamily.Monospace))
+        for (t in bar.texts.filter { it.isNotEmpty() }) BasicText(t, style = TextStyle(color = Color(fg.red, fg.green, fg.blue, fg.alpha), fontSize = bar.fontSize.sp, fontFamily = family))
     }
 }
 
 /** The background and the screen's corners as Caulis drawings (one each, every output). */
-internal fun Layout.addWidgetDrawings(backgrounds: () -> List<Background>, corners: Corners) {
+internal fun Layout.addWidgetDrawings(backgrounds: () -> List<Background>, corners: Corners, bars: () -> List<Bar>) {
     caulis.addDrawing(DrawingLevel.BELOW_WINDOWS, object : Drawing {
         override fun draw(monitor: Monitor, canvas: OverlayCanvas) {
             backgrounds().filter { it.monitor === monitor }.forEach { it.draw(canvas) }
@@ -411,6 +461,10 @@ internal fun Layout.addWidgetDrawings(backgrounds: () -> List<Background>, corne
         override fun animating(now: Long): Boolean = backgrounds().any { it.moving }
     })
     caulis.addDrawing(DrawingLevel.ON_TOP, object : Drawing {
-        override fun draw(monitor: Monitor, canvas: OverlayCanvas) = corners.draw(monitor, canvas)
+        override fun draw(monitor: Monitor, canvas: OverlayCanvas) {
+            corners.draw(monitor, canvas)
+            // Behind a see-through bar: blurred (the bar itself comes above, rounded at the screen's corners).
+            for (bar in bars()) if (bar.monitor === monitor && bar.blur) bar.place()?.let { canvas.blur(it, size = 8, passes = 3) }
+        }
     })
 }

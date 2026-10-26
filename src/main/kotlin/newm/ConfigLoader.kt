@@ -1,0 +1,189 @@
+package newm
+
+import dev.caulis.core.Notice
+import dev.caulis.core.NoticeLevel
+import dev.caulis.log.Logger
+import dev.caulis.wm.Caulis
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardWatchEventKinds
+
+private val log = Logger("config")
+
+/**
+ * The user's configuration while newm runs: ~/.config/newm/config.kts, else a config.py of
+ * before (run by Python as newm did; a line or two may need changing). With neither, newm
+ * writes one there (the folder too) — the system's /etc/newm/config.kts, or its own — and uses it.
+ *
+ * Saving a file of the folder loads it again — no new session needed. A mistake never leaves
+ * a black screen: at the start newm runs with its default configuration, later with the last
+ * one that worked, and the mistake (with its line) is shown on screen until a save loads.
+ */
+class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Handler) {
+    private val home = Path.of(System.getenv("HOME") ?: System.getProperty("user.home"))
+    private val folder = home.resolve(".config/newm")
+    private var python: PyConfig? = null
+    private var errorNotice: Notice? = null
+    private var pendingError: String? = null
+    private var running = false
+
+    /** The file in use (found, or made). */
+    val path: Path = locate()
+
+    /** Set by main: what a save does (newm's update_config, with [loadAgain] inside). */
+    var reload: () -> Unit = {}
+
+    private fun locate(): Path {
+        val kts = folder.resolve("config.kts")
+        val system = Path.of("/etc/newm/config.kts")
+        // The user's own (config.kts first; a config.py of before still works), else the system's.
+        listOf(kts, folder.resolve("config.py")).firstOrNull(Files::isRegularFile)?.let { return it }
+        // None of the user's own: theirs from the system's config.kts, or newm's own, written for them to change.
+        try {
+            Files.createDirectories(folder)
+            if (Files.isRegularFile(system)) {
+                Files.copy(system, kts)
+            } else {
+                ConfigLoader::class.java.getResourceAsStream("/newm/config.kts")!!.use { Files.copy(it, kts) }
+            }
+            log.info { "There was no configuration: $kts written (${if (Files.isRegularFile(system)) "from $system" else "newm's default"}, with notes)" }
+            return kts
+        } catch (e: Exception) {
+            log.warn("$kts cannot be written ($e)")
+        }
+        return listOf(system, Path.of("/etc/newm/config.py")).firstOrNull(Files::isRegularFile) ?: kts
+    }
+
+    private val isKts get() = path.fileName.toString().endsWith(".kts")
+
+    /** The configuration now (at the start: compiled here, a few seconds the first time). */
+    fun load(): Map<String, Any?>? = if (isKts) runKts(KtsConfig.compile(path)) else loadPython()
+
+    /** newm's own default (when the user's cannot be loaded at the start). */
+    fun loadDefault(): Map<String, Any?>? {
+        val copy = Files.createTempFile("newm-default", ".kts")
+        return try {
+            ConfigLoader::class.java.getResourceAsStream("/newm/config.kts")!!.use { Files.copy(it, copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+            val compiled = KtsConfig.compile(copy)
+            val config = NewmConfig(caulis)
+            if (KtsConfig.run(compiled, config).isEmpty()) config.values else null
+        } finally {
+            Files.deleteIfExists(copy)
+        }
+    }
+
+    private fun runKts(compiled: KtsConfig.Compiled): Map<String, Any?>? {
+        val config = NewmConfig(caulis)
+        val problems = KtsConfig.run(compiled, config, path.fileName.toString())
+        if (problems.isNotEmpty()) {
+            failed(problems.take(3).joinToString("\n"))
+            return null
+        }
+        clearError()
+        return config.values
+    }
+
+    private fun loadPython(): Map<String, Any?>? {
+        val py = python?.takeIf { it.alive } ?: PyConfig.start(handler)?.also { started ->
+            python?.close()
+            python = started
+            started.onError = { text -> caulis.post { show("${path.fileName}: $text", NoticeLevel.WARNING) } }
+            if (running) started.environment(caulis.programEnvironment())
+        }
+        if (py == null) {
+            show("python3 cannot be started: ${path.fileName} is not used (newm runs with its default configuration)", NoticeLevel.ERROR)
+            return null
+        }
+        return try {
+            py.load(path).also { clearError() }
+        } catch (e: Exception) {
+            failed(e.message ?: e.toString())
+            null
+        }
+    }
+
+    private fun failed(what: String) {
+        val after = if (running) "The settings before stay" else "newm runs with its default configuration"
+        show("${path.fileName} cannot be loaded — $what\n$after until it is saved without mistakes.", NoticeLevel.ERROR)
+    }
+
+    /**
+     * Loads the file again for a reload: config.kts is compiled on a thread of its own (the
+     * screen does not stop), then [apply] runs on the compositor's thread with the settings.
+     */
+    fun loadAgain(apply: (Map<String, Any?>) -> Unit) {
+        if (!isKts) {
+            loadPython()?.let(apply)
+            return
+        }
+        Thread({
+            val compiled = KtsConfig.compile(path)
+            caulis.post { runKts(compiled)?.let(apply) }
+        }, "newm-config-compile").apply { isDaemon = true }.start()
+    }
+
+    /** The compositor runs: what Python starts runs inside it; mistakes so far are shown; saves are followed. */
+    fun started() {
+        running = true
+        python?.environment(caulis.programEnvironment())
+        pendingError?.let { text ->
+            pendingError = null
+            show(text, NoticeLevel.ERROR)
+        }
+        watch()
+    }
+
+    fun close() {
+        python?.close()
+    }
+
+    private fun show(text: String, level: NoticeLevel) {
+        // (Info in the log: an error line there would become a second notice.)
+        log.info { text }
+        if (!running) {
+            pendingError = text
+            return
+        }
+        if (level == NoticeLevel.ERROR) errorNotice?.let(caulis.desktop::dismiss)
+        val notice = caulis.notify(text, level, "newm")
+        if (level == NoticeLevel.ERROR) errorNotice = notice
+    }
+
+    private fun clearError() {
+        pendingError = null
+        errorNotice?.let { caulis.desktop.dismiss(it) }
+        errorNotice = null
+    }
+
+    // A file of the config's folder saved (.kts, .py): loaded again, once, a moment after the last save.
+    private fun watch() {
+        val dir = path.parent
+        val watcher = try {
+            FileSystems.getDefault().newWatchService().also { dir.register(it, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE) }
+        } catch (e: Exception) {
+            return log.warn("$dir cannot be followed ($e): saving the configuration needs updateConfig() to take it on")
+        }
+        var pending: AutoCloseable? = null
+        Thread({
+            while (true) {
+                val key = try {
+                    watcher.take()
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                val changed = key.pollEvents().map { it.context().toString() }.filter { it.endsWith(".py") || it.endsWith(".kts") }
+                key.reset()
+                if (changed.isEmpty()) continue
+                caulis.post {
+                    pending?.close()
+                    pending = caulis.after(300) {
+                        log.info { "${changed.distinct().joinToString()} saved: loading ${path.fileName} again" }
+                        reload()
+                    }
+                }
+            }
+        }, "newm-config-watch").apply { isDaemon = true }.start()
+        log.info { "Following $dir: saving ${path.fileName} loads it again" }
+    }
+}

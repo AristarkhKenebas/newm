@@ -8,28 +8,23 @@
 
 ## newm on Caulis (Kotlin)
 
-This fork carries a port of newm to Kotlin, on the [Caulis](https://github.com/AristarkhKenebas/caulis)
+This fork is newm ported to Kotlin, on the [Caulis](https://github.com/AristarkhKenebas/caulis)
 compositor library instead of pywm (`src/main/kotlin`; the Python original stays in `newm/`
-for reference). The same layout, gestures, animations, overlays, native bars, lock screen
-authentication (PAM, greetd) and D-Bus interfaces; Caulis draws and handles input.
+for reference): the same wall of tiles, gestures, animations and overlays, with smooth
+rounded corners, blur, its own lock screen and launcher, and a bar.
 
 ```sh
-./gradlew installDist -Pcaulis.local=true     # build/install/newm/bin/newm (needs Caulis's sources next to it until Caulis 0.1.2)
-build/install/newm/bin/newm                   # on a text console, or nested inside a Wayland session
-build/install/newm/bin/newm cmd debug         # newm-cmd
+./install.sh          # builds newm, installs the `newm` command and the login screen's session
+newm                  # on a text console; or choose "newm" in your login screen
 ```
 
-Your newm `config.py` works as it is: it is run by Python as before (`~/.config/newm/config.py`,
-else `/etc/newm/config.py`), with everything it imports and does — `from newm.layout import
-Layout`, `from pywm import ...`, `newm.helper`, key bindings, view rules, callbacks. Its `pywm`
-and `outputs` sections become Caulis's keyboard, cursor, touchpad and monitor settings.
+- **The guide**: [docs/guide.md](docs/guide.md): keys, gestures, every setting, recipes.
+- **Your configuration**: `~/.config/newm/config.kts`, written by newm the first time,
+  with notes on everything. Saving it applies it at once; a mistake is shown on screen
+  with its line, and newm keeps the settings that worked.
+- **A config.py of the old newm** still works (see the guide).
 
-Saving `config.py` (or any `.py` next to it) loads it again at once — no new session. A
-mistake never leaves a black screen: at the start newm runs with its default configuration,
-later it keeps the last one that worked, and the mistake is shown on screen with its line
-until the file is saved without it.
-
-Still to come: newm-panel-basic (the lock and launcher panels). Licensed MIT, as newm.
+Licensed MIT, as newm.
 
 ## Current state
 

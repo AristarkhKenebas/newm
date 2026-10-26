@@ -134,15 +134,19 @@ class AuthBackend(private val layout: Layout) {
     fun initSession() {
         state = "wait_user"
         log.trace { "Requesting user" }
-        layout.dbusEndpoint.publishAuthRequest(
-            AuthRequest(mapOf("kind" to "auth_request_user", "users" to users.filter { !it.greeter }.map { it.name }), ::onUser),
-        )
+        publish(AuthRequest(mapOf("kind" to "auth_request_user", "users" to users.filter { !it.greeter }.map { it.name }), ::onUser))
     }
 
     fun lock() {
         val current = users.firstOrNull { it.uid == uid }
         log.trace { "Locking for user ${current?.name}" }
         if (current != null && !current.greeter) backend.initAuth(current.name)
+    }
+
+    // newm's own lock screen asks it, and so can a panel program (over D-Bus).
+    private fun publish(req: AuthRequest) {
+        layout.panelsUi.authRequest(req)
+        layout.dbusEndpoint.publishAuthRequest(req)
     }
 
     // --- the panels' side
@@ -164,7 +168,7 @@ class AuthBackend(private val layout: Layout) {
             waitingCred = mapOf("kind" to "auth_request_cred", "user" to forUser, "message" to message)
         }
         log.trace { "Requesting credentials" }
-        layout.dbusEndpoint.publishAuthRequest(AuthRequest(waitingCred, ::onCred))
+        publish(AuthRequest(waitingCred, ::onCred))
         state = "wait_cred"
     }
 

@@ -29,6 +29,10 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     implementation(libs.caulis.wm)
     implementation(libs.caulis.compose)
+    // config.kts, compiled by newm itself.
+    implementation(libs.kotlin.scripting.common)
+    implementation(libs.kotlin.scripting.jvm)
+    implementation(libs.kotlin.scripting.jvm.host)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -44,4 +48,9 @@ application {
     mainClass = "newm.MainKt"
     applicationName = "newm"
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "-XX:+UseZGC")
+}
+
+// `newm --version` says it.
+tasks.jar {
+    manifest { attributes("Implementation-Version" to project.version) }
 }

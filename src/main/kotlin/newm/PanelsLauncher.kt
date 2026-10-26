@@ -11,8 +11,7 @@ private val confCmds: Map<String, () -> String?> = allPanels.associateWith { pan
     configuredValue<String?>(
         "panels.$panel.cmd",
         when (panel) {
-            "lock" -> "alacritty -e newm-panel-basic lock"
-            "launcher" -> "alacritty -e newm-panel-basic launcher"
+            // (newm's own lock screen and launcher otherwise: no program needed.)
             else -> null
         },
     )
@@ -23,6 +22,9 @@ private val confCwds: Map<String, () -> String?> = allPanels.associateWith { con
 /** newm's PanelLauncher: one panel program (the lock screen, the launcher, a bar), started again if it dies. */
 class PanelLauncher(val panel: String, private val spawn: (List<String>, java.nio.file.Path?) -> Process?) {
     private var process: Process? = null
+    private var toldMissing = false
+
+    private fun onPath(program: String) = (System.getenv("PATH") ?: "/usr/bin").split(':').any { java.nio.file.Files.isExecutable(java.nio.file.Path.of(it, program)) }
 
     val pid: Long? get() = process?.pid()
 
@@ -36,7 +38,13 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
     }
 
     fun check() {
-        confCmds.getValue(panel)() ?: return
+        val cmd = confCmds.getValue(panel)() ?: return
+        // newm-panel-basic (newm's Python panels) when it is not installed: newm's own are used.
+        if ("newm-panel-basic" in cmd && !onPath("newm-panel-basic")) {
+            if (!toldMissing) log.info { "$panel: newm-panel-basic is not installed, newm's own $panel is used" }
+            toldMissing = true
+            return
+        }
         if (process?.isAlive != true) {
             log.info { "Subprocess for panel $panel died" }
             start()

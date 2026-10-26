@@ -338,7 +338,8 @@ class LauncherOverlay(layout: Layout) : Overlay(layout) {
             layout.state.launcherPerc = min(max(moved, 0.0), 1.0)
             if (values == null) {
                 isOpened = true
-                layout.panels().filter { it.panel == "launcher" }.forEach { it.focus() }
+                val launcher = layout.panels().filter { it.panel == "launcher" }
+                if (launcher.isNotEmpty()) launcher.forEach { it.focus() } else layout.panelsUi.launcherOpened()
             }
         } else {
             layout.state.launcherPerc = min(max(1.0 - moved, 0.0), 1.0)
@@ -368,6 +369,8 @@ class LauncherOverlay(layout: Layout) : Overlay(layout) {
 
     override fun postInit() {
         val launcher = layout.panels().filter { it.panel == "launcher" }
-        if (launcher.isNotEmpty()) launcher[0].focus() else log.error("Could not find launcher")
+        if (launcher.isNotEmpty()) launcher[0].focus() else layout.panelsUi.launcherOpened()
     }
+
+    override fun preDestroy() = layout.panelsUi.launcherClosed()
 }

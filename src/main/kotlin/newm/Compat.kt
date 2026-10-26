@@ -28,6 +28,8 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
                 caulis.input.pointers.naturalScroll = value
             }
             "focus_follows_mouse" -> caulis.focusFollowsMouse = value as Boolean
+            // pywm's: programs draw their own title bars (true), or none are drawn at all.
+            "encourage_csd" -> caulis.titleBars = if (value as Boolean) dev.caulis.core.TitleBars.PROGRAM else dev.caulis.core.TitleBars.NONE
             else -> log.info { "pywm.$key: pywm's own (Caulis draws here), left out" }
         }
     }
@@ -80,6 +82,9 @@ class LayoutApi(private val layout: Layout) : PyConfig.Handler {
             "move_in_stack" -> layout.moveInStack(int(0, "delta", 1))
             "move_next_view" -> layout.moveNextView(int(0, "dv", 1), bool(1, "active_workspace", true))
             "move_workspace" -> layout.moveWorkspace(int(0, "ds", 1))
+            "cycle_views" -> layout.cycleViews(int(0, "steps", 1), bool(1, "active_workspace", true))
+            "move_prev_view" -> layout.movePrevView(bool(0, "active_workspace", true))
+            "goto_view" -> layout.gotoView(int(0, "index", 0), bool(1, "active_workspace", true))
             "focus_view" -> (arg(0, "view") as? View)?.let(layout::focusView)
             "toggle_overview" -> layout.toggleOverview(bool(0, "only_active_workspace", false))
             "toggle_fullscreen" -> layout.toggleFullscreen(arg(0, "defined_state") as? Boolean)

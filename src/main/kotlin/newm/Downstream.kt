@@ -35,8 +35,8 @@ data class ViewDown(
     var isFullscreen: Boolean = false,
 )
 
-/** The layout's own downstream state: how far the lock screen is in (0..1). */
-data class LayoutDown(val lockPerc: Double)
+/** The layout's own downstream state: how far the lock screen and the launcher are in (0..1). */
+data class LayoutDown(val lockPerc: Double, val launcherPerc: Double = 0.0)
 
 /** newm's interpolation.py: a state at a point of the way between two. */
 fun interface Interpolation<T> {
@@ -47,12 +47,15 @@ private val confSizeAdjustment = configuredValue("interpolation.size_adjustment"
 
 class LayoutDownInterpolation(state0: LayoutDown, state1: LayoutDown) : Interpolation<LayoutDown> {
     private val lock = state0.lockPerc to state1.lockPerc
+    private val launcher = state0.launcherPerc to state1.launcherPerc
 
     override fun get(at: Double): LayoutDown {
         val t = at.coerceIn(0.0, 1.0)
         var lockPerc = lock.first + t * (lock.second - lock.first)
         if (lockPerc < 0.0001) lockPerc = 0.0
-        return LayoutDown(lockPerc)
+        var launcherPerc = launcher.first + t * (launcher.second - launcher.first)
+        if (launcherPerc < 0.0001) launcherPerc = 0.0
+        return LayoutDown(lockPerc, launcherPerc)
     }
 }
 
