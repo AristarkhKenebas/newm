@@ -370,7 +370,7 @@ private val confRadius = BarSetting("corner_radius", 12)
 private val confTheme = BarSetting("theme", "auto")
 private val confLeft = BarSetting("left", listOf("wall", "window"))
 private val confCenter = BarSetting("center", listOf("clock"))
-private val confRight = BarSetting("right", listOf("tray", "network", "volume", "battery", "power"))
+private val confRight = BarSetting("right", listOf("tray", "layout", "network", "volume", "battery", "power"))
 private val confClock = BarSetting("clock", "HH:mm")
 private val confDate = BarSetting("date", "EEE d MMM")
 private val confIslandColor = BarSetting<String?>("island_color", null)
@@ -380,6 +380,12 @@ private val confIconSize = BarSetting("icon_size", 16)
 private val confShowPercent = BarSetting("show_percent", true)
 private val confShowPassive = BarSetting("show_passive", false)
 private val confTitleWidth = BarSetting("title_width", 360)
+
+// "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
+private fun layoutLabel(name: String): String = when (val code = name.substringBefore('(').trim().lowercase()) {
+    "us", "gb" -> "EN"
+    else -> code.take(2).uppercase()
+}
 
 /** The room newm's own bar keeps at the top ([top]) or bottom: its height, and the gaps around islands. */
 internal fun nativeBarRoom(top: Boolean): Int {
@@ -448,6 +454,10 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     var wall by mutableStateOf(newm.bar.WallMap.EMPTY)
         private set
     var focused by mutableStateOf(newm.bar.Focused("", ""))
+        private set
+
+    /** The keyboard layout in use ("EN", "RU"), empty while there is only one. */
+    var keyboardLayout by mutableStateOf("")
         private set
 
     // The islands where they are (relative to the bar): blurred behind.
@@ -530,6 +540,9 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
         if (map != wall) wall = map
         val f = focusedView?.let { newm.bar.Focused(it.title, it.appId) } ?: newm.bar.Focused("", "")
         if (f != focused) focused = f
+        val names = wm.caulis.keyboardLayoutNames
+        val k = if (names.size > 1) names.getOrNull(wm.caulis.keyboardLayoutNow)?.let(::layoutLabel).orEmpty() else ""
+        if (k != keyboardLayout) keyboardLayout = k
     }
 }
 

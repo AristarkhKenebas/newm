@@ -19,11 +19,11 @@ class DataConfigTest {
     @Suppress("UNCHECKED_CAST")
     private fun check(settings: Map<String, Any?>) {
         assertEquals(8L, (settings["view"] as Map<String, Any?>)["padding"])
-        assertEquals("us", (settings["pywm"] as Map<String, Any?>)["xkb_layout"])
+        assertEquals(null, (settings["pywm"] as? Map<String, Any?>)?.get("xkb_layout"))
         val bindings = (settings["key_bindings"] as (Layout) -> List<Pair<String, () -> Unit>>)(Layout(Caulis()))
         assertTrue(bindings.size > 30 && bindings.any { it.first == "L-Return" }, "${bindings.size}")
         val native = ((settings["panels"] as Map<String, Any?>)["top_bar"] as Map<String, Any?>)["native"] as Map<String, Any?>
-        assertEquals(listOf("tray", "network", "volume", "battery", "power"), native["right"])
+        assertEquals(listOf("tray", "layout", "network", "volume", "battery", "power"), native["right"])
     }
 
     @Test

@@ -361,6 +361,7 @@ private fun Modules(names: List<String>, bar: Bar, model: BarModel, colors: BarC
         "window" -> WindowModule(bar, model, colors, text)
         "clock" -> ClockModule(bar, model, colors, text)
         "tray" -> TrayModule(bar, model, colors)
+        "layout" -> LayoutModule(bar, model, colors, text)
         "network" -> NetworkModule(bar, model, colors, text)
         "volume" -> VolumeModule(bar, model, colors, text)
         "battery" -> BatteryModule(bar, model, colors, text)
@@ -480,6 +481,18 @@ private fun BarModel.hoverTooltip(on: Boolean, bar: Bar, x: Double, item: TrayIt
         val text = item.tooltip.ifBlank { item.title }.trim()
         if (text.isEmpty()) return@after
         popup = Popup(PopupKind.TOOLTIP, bar, x, item).also { it.text = text.take(300) }
+    }
+}
+
+// The keyboard layout ("EN", "RU"): a click or the wheel switches it.
+@Composable
+private fun LayoutModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
+    val name = bar.keyboardLayout
+    if (name.isEmpty()) return
+    val caulis = model.wm.caulis
+    Chip(colors, onPrimary = { caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + 1); bar.look() },
+        onScroll = { dy -> caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + if (dy > 0) 1 else -1); bar.look() }) {
+        BasicText(name, style = text.copy(fontWeight = FontWeight.SemiBold, fontSize = (bar.fontSize - 1).sp))
     }
 }
 

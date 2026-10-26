@@ -1088,6 +1088,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             "bar" -> barCommand(arg.orEmpty())
             // For newm's own tests only (NEWM_TEST_INPUT=1): the pointer moved, clicked, scrolled.
             "test-pointer" -> if (System.getenv("NEWM_TEST_INPUT") == "1") testPointer(arg.orEmpty()) else "Disabled"
+            // "56+42" presses Alt and Shift together, then lets them go (evdev codes).
+            "test-keys" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
+                val codes = arg.orEmpty().trim().split('+').mapNotNull { it.trim().toIntOrNull() }
+                codes.forEach { caulis.simulateKey(it, true) }
+                codes.reversed().forEach { caulis.simulateKey(it, false) }
+                null
+            } else "Disabled"
             "restart" -> {
                 // For dev/newm-dev: newm ends, and the script starts it again (a new build).
                 restartRequested = true

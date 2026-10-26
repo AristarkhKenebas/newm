@@ -54,6 +54,7 @@ fun main(args: Array<String>) {
             config.loadAgain { next ->
                 Config.loadConfig(next)
                 applyHostSettings(next)
+                applySettings()
                 apply()
             }
         }
@@ -73,7 +74,14 @@ const val RESTART_EXIT = 3
 // The pywm and outputs sections, as Caulis's settings.
 @Suppress("UNCHECKED_CAST")
 private fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) {
-    (settings["pywm"] as? Map<String, Any?>)?.let { applyPywmSettings(this, it) }
+    // The keyboard's layouts: the configuration's, else the system's (with a switch between them).
+    val pywm = settings["pywm"] as? Map<String, Any?>
+    if (pywm?.get("xkb_layout") == null) {
+        val system = SystemKeyboard.detect()
+        keyboardLayouts = system.layouts
+        if (pywm?.get("xkb_options") == null) keyboardOptions = system.options
+    }
+    pywm?.let { applyPywmSettings(this, it) }
     (settings["outputs"] as? List<Map<String, Any?>>)?.let { applyOutputs(this, it) }
 }
 

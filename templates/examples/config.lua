@@ -42,7 +42,7 @@ panels = {
     theme = "auto",                  -- "light", "dark"
     left = { "wall", "window" },
     center = { "clock" },
-    right = { "tray", "network", "volume", "battery", "power" },
+    right = { "tray", "layout", "network", "volume", "battery", "power" },
     clock = "HH:mm", date = "EEE d MMM",
     -- style = "classic",            -- the original newm's bar, with texts = function() return { sys.cpu(), sys.time() } end
   },
@@ -51,7 +51,7 @@ panels = {
   launcher = { w = 0.7, h = 0.7, corner_radius = 24 },
 }
 
-keyboard = { layouts = "us" }        -- "us,ru"; options = "grp:alt_shift_toggle"
+-- keyboard = { layouts = "us,ru", options = "grp:alt_shift_toggle" }   -- unset: the system's layouts
 input = { tap_to_click = true, natural_scroll = false, focus_follows_mouse = false }
 
 -- Keys: "L" Logo, "S" Shift, "C" Ctrl, "A" Alt; "L-" is Logo tapped alone.

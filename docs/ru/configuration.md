@@ -48,14 +48,20 @@ background { path = "~/Pictures/wallpaper.jpg" }
 
 ### Раскладки клавиатуры
 
-Alt+Shift переключает их:
+Без этой настройки newm берёт раскладки системы: заданные через `localectl set-x11-keymap`,
+а если их нет — раскладку вашего языка рядом с английской (при `LANG=ru_RU` — "us,ru"),
+переключение — Alt+Shift. Панель показывает текущую раскладку (EN, RU), клик по ней тоже
+переключает. Свои раскладки:
 
 ```kotlin
 keyboard {
     layouts = "us,ru"
-    options = "grp:alt_shift_toggle"
+    options = "grp:alt_shift_toggle"    // или "grp:win_space_toggle": Super+Space, "grp:caps_toggle": Caps Lock
 }
 ```
+
+Изменение применяется сразу после сохранения. Переключать может и своя клавиша:
+`keys { "L-S-space" { caulis.run("keyboard-layout next") } }`.
 
 ### Клавиши
 

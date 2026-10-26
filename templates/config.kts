@@ -65,7 +65,7 @@ panels {
         // font = "Inter"
         left = listOf("wall", "window")
         center = listOf("clock")
-        right = listOf("tray", "network", "volume", "battery", "power")
+        right = listOf("tray", "layout", "network", "volume", "battery", "power")
         clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"                  // "" for none
         // accentColor = "#BF616A"          // and islandColor, textColor: your own colours
@@ -92,8 +92,9 @@ panels {
 // --- Keyboard, mouse, monitors -----------------------------------------------------------
 
 keyboard {
-    layouts = "us"                          // "us,ru"
-    // options = "grp:alt_shift_toggle"     // switch layouts with Alt+Shift
+    // Unset: the system's layouts (with Alt+Shift switching). Your own:
+    // layouts = "us,ru"
+    // options = "grp:alt_shift_toggle"     // Alt+Shift switches; "grp:caps_toggle": Caps Lock
     // numLock = true                       // Num Lock on from the start
 }
 

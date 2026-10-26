@@ -44,7 +44,7 @@ panels {
         fontSize = 13
         left = listOf("wall", "window")
         center = listOf("clock")
-        right = listOf("tray", "network", "volume", "battery", "power")
+        right = listOf("tray", "layout", "network", "volume", "battery", "power")
         clock = "HH:mm"                 // шаблоны java.time: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"              // "" — без даты
         accentColor = "#88C0D0"         // а также islandColor, textColor
@@ -57,7 +57,8 @@ panels {
 ```
 
 Каждый остров показывает свои модули по порядку, а пустой список убирает остров. Модули:
-`wall`, `window`, `clock`, `tray`, `network`, `volume`, `battery`, `power` и `texts`.
+`wall`, `window`, `clock`, `tray`, `layout` (раскладка клавиатуры, если их несколько),
+`network`, `volume`, `battery`, `power` и `texts`.
 Последний показывает тексты из `texts { ... }`, которые запрашиваются каждую секунду:
 
 ```kotlin

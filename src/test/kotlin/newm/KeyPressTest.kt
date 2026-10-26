@@ -28,3 +28,13 @@ class KeyPressTest {
         assertEquals(false, fires("L-H", "h", Mod.LOGO))
     }
 }
+
+class SystemKeyboardTest {
+    @Test
+    fun `a layout for the system's language`() {
+        val k = SystemKeyboard.detect()
+        // (Whatever this computer's language: at least "us", and a switch when there are more.)
+        kotlin.test.assertTrue(k.layouts.startsWith("us") || ',' !in k.layouts)
+        if (',' in k.layouts) kotlin.test.assertTrue(k.options.isNotEmpty(), k.toString())
+    }
+}

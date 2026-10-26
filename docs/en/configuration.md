@@ -48,14 +48,19 @@ background { path = "~/Pictures/wallpaper.jpg" }
 
 ### Keyboard layouts
 
-Alt+Shift switches between them:
+Without this setting newm uses your system's layouts: those of `localectl set-x11-keymap`,
+or else your language's next to English (with `LANG=ru_RU`, "us,ru"), and Alt+Shift
+switches. The bar shows the layout in use (EN, RU); a click on it switches too. Your own:
 
 ```kotlin
 keyboard {
     layouts = "us,ru"
-    options = "grp:alt_shift_toggle"
+    options = "grp:alt_shift_toggle"    // or "grp:win_space_toggle": Super+Space, "grp:caps_toggle": Caps Lock
 }
 ```
+
+A change applies as soon as you save. A key of your own can switch too:
+`keys { "L-S-space" { caulis.run("keyboard-layout next") } }`.
 
 ### Keys
 

@@ -44,7 +44,7 @@ panels {
         fontSize = 13
         left = listOf("wall", "window")
         center = listOf("clock")
-        right = listOf("tray", "network", "volume", "battery", "power")
+        right = listOf("tray", "layout", "network", "volume", "battery", "power")
         clock = "HH:mm"                 // java.time patterns: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"              // "" for no date
         accentColor = "#88C0D0"         // also islandColor, textColor
@@ -57,8 +57,8 @@ panels {
 ```
 
 Each island shows its modules in order, and an empty list leaves that island out. The
-modules are `wall`, `window`, `clock`, `tray`, `network`, `volume`, `battery`, `power` and
-`texts`. The last one shows the texts of `texts { ... }`, asked for every second:
+modules are `wall`, `window`, `clock`, `tray`, `layout` (the keyboard layout, when there are several),
+`network`, `volume`, `battery`, `power` and `texts`. The last one shows the texts of `texts { ... }`, asked for every second:
 
 ```kotlin
 panels {

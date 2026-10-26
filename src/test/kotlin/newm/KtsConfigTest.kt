@@ -32,7 +32,8 @@ class KtsConfigTest {
             val rules = view["rules"] as (View) -> Map<String, Any?>?
             assertTrue(rules.toString().isNotEmpty())
             @Suppress("UNCHECKED_CAST")
-            assertEquals("us", (values["pywm"] as Map<String, Any?>)["xkb_layout"])
+            // No layouts of its own: the system's are used.
+            assertEquals(null, (values["pywm"] as? Map<String, Any?>)?.get("xkb_layout"))
         } finally {
             Files.deleteIfExists(file)
         }
