@@ -106,6 +106,8 @@ private fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) 
     if (pywm?.get("focus_follows_mouse") == null) focusFollowsMouse = true
     pywm?.let { applyPywmSettings(this, it) }
     (settings["outputs"] as? List<Map<String, Any?>>)?.let { applyOutputs(this, it) }
+    // Light or dark: always one of them (never "the programs' own", which left newm light).
+    ColorChoice.apply(this)
 }
 
 // LayoutApi once the layout is there (config.py's Python starts before it).

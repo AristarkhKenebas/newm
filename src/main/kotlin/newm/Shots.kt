@@ -18,6 +18,8 @@ private val confPointer = configuredValue("screenshots.pointer", false)
 private val confToast = configuredValue("screenshots.toast", true)
 private val confStart = configuredValue<String?>("screenshots.start", null)
 private val confDelay = configuredValue("screenshots.delay", 0)
+private val confSelection = configuredValue("screenshots.selection", "adjust")
+private val confOverviewStart = configuredValue("screenshots.overview_start", "windows")
 private val confSharp = configuredValue("screenshots.sharp_windows", true)
 private val confSharpBackground = configuredValue("screenshots.sharp_background", "none")
 private val confFileName = configuredValue("screenshots.file_name", "Screenshot from {date} {time}")
@@ -56,6 +58,8 @@ internal class Shots(private val wm: Layout) {
         shots.pointer = confPointer()
         shots.delaySeconds = confDelay().coerceIn(0, 60)
         confStart()?.let { name -> ShotKind.entries.firstOrNull { it.name.equals(name, true) }?.let { shots.kind = it } }
+        shots.selection = if (confSelection().trim().equals("new", true)) dev.caulis.screenshot.Screenshots.Selection.NEW else dev.caulis.screenshot.Screenshots.Selection.ADJUST
+        shots.overviewKind = confOverviewStart().trim().let { name -> ShotKind.entries.firstOrNull { it.name.equals(name, true) } }
         shots.sharpWindows = confSharp()
         shots.sharpCornerRadius = confCornerRadius().toFloat()
         shots.sharpBackground = when (val bg = confSharpBackground().trim().lowercase()) {
@@ -75,7 +79,8 @@ internal class Shots(private val wm: Layout) {
         val c = wm.barModel.colorsNow()
         fun of(x: androidx.compose.ui.graphics.Color, alpha: Float = x.alpha) = dev.caulis.render.Color(x.red, x.green, x.blue, alpha)
         val words = listOf("Area", "Window", "Screen", "Pointer", "Timer", "Capture", "%s s", "Drag to choose a part first", "Point at a window first",
-            "No window has the focus", "Screenshot in %s")
+            "No window has the focus", "Screenshot in %s", "Windows, whole", "Move and resize the area", "A new area each time", "Pointer: in the picture",
+            "Pointer: left out", "Timer: %s s", "Timer: off", "Close", "1 window", "%s windows", "Drag over windows or click them first")
         return dev.caulis.screenshot.ScreenshotStyle(
             background = of(c.island, 0.96f), text = of(c.text), dim = of(c.dim), border = of(c.edge), accent = of(c.accent),
             onAccent = of(newm.bar.onAccent(c)), cornerRadius = 32f, labels = words.associateWith { newm.bar.tr(it) },
@@ -84,11 +89,11 @@ internal class Shots(private val wm: Layout) {
 
     private fun enabled(): Boolean = confEnabled().also { if (!it) log.info { "Screenshots are off (screenshots { enabled = false })" } }
 
-    /** The chooser, starting with a part of the screen. */
+    /** The chooser: with the kind used last (over the overview: several windows, whole). */
     fun choose() {
         // (Its look again: the colours may have changed with the wallpaper.)
         shots.style = style()
-        if (enabled()) shots.choose(ShotKind.REGION)
+        if (enabled()) shots.choose()
     }
 
     /** The monitor with the pointer, at once. */

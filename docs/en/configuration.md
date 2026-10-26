@@ -214,6 +214,13 @@ newm's menus speak Russian when the system's language is Russian. To choose:
 language = "en"     // "auto" (the system's, the default), "en" or "ru"
 ```
 
+Light or dark — the bar, the menus, the launcher, the lock and the programs together — is
+switched in the quick settings and kept for the next start (dark until chosen). To fix it:
+
+```kotlin
+colorScheme = "dark"   // "auto" (the quick settings' last choice, the default), "dark" or "light"
+```
+
 ### A scratchpad (a terminal that drops down)
 
 A window kept apart from the wall that one key shows above everything and hides again, as
@@ -270,6 +277,8 @@ screenshots {
     toast = true                    // "Screenshot saved" for a moment
     start = "region"                // the chooser starts with "region", "window" or "screen"
     delay = 0                       // seconds before it is taken
+    selection = "adjust"            // a part: "adjust" (drag and resize it after) or "new" (each drag a new one)
+    overviewStart = "windows"       // over the overview: "windows" (several, whole), "region", ... or "" (the last used)
     sharpWindows = true             // a part of the overview: put together from the windows, sharp
     sharpBackground = "none"        // behind them: "none" (see-through), "#RRGGBB", "theme"
     fileName = "Screenshot from {date} {time}"   // {date}, {time}, {kind}
@@ -278,9 +287,14 @@ screenshots {
 }
 ```
 
-In the overview (tap Super) choose a part over the windows: the picture is put together
-from the windows at their own size — each as sharp as if it filled the screen — in the
-places they have there. The power menu of the bar has "Screenshot…" too.
+In the overview (tap Super) the chooser has a fourth kind, "Windows, whole" (G): drag a
+frame over windows — every window it touches is in the picture, whole, from edge to edge —
+or click windows to add or drop them (Shift adds a frame to those chosen, Ctrl+A takes all),
+then Enter or Capture. The picture is put together from the windows at their own size, each
+as sharp as if it filled the screen, in the places they have in the overview. A part chosen
+over the overview is put together the same way (cut where the part ends). The toolbar's
+"Area" options button (M) switches between moving the part chosen and drawing a new one
+with each drag; the name of each button and its key show above it. The power menu of the bar has "Screenshot…" too.
 
 ### The wallpaper: following the view or standing still
 

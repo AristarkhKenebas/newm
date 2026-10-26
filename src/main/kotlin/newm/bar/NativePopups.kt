@@ -274,7 +274,8 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
     }
     LaunchedEffect(Unit) { model.network.refresh(); model.bluetooth.refresh(); model.powerProfiles.refresh() }
     val caffeine = until != null && until > now
-    val dark = wm.caulis.colorSchemeNow != dev.caulis.core.appearance.ColorScheme.LIGHT
+    // (The same test as the bar's: what the tile shows is what everything shows.)
+    val dark = wm.caulis.colorSchemeNow == dev.caulis.core.appearance.ColorScheme.DARK
     val nm = model.network
     val bt = model.bluetooth
     val profiles = model.powerProfiles
@@ -312,7 +313,7 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
                 else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
             }, caffeine, colors, text, Modifier.weight(1f), onOpen = { popup.expanded = if (popup.expanded == "caffeine") null else "caffeine" }) { wm.caffeine(if (caffeine) null else 0) }
             SmallTile(if (dark) "dark_mode" else "light_mode", dark, colors, Modifier.weight(0.5f)) {
-                wm.caulis.colorScheme = if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK
+                newm.ColorChoice.choose(wm.caulis, if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK)
                 wm.caulis.applySettings()
             }
             SmallTile("screenshot_region", false, colors, Modifier.weight(0.5f)) { closeThen { wm.screenshot() } }

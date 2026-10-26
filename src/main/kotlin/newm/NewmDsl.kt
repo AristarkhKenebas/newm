@@ -65,6 +65,12 @@ class NewmConfig(
     /** Lock the screen when the computer wakes up. */
     var lockOnWakeup by setting<Boolean>("lock_on_wakeup")
 
+    /**
+     * Light or dark, for newm and the programs: "auto" (the default: what the quick settings
+     * chose last, else dark), "dark" or "light".
+     */
+    var colorScheme by setting<String>("color_scheme")
+
     /** The language of newm's menus: "auto" (the system's), "en" or "ru". */
     var language by setting<String>("language")
 
@@ -472,6 +478,12 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
 
     /** Seconds to wait before taking it (0). */
     var delay by setting<Int>("delay")
+
+    /** How a part is chosen: "adjust" (the default: dragged and resized after) or "new" (each drag a new part). */
+    var selection by setting<String>("selection")
+
+    /** What the chooser starts with over the overview: "windows" (the default: several, whole), "region", "window", "screen", or "" (the one used last). */
+    var overviewStart by setting<String>("overview_start")
 
     /** A part of the overview (windows drawn small) is put together from the windows at their own size: sharp (true). */
     var sharpWindows by setting<Boolean>("sharp_windows")
