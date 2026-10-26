@@ -123,6 +123,8 @@ class FocusBorders(private val wm: Layout) : Animatable {
     /** Draws the border now (with the focused window's pictures below it). */
     fun draw(canvas: OverlayCanvas) {
         if (!confEnabled()) return
+        // A menu of newm's has the keys (the launcher, the clipboard): no window looks chosen.
+        if (wm.caulis.desktop.keyboardWidget != null) return
         val down = border.at(reducer(current, 1.0))
         if (down.opacity <= 0.0 || down.box.w <= 0.0 || down.box.h <= 0.0) return
         val b = down.box

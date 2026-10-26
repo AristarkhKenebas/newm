@@ -388,12 +388,15 @@ class ClipboardHistory(private val wm: Layout) {
         LaunchedEffect(shown.size) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
         var byKeys by remember(opened) { mutableIntStateOf(0) }
         LaunchedEffect(byKeys) { if (byKeys > 0 && shown.isNotEmpty()) list.animateScrollToItem(selected.coerceAtMost(shown.size - 1)) }
-        val current = shown.getOrNull(selected)
+        // (Read when needed, not while composing: choosing another then redraws only the
+        // preview and two rows — reading it here composed the whole window anew on each row
+        // the pointer passed, and the pointer lagged.)
+        fun current() = shown.getOrNull(selected)
         val clearKinds = listOf<ClipKind?>(null, ClipKind.TEXT, ClipKind.PICTURES, ClipKind.FILES)
         val actions = listOf<Pair<String, () -> Unit>>(
-            "Copy" to { current?.let(history::use) },
-            "Pin" to { current?.let(history::pin) },
-            "Delete" to { current?.let(history::remove) },
+            "Copy" to { current()?.let(history::use) },
+            "Pin" to { current()?.let(history::pin) },
+            "Delete" to { current()?.let(history::remove) },
         )
         fun clearNow(kind: ClipKind?) {
             if (history.canClear(kind)) history.clear(kind)
@@ -434,13 +437,13 @@ class ClipboardHistory(private val wm: Layout) {
                 }
                 return true
             }
-            if (e.key == Key.P && e.isCtrlPressed) { current?.let(history::pin); return true }
+            if (e.key == Key.P && e.isCtrlPressed) { current()?.let(history::pin); return true }
             when (zone) {
                 Zone.SEARCH, Zone.LIST -> when {
                     down -> { selected = (selected + 1).coerceAtMost(shown.size - 1); byKeys++ }
                     up -> { selected = (selected - 1).coerceAtLeast(0); byKeys++ }
-                    e.key == Key.Enter || e.key == Key.NumPadEnter -> current?.let(history::use)
-                    e.key == Key.Delete -> current?.let(history::remove)
+                    e.key == Key.Enter || e.key == Key.NumPadEnter -> current()?.let(history::use)
+                    e.key == Key.Delete -> current()?.let(history::remove)
                     zone == Zone.LIST && (left || right) -> zone = if (right) Zone.ACTIONS else Zone.KINDS
                     else -> return zone != Zone.SEARCH
                 }
@@ -515,7 +518,8 @@ class ClipboardHistory(private val wm: Layout) {
                         }
                         Spacer(Modifier.width(14.dp))
                         // What the chosen one is, whole, and what can be done with it.
-                        Column(Modifier.weight(1f).fillMaxHeight().background(colors.text.copy(alpha = 0.04f), RoundedCornerShape(16.dp)).padding(16.dp)) {
+                        Box(Modifier.weight(1f).fillMaxHeight()) { PreviewOf(::current) { current ->
+                        Column(Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.04f), RoundedCornerShape(16.dp)).padding(16.dp)) {
                             if (current != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     SourceIcon(current, colors, 22.dp)
@@ -560,6 +564,7 @@ class ClipboardHistory(private val wm: Layout) {
                                 }
                             }
                         }
+                        } }
                     }
                     // The clearing menu, under its button.
                     if (clearMenu) Column(
@@ -683,6 +688,10 @@ class ClipboardHistory(private val wm: Layout) {
     /** The window as it looks, for drawing it once ahead (see Warmup). */
     @Composable
     internal fun WarmPanel() = ClipboardPanel(this, warm = true)
+
+    // The chosen one, read here alone: only this part recomposes when another is chosen.
+    @Composable
+    private fun PreviewOf(chosen: () -> ClipEntry?, content: @Composable (ClipEntry?) -> Unit) = content(chosen())
 
     // The program it came from (its icon), or what it is.
     @Composable

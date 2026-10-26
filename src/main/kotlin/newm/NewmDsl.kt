@@ -111,6 +111,9 @@ class NewmConfig(
     /** What shows on the screen by itself (a card when Wi-Fi, a cable or Bluetooth comes or goes). */
     fun osd(configure: OsdSection.() -> Unit) = section("osd", ::OsdSection, configure)
 
+    /** The volume's slider. */
+    fun sound(configure: SoundSection.() -> Unit) = section("sound", ::SoundSection, configure)
+
     /** The overview (Super alone): clicks there. */
     fun overview(configure: OverviewSection.() -> Unit) = section("overview", ::OverviewSection, configure)
 
@@ -485,6 +488,12 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
 
     /** A command run with each file saved, {file} being it (an editor: "satty --filename {file}"). */
     var then by setting<String>("then")
+}
+
+/** sound { }: the volume's slider. */
+class SoundSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** How loud it goes, in percent (150; past 100 the sound is amplified, as Linux can). */
+    var maxVolume by setting<Int>("max_volume")
 }
 
 /** overview { }: the windows seen from afar (Super alone). */

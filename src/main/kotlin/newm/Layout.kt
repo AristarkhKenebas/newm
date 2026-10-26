@@ -564,6 +564,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 ?: workspaces[0].also { log.warn("Workspaces do not cover whole area") }
 
         barModel.close()
+        // (Diagnostics: the bars made anew show for a frame as new — if they flash, this says when.)
+        if (topBars.isNotEmpty() || bottomBars.isNotEmpty()) log.warn("The bars are made anew (the layout or the configuration changed)")
         topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh).also(Bar::look) } else emptyList()
         bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh).also(Bar::look) } else emptyList()
         barModel.refreshPalette()
@@ -898,6 +900,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
         overlay?.takeIf { it.ready }?.let { return it.onMotion(timeMillis, dx, dy) }
         return false
+    }
+
+    /** The window drawn under the pointer now (also where windows take no clicks: the overview). */
+    fun viewUnderPointer(): View? {
+        val d = caulis.desktop
+        return views.values.lastOrNull { v ->
+            d.drawnNow(v.window) && d.shownRect(v.window)?.let { r -> d.pointerX >= r.x && d.pointerX < r.right && d.pointerY >= r.y && d.pointerY < r.bottom } == true
+        }
     }
 
     /** The active workspace is seen from afar (the overview). */
@@ -1429,7 +1439,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun toggleOverview(onlyActiveWorkspace: Boolean = false) {
         animateTo({ s ->
             val overview = if (onlyActiveWorkspace) !s.workspaceState(activeWorkspace()).isInOverview() else !s.allInOverview()
-            val focused = if (!overview) findFocusedView() else null
+            // Leaving it: the window under the pointer is the one chosen (Super, a look, the
+            // pointer on another, Super again), else the focused one.
+            val focused = if (!overview) (viewUnderPointer()?.also { if (!it.isFocused()) it.focus() } ?: findFocusedView()) else null
             null to s.withOverviewSet(overview, if (onlyActiveWorkspace) activeWorkspace() else null, focused)
         }, confAnimT())
     }

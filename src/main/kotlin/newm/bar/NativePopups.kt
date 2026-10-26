@@ -145,6 +145,9 @@ private fun DeviceRow(model: BarModel, popup: Popup, d: BluetoothDevice, colors:
     }
 }
 
+// sound { maxVolume = 150 }: how loud the volume's slider goes (100..150; past 100 the sound is amplified).
+private val confMaxVolume = newm.configuredValue("sound.max_volume", 150)
+
 // --- sound ---------------------------------------------------------------------------------------
 
 /** Sound from the bar: the volume and the device it plays on; the microphone and the device it hears with. */
@@ -156,7 +159,7 @@ internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
         val out = sound.outputs.firstOrNull { it.isDefault } ?: sound.outputs.firstOrNull()
         Header("Sound", colors, text)
         if (out == null) return@Column Note("No sound device", colors, text)
-        LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }) { sound.setVolume(out, it, true) }
+        LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }, max = confMaxVolume().coerceIn(100, 150)) { sound.setVolume(out, it, true) }
         DevicePicker(out, sound.outputs, { it.description }, { outputGlyph(it.description) }, { it.isDefault }, colors, text) { sound.use(it, true) }
         val mic = sound.inputs.firstOrNull { it.isDefault } ?: sound.inputs.firstOrNull()
         if (mic != null) {
@@ -197,9 +200,12 @@ private fun DeviceChoice(name: String, glyph: Glyph, chosen: Boolean, colors: Ba
 
 // A level: a Pixel's wide slider, its icon inside (a click on it mutes), the percent at the right.
 @Composable
-private fun LevelRow(glyph: Glyph, percent: Int, muted: Boolean, colors: BarColors, text: TextStyle, onMute: (() -> Unit)?, onSet: (Int) -> Unit) {
-    LevelSlider(glyph, percent / 100f, colors, text, if (muted) tr("off") else "$percent%", Modifier.padding(vertical = 3.dp), dim = muted, onIcon = onMute) { level ->
-        onSet(Math.round(level * 100))
+private fun LevelRow(glyph: Glyph, percent: Int, muted: Boolean, colors: BarColors, text: TextStyle, onMute: (() -> Unit)?, max: Int = 100, onSet: (Int) -> Unit) {
+    var live by remember { mutableStateOf<Int?>(null) }
+    LevelSlider(glyph, percent / 100f, colors, text, "${live ?: percent}%", Modifier.padding(vertical = 2.dp), dim = muted, max = max / 100f, onIcon = onMute) { level ->
+        val p = Math.round(level * 100)
+        live = p
+        onSet(p)
     }
 }
 

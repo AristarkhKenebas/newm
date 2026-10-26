@@ -221,9 +221,13 @@ internal fun PasswordField(value: String, colors: BarColors, text: TextStyle, on
 }
 
 /**
- * A level as a Pixel's: a wide rounded track in the accent's faint tone, the level filled in
- * the accent with [glyph] inside it at the left, the percent at the right. Dragging or a
- * click sets it (now and then while dragging); a click on the icon does [onIcon] (mutes).
+ * A level as Android 16's (Material 3 Expressive) sliders, lying down: the filled part in the
+ * accent and the rest faint, a gap between them where a tall thin handle stands (taller than the
+ * track, so it is easy to see and to grab), the outer ends rounded, the inner ones nearly
+ * square; [glyph] at the start. [value] goes from 0 to [max] (1: 100%; the volume goes to 1.5,
+ * a small mark showing where 100% is). Pressed anywhere it jumps there and follows the pointer
+ * (also beyond its ends, so its ends are easy to reach); the percent shows while dragging. A
+ * click on the icon does [onIcon] (mutes).
  */
 @Composable
 internal fun LevelSlider(
@@ -234,57 +238,95 @@ internal fun LevelSlider(
     label: String,
     modifier: Modifier = Modifier,
     dim: Boolean = false,
+    max: Float = 1f,
     onIcon: (() -> Unit)? = null,
     onChange: (Float) -> Unit,
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
-    val animated by animateFloatAsState(value.coerceIn(0f, 1f), tween(180))
+    val animated by animateFloatAsState((value / max).coerceIn(0f, 1f), tween(160))
     val shown = dragging ?: animated
     var lastSent by remember { mutableFloatStateOf(-1f) }
-    val fill = if (dim) colors.text.copy(alpha = 0.3f) else colors.accent.copy(alpha = 0.85f)
+    val fill = if (dim) colors.text.copy(alpha = 0.32f) else colors.accent
     val onFill = if (fill.luminance() > 0.55f) Color(0xFF1B1B1F) else Color.White
-    val height = 26.dp
+    val rest = colors.text.copy(alpha = 0.10f)
+    val handleColor = if (dim) colors.dim else colors.accent
     Box(
-        modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(13.dp)).background(colors.text.copy(alpha = 0.08f))
-            .pointerInput(onIcon) {
+        modifier.fillMaxWidth().height(40.dp)
+            .pointerInput(onIcon, max) {
                 awaitPointerEventScope {
                     var held = false
                     var startX = 0f
                     var moved = false
+                    // The handle's way: from its half width in to its half width from the end (both ends reached inside).
+                    fun levelAt(x: Float): Float {
+                        val inset = 10.dp.toPx()
+                        return ((x - inset) / (size.width - 2 * inset)).coerceIn(0f, 1f)
+                    }
                     while (true) {
                         val e = awaitPointerEvent()
                         val x = e.changes.firstOrNull()?.position?.x ?: continue
-                        val level = (x / size.width).coerceIn(0f, 1f)
                         when (e.type) {
-                            PointerEventType.Press -> { held = true; moved = false; startX = x }
+                            PointerEventType.Press -> {
+                                held = true; moved = false; startX = x
+                                // (On the icon: maybe a click to mute — not a jump to 0.)
+                                if (onIcon == null || x > 36.dp.toPx()) dragging = levelAt(x)
+                            }
                             PointerEventType.Move -> if (held) {
-                                if (Math.abs(x - startX) > 4) moved = true
-                                if (moved) dragging = level
+                                if (Math.abs(x - startX) > 3) moved = true
+                                if (moved || dragging != null) dragging = levelAt(x)
                             }
                             PointerEventType.Release -> if (held) {
                                 held = false
-                                // A click on the icon (no drag): mute.
-                                if (!moved && onIcon != null && x < size.height) onIcon() else { onChange(level); lastSent = level }
+                                if (!moved && onIcon != null && x <= 36.dp.toPx()) onIcon()
+                                else { val l = levelAt(x); onChange(l * max); lastSent = l }
                                 dragging = null
                             }
                             else -> {}
                         }
                         val d = dragging
-                        if (held && d != null && Math.abs(d - lastSent) > 0.03f) { onChange(d); lastSent = d }
+                        if (held && d != null && Math.abs(d - lastSent) > 0.02f) { onChange(d * max); lastSent = d }
                     }
                 }
             },
+        contentAlignment = Alignment.CenterStart,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            // The filled part never narrower than the icon's room.
-            val w = maxOf(size.height, size.width * shown)
-            drawRoundRect(fill, Offset.Zero, androidx.compose.ui.geometry.Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(size.height / 2))
+            val trackH = 30.dp.toPx()
+            val top = (size.height - trackH) / 2
+            val outer = 11.dp.toPx()
+            val inner = 3.dp.toPx()
+            val gap = 5.dp.toPx()
+            val handleW = 4.dp.toPx()
+            val inset = 10.dp.toPx()
+            val hx = inset + shown * (size.width - 2 * inset)
+            fun part(left: Float, right: Float, color: Color, leftR: Float, rightR: Float) {
+                if (right - left < 1f) return
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    addRoundRect(androidx.compose.ui.geometry.RoundRect(
+                        left, top, right, top + trackH,
+                        topLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(leftR), bottomLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(leftR),
+                        topRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(rightR), bottomRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(rightR),
+                    ))
+                }
+                drawPath(path, color)
+            }
+            part(0f, hx - gap - handleW / 2, fill, outer, inner)
+            part(hx + gap + handleW / 2, size.width, rest, inner, outer)
+            // Where 100% is, on a level that goes beyond it.
+            if (max > 1f) {
+                val mx = inset + (1f / max) * (size.width - 2 * inset)
+                if (Math.abs(mx - hx) > gap * 2) drawCircle(if (mx < hx) onFill.copy(alpha = 0.6f) else colors.text.copy(alpha = 0.35f), 2.dp.toPx(), Offset(mx, size.height / 2))
+            }
+            // The handle: taller than the track, with clear room around it.
+            drawRoundRect(handleColor, Offset(hx - handleW / 2, 0f), androidx.compose.ui.geometry.Size(handleW, size.height), androidx.compose.ui.geometry.CornerRadius(handleW / 2))
         }
-        Box(Modifier.size(height).align(Alignment.CenterStart), contentAlignment = Alignment.Center) {
-            GlyphIcon(glyph, onFill, 14.dp, level = shown, slash = dim)
+        val fillWidth = shown
+        Box(Modifier.padding(start = 10.dp).size(20.dp), contentAlignment = Alignment.Center) {
+            GlyphIcon(glyph, if (fillWidth > 0.12f) onFill else colors.text, 16.dp, level = shown, slash = dim)
         }
-        BasicText(label, style = text.copy(color = if (shown > 0.86f) onFill else colors.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 11.dp))
+        // The percent while dragging (else the level speaks for itself).
+        if (dragging != null) BasicText(label, style = text.copy(color = colors.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
     }
 }
 

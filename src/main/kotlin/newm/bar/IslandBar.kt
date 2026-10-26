@@ -219,6 +219,7 @@ class BarModel(val wm: Layout) {
     /** Makes the palette anew (the wallpaper, the configuration or the colours menu changed) and writes it out. */
     fun refreshPalette() {
         val next = NewmColors.palette(wm.wallpaperSeed)
+        if (next == null && palette != null) log.warn("The colours went back to the plain ones (no wallpaper colour now)")
         if (next != palette) {
             palette = next
             NewmColors.export(next)
