@@ -472,7 +472,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private fun setup(reconfigure: Boolean = true) {
         setupWidgets()
         keyProcessor.clear()
-        keyProcessor.registerBindings(*confKeyBindings()(this).toTypedArray())
+        keyProcessor.registerBindings(*keyBindingsOf(confKeyBindings()(this)).toTypedArray())
 
         // Stop and set up the gestures anew.
         gestureProviders.forEach(GestureProvider::stop)
@@ -1008,7 +1008,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // --- 2. general purpose ----------------------------------------------------------------------------
 
+    /** Loads the configuration again (config.py, as newm's update_config); set by main. */
+    var reloadConfig: () -> Unit = {}
+
     fun updateConfig() {
+        try {
+            reloadConfig()
+        } catch (e: Exception) {
+            log.error("Error loading config", e)
+        }
         setup()
         damage()
         confOnReconfigure()()
@@ -1245,6 +1253,28 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
         }, confAnimT())
     }
+
+    fun swallowFocusedView() {
+        animateTo({ s ->
+            val view = findFocusedView() ?: return@animateTo null to null
+            if (!(view.isTiled(s) || view.isFloat(s))) return@animateTo null to null
+            val by = view.findSwallower() ?: return@animateTo null to null
+            val next = s.focusingView(by)
+            if (view.isTiled(s)) {
+                val bs = s.viewState(by)
+                next.updateViewState(view) { swallowed = by.handle; i = bs.i; j = bs.j; w = bs.w; h = bs.h }
+            } else {
+                next.updateViewState(view) { swallowed = by.handle }
+            }
+            next.constrain()
+            focusBorders.updateFocus(by, null to next)
+            by.focus()
+            null to next
+        }, confAnimT())
+    }
+
+    /** The view with [handle] (as config.py's functions know it), if it is still there. */
+    fun viewByHandle(handle: Int): View? = views[handle]
 
     // --- 6. legacy ----------------------------------------------------------------------------------------
 

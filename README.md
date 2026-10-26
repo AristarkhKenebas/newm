@@ -19,8 +19,17 @@ build/install/newm/bin/newm                   # on a text console, or nested ins
 build/install/newm/bin/newm cmd debug         # newm-cmd
 ```
 
-It is a port in progress: the user's own configuration file and newm-panel-basic are not
-ported yet. Licensed MIT, as newm.
+Your newm `config.py` works as it is: it is run by Python as before (`~/.config/newm/config.py`,
+else `/etc/newm/config.py`), with everything it imports and does — `from newm.layout import
+Layout`, `from pywm import ...`, `newm.helper`, key bindings, view rules, callbacks. Its `pywm`
+and `outputs` sections become Caulis's keyboard, cursor, touchpad and monitor settings.
+
+Saving `config.py` (or any `.py` next to it) loads it again at once — no new session. A
+mistake never leaves a black screen: at the start newm runs with its default configuration,
+later it keeps the last one that worked, and the mistake is shown on screen with its line
+until the file is saved without it.
+
+Still to come: newm-panel-basic (the lock and launcher panels). Licensed MIT, as newm.
 
 ## Current state
 

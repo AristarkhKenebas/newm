@@ -741,6 +741,27 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
     fun update() = readRules()
 
+    /**
+     * The view that swallows this one (newm's find_swallower): one whose program was started
+     * by this view's (a player started from a terminal) — the topmost of them if several are.
+     */
+    fun findSwallower(): View? {
+        fun parentOf(pid: Long): Long? = java.lang.ProcessHandle.of(pid).flatMap { it.parent() }.map { it.pid() }.orElse(null)
+        // The process and its ancestors (as newm walks them: down to 1).
+        fun lineage(pid: Long): Sequence<Long> = generateSequence(pid) { p -> parentOf(p) }.takeWhile { it > 1 }
+        if (pid <= 0) return null
+        val res = wm.views().filter { v -> v !== this && v.pid > 0 && pid.toLong() in lineage(v.pid.toLong()) }
+        return when (res.size) {
+            0 -> null
+            1 -> res[0]
+            else -> {
+                val pids = res.map { it.pid.toLong() }.toSet()
+                // (Not one started by another of them.)
+                res.firstOrNull { v -> lineage(v.pid.toLong()).drop(1).none { it in pids } } ?: null.also { log.trace { "Unexpected" } }
+            }
+        }
+    }
+
     // --- Callbacks
 
     /** The program asked for fullscreen (true) or to leave it. */
