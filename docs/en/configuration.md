@@ -341,3 +341,10 @@ program can be (Spotify: 800 x 600).
 
 While a window is resized it is drawn at its own size, not stretched, so it does not flicker
 when its new picture comes. `view { crispResize = false }` stretches it, as newm did.
+
+### Restarting with your windows
+
+`newm cmd restart keep` restarts newm (a new build, a changed setting) and opens your windows
+again afterwards: each program starts again (a terminal in the folder its shell was in) and its
+window goes back to its place. What can be kept is a program's command line; what a program
+had open inside it (tabs, files) is its own to bring back.

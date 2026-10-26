@@ -139,8 +139,8 @@ object IconTheme {
             val svg = SVGDOM(Data.makeFromBytes(bytes))
             val root = svg.root
             val box = root?.viewBox
-            val w = (box?.width ?: root?.width?.value ?: size.toFloat()).takeIf { it > 0f } ?: size.toFloat()
-            val h = (box?.height ?: root?.height?.value ?: size.toFloat()).takeIf { it > 0f } ?: size.toFloat()
+            val w = root?.width?.takeIf { it.unit != org.jetbrains.skia.svg.SVGLengthUnit.PERCENTAGE && it.value > 0f }?.value ?: box?.width?.takeIf { it > 0f } ?: size.toFloat()
+            val h = root?.height?.takeIf { it.unit != org.jetbrains.skia.svg.SVGLengthUnit.PERCENTAGE && it.value > 0f }?.value ?: box?.height?.takeIf { it > 0f } ?: size.toFloat()
             svg.setContainerSize(w, h)
             val scale = size / maxOf(w, h)
             canvas.translate((size - w * scale) / 2f, (size - h * scale) / 2f)

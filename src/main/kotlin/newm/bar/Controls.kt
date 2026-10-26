@@ -240,6 +240,10 @@ internal fun LevelSlider(
     dim: Boolean = false,
     max: Float = 1f,
     onIcon: (() -> Unit)? = null,
+    /** How tall it is (the handle; the track a little less), and its icon at the end (Android's brightness). */
+    height: Dp = 40.dp,
+    iconAtEnd: Boolean = false,
+    symbol: String? = null,
     onChange: (Float) -> Unit,
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
@@ -251,7 +255,7 @@ internal fun LevelSlider(
     val rest = colors.text.copy(alpha = 0.10f)
     val handleColor = if (dim) colors.dim else colors.accent
     Box(
-        modifier.fillMaxWidth().height(40.dp)
+        modifier.fillMaxWidth().height(height)
             .pointerInput(onIcon, max) {
                 awaitPointerEventScope {
                     var held = false
@@ -291,9 +295,9 @@ internal fun LevelSlider(
         contentAlignment = Alignment.CenterStart,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val trackH = 30.dp.toPx()
+            val trackH = size.height - 10.dp.toPx()
             val top = (size.height - trackH) / 2
-            val outer = 11.dp.toPx()
+            val outer = minOf(trackH / 2.4f, 16.dp.toPx())
             val inner = 3.dp.toPx()
             val gap = 5.dp.toPx()
             val handleW = 4.dp.toPx()
@@ -321,12 +325,16 @@ internal fun LevelSlider(
             drawRoundRect(handleColor, Offset(hx - handleW / 2, 0f), androidx.compose.ui.geometry.Size(handleW, size.height), androidx.compose.ui.geometry.CornerRadius(handleW / 2))
         }
         val fillWidth = shown
-        Box(Modifier.padding(start = 10.dp).size(20.dp), contentAlignment = Alignment.Center) {
-            GlyphIcon(glyph, if (fillWidth > 0.12f) onFill else colors.text, 16.dp, level = shown, slash = dim)
+        if (iconAtEnd) Box(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(22.dp), contentAlignment = Alignment.Center) {
+            val tint = if (fillWidth > 0.9f) onFill else colors.text
+            if (symbol != null) SymbolIcon(symbol, tint, 22.dp) else GlyphIcon(glyph, tint, 18.dp, level = shown, slash = dim)
+        } else Box(Modifier.padding(start = 10.dp).size(20.dp), contentAlignment = Alignment.Center) {
+            if (symbol != null) SymbolIcon(symbol, if (fillWidth > 0.12f) onFill else colors.text, 18.dp)
+            else GlyphIcon(glyph, if (fillWidth > 0.12f) onFill else colors.text, 16.dp, level = shown, slash = dim)
         }
         // The percent while dragging (else the level speaks for itself).
-        if (dragging != null) BasicText(label, style = text.copy(color = colors.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
+        if (dragging != null) BasicText(label, style = text.copy(color = if (iconAtEnd && fillWidth > 0.75f) onFill else colors.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = if (iconAtEnd) 46.dp else 12.dp))
     }
 }
 

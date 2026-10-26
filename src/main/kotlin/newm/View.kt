@@ -607,7 +607,12 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
                 if (initialKind == 2) showFloating(ws, state, wsState, posHint) else showTiled(ws, state, wsState)
             }
         }
-        if (result != (null to null)) mapped = true
+        if (result != (null to null)) {
+            mapped = true
+            // (A window kept over a restart goes back to its place.)
+            val shownView = this
+            wm.caulis.post { wm.session.shown(shownView) }
+        }
         return result
     }
 

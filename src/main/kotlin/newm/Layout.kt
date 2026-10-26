@@ -633,6 +633,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         panelsUi.start()
         clipboardHistory.start()
         Warmup(this).start()
+        // The windows kept by `restart keep`, opened again.
+        caulis.after(1200) { session.restoreAtStart() }
         // The native bars (Compose), their texts asked for every second.
         caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
             topBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
@@ -1293,6 +1295,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 null
             } else "Disabled"
             "restart" -> {
+                // `restart keep`: the windows open now open again after it, each in its place.
+                val keep = arg?.trim()?.removePrefix("--") in setOf("keep", "restore", "windows", "session")
+                if (keep) session.save()
                 // For dev/newm-dev: newm ends, and the script starts it again (a new build).
                 restartRequested = true
                 terminate()
@@ -1378,6 +1383,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun floats(workspace: Workspace? = null): List<View> = views.values.filter { it.isFloat(state) && isViewOnWorkspace(it, workspace) }
 
     fun panels(workspace: Workspace? = null): List<View> = views.values.filter { it.isPanel() && isViewOnWorkspace(it, workspace) }
+
+    /** Every window's view now (panels too). */
+    internal fun viewsNow(): List<View> = views.values.toList()
+
+    /** The windows kept over a restart. */
+    internal val session by lazy { SessionKeeper(this) }
 
     fun views(workspace: Workspace? = null): List<View> = views.values.filter { !it.isPanel() && isViewOnWorkspace(it, workspace) }
 

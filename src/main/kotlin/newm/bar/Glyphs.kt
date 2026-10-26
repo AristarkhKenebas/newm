@@ -130,10 +130,16 @@ private object Icons {
         val svg = source.replace("currentColor", hex).replace("<svg", "<svg opacity=\"$alpha\"")
         return try {
             val dom = SVGDOM(Data.makeFromBytes(svg.toByteArray()))
-            // (Lucide's are 24 units: scaled to the pixels asked for.)
-            dom.setContainerSize(24f, 24f)
+            // At its own size (Lucide's 24 units, Material's 960 in a viewBox that starts above),
+            // scaled to the pixels asked for.
+            val root = dom.root
+            val box = root?.viewBox
+            // (Its width and height when it gives them — its viewBox is fitted into those — else the viewBox.)
+            val w = root?.width?.takeIf { it.unit != org.jetbrains.skia.svg.SVGLengthUnit.PERCENTAGE && it.value > 0f }?.value ?: box?.width?.takeIf { it > 0f } ?: 24f
+            val h = root?.height?.takeIf { it.unit != org.jetbrains.skia.svg.SVGLengthUnit.PERCENTAGE && it.value > 0f }?.value ?: box?.height?.takeIf { it > 0f } ?: 24f
+            dom.setContainerSize(w, h)
             val surface = Surface.makeRasterN32Premul(pixels, pixels)
-            surface.canvas.scale(pixels / 24f, pixels / 24f)
+            surface.canvas.scale(pixels / maxOf(w, h), pixels / maxOf(w, h))
             dom.render(surface.canvas)
             surface.makeImageSnapshot().toComposeImageBitmap().also { surface.close(); dom.close() }
         } catch (e: Exception) {
@@ -182,5 +188,18 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBattery(color: 
         // An outline the colour of what is around it, then the bolt.
         drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(1.4f * u, join = androidx.compose.ui.graphics.StrokeJoin.Round))
         drawPath(path, if (level > 0.5f) Color.White else color)
+    }
+}
+
+/**
+ * A Material Symbols icon (Rounded, filled: Android's own, bold and soft) of the ones newm
+ * carries ("wifi", "bluetooth", "coffee", "dark_mode", ...), at [size] in [color].
+ */
+@Composable
+fun SymbolIcon(name: String, color: Color, size: Dp = 20.dp) {
+    val argb = color.toArgb()
+    Canvas(Modifier.size(size)) {
+        val px = this.size.minDimension.toInt().coerceAtLeast(1)
+        Icons.get("material/$name", argb, px)?.let { drawImage(it, dstOffset = IntOffset.Zero, dstSize = IntSize(px, px)) }
     }
 }
