@@ -288,7 +288,8 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The screen's brightness (here, not with the battery: a computer without one has it too).
         model.status.brightness?.let { level ->
-            LevelSlider(Glyph.BRIGHTNESS, level / 100f, colors, text, "$level%", height = 54.dp, iconAtEnd = true, symbol = "brightness_medium") { setBrightness(model, it) }
+            // (The same slider as the volume's: one look for all of them.)
+            LevelSlider(Glyph.BRIGHTNESS, level / 100f, colors, text, "$level%", Modifier.padding(vertical = 2.dp)) { setBrightness(model, it) }
             Spacer(Modifier.height(2.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -312,11 +313,11 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
                 until == Long.MAX_VALUE -> tr("On")
                 else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
             }, caffeine, colors, text, Modifier.weight(1f), onOpen = { popup.expanded = if (popup.expanded == "caffeine") null else "caffeine" }) { wm.caffeine(if (caffeine) null else 0) }
-            SmallTile(if (dark) "dark_mode" else "light_mode", dark, colors, Modifier.weight(0.5f)) {
+            SmallTile(if (dark) "dark_mode" else "light_mode", dark, colors, Modifier.weight(0.5f), height = 56.dp) {
                 newm.ColorChoice.choose(wm.caulis, if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK)
                 wm.caulis.applySettings()
             }
-            SmallTile("screenshot_region", false, colors, Modifier.weight(0.5f)) { closeThen { wm.screenshot() } }
+            SmallTile("screenshot_region", false, colors, Modifier.weight(0.5f), height = 56.dp) { closeThen { wm.screenshot() } }
         }
         if (popup.expanded == "caffeine") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             val left = if (caffeine && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
@@ -351,25 +352,26 @@ private fun WideTile(symbol: String, title: String, state: String, on: Boolean, 
         }, androidx.compose.animation.core.tween(160),
     )
     val square by androidx.compose.animation.animateColorAsState(if (on) colors.accent else colors.text.copy(alpha = 0.10f), androidx.compose.animation.core.tween(160))
-    Row(modifier.height(68.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp)).background(bg).hoverable(source)
-        .onClick(onClick = onOpen ?: onToggle).padding(start = 8.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.foundation.layout.Box(Modifier.size(52.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).background(square)
+    // (Square-ish with soft corners, as a phone's quick settings.)
+    Row(modifier.height(56.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(bg).hoverable(source)
+        .onClick(onClick = onOpen ?: onToggle).padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(square)
             .onClick(onClick = onToggle), contentAlignment = Alignment.Center) {
-            SymbolIcon(symbol, if (on) onAccent(colors) else colors.text, 24.dp)
+            SymbolIcon(symbol, if (on) onAccent(colors) else colors.text, 20.dp)
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            BasicText(tr(title), style = text.copy(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold), maxLines = 1, softWrap = false,
+            BasicText(tr(title), style = text.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), maxLines = 1, softWrap = false,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            BasicText(state, style = text.copy(color = colors.dim, fontSize = 11.5.sp), maxLines = 1, softWrap = false,
+            BasicText(state, style = text.copy(color = colors.dim, fontSize = 11.sp), maxLines = 1, softWrap = false,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
 }
 
-// A small tile: a round pill with its icon alone, filled with the accent when on.
+// A small tile: a square with soft corners and its icon alone, filled with the accent when on.
 @Composable
-private fun SmallTile(symbol: String, on: Boolean, colors: BarColors, modifier: Modifier, onClick: () -> Unit) {
+private fun SmallTile(symbol: String, on: Boolean, colors: BarColors, modifier: Modifier, height: androidx.compose.ui.unit.Dp = 48.dp, onClick: () -> Unit) {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     val bg by androidx.compose.animation.animateColorAsState(
@@ -379,9 +381,9 @@ private fun SmallTile(symbol: String, on: Boolean, colors: BarColors, modifier: 
             else -> colors.text.copy(alpha = 0.07f)
         }, androidx.compose.animation.core.tween(160),
     )
-    androidx.compose.foundation.layout.Box(modifier.height(68.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp)).background(bg)
+    androidx.compose.foundation.layout.Box(modifier.height(height).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).background(bg)
         .hoverable(source).onClick(onClick = onClick), contentAlignment = Alignment.Center) {
-        SymbolIcon(symbol, if (on) onAccent(colors) else colors.text, 24.dp)
+        SymbolIcon(symbol, if (on) onAccent(colors) else colors.text, 22.dp)
     }
 }
 

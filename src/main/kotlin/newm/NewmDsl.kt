@@ -488,7 +488,7 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
     /** A part of the overview (windows drawn small) is put together from the windows at their own size: sharp (true). */
     var sharpWindows by setting<Boolean>("sharp_windows")
 
-    /** Behind the windows of such a picture: "none" (see-through, the default), "#RRGGBB", or "theme" (the bar's colour). */
+    /** Behind the windows of such a picture: "wallpaper" (the default: what was behind them), "none" (see-through), "#RRGGBB", or "theme" (the bar's colour). */
     var sharpBackground by setting<String>("sharp_background")
 
     /** The file's name: {date}, {time}, {kind} ("Screenshot from {date} {time}"). */

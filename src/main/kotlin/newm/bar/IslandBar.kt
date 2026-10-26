@@ -408,7 +408,7 @@ class BarModel(val wm: Layout) {
         PopupKind.BATTERY -> 310 to ((if (status.battery != null) 56 + 8 else 0) + (if (status.brightness != null) 26 + 36 + 8 else 0) +
             (if (powerProfiles.profiles.isNotEmpty()) 26 + 8 + powerProfiles.profiles.size * (34 + 8) else 0) + 26).coerceAtLeast(60)
         PopupKind.POWER -> 240 to 228
-        PopupKind.QUICK -> 360 to 330
+        PopupKind.QUICK -> 296 to (if (status.brightness != null) 280 else 230)
         PopupKind.COLORS -> 340 to (34 + 6 * 42 + 28)
         PopupKind.TOOLTIP -> (popup.text.lines().maxOfOrNull { it.length } ?: 10).coerceIn(4, 60) * 7 + 28 to popup.text.lines().size * 18 + 18
         PopupKind.TRAY_MENU -> {

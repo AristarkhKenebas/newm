@@ -21,7 +21,7 @@ private val confDelay = configuredValue("screenshots.delay", 0)
 private val confSelection = configuredValue("screenshots.selection", "adjust")
 private val confOverviewStart = configuredValue("screenshots.overview_start", "windows")
 private val confSharp = configuredValue("screenshots.sharp_windows", true)
-private val confSharpBackground = configuredValue("screenshots.sharp_background", "none")
+private val confSharpBackground = configuredValue("screenshots.sharp_background", "wallpaper")
 private val confFileName = configuredValue("screenshots.file_name", "Screenshot from {date} {time}")
 private val confFormat = configuredValue("screenshots.format", "png")
 private val confQuality = configuredValue("screenshots.quality", 92)
@@ -62,8 +62,10 @@ internal class Shots(private val wm: Layout) {
         shots.overviewKind = confOverviewStart().trim().let { name -> ShotKind.entries.firstOrNull { it.name.equals(name, true) } }
         shots.sharpWindows = confSharp()
         shots.sharpCornerRadius = confCornerRadius().toFloat()
-        shots.sharpBackground = when (val bg = confSharpBackground().trim().lowercase()) {
-            "none", "", "transparent" -> null
+        val behind = confSharpBackground().trim().lowercase()
+        shots.sharpWallpaper = behind == "wallpaper"
+        shots.sharpBackground = when (val bg = behind) {
+            "none", "", "transparent", "wallpaper" -> null
             "theme" -> wm.barModel.colorsNow().island.let { dev.caulis.render.Color(it.red, it.green, it.blue, 1f) }
             else -> runCatching { dev.caulis.render.Color.hex(bg) }.getOrNull()
         }
@@ -83,7 +85,7 @@ internal class Shots(private val wm: Layout) {
             "Pointer: left out", "Timer: %s s", "Timer: off", "Close", "1 window", "%s windows", "Drag over windows or click them first")
         return dev.caulis.screenshot.ScreenshotStyle(
             background = of(c.island, 0.96f), text = of(c.text), dim = of(c.dim), border = of(c.edge), accent = of(c.accent),
-            onAccent = of(newm.bar.onAccent(c)), cornerRadius = 32f, labels = words.associateWith { newm.bar.tr(it) },
+            onAccent = of(newm.bar.onAccent(c)), cornerRadius = 18f, labels = words.associateWith { newm.bar.tr(it) },
         )
     }
 

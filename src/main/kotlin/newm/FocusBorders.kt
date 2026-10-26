@@ -125,6 +125,8 @@ class FocusBorders(private val wm: Layout) : Animatable {
         if (!confEnabled()) return
         // A menu of newm's has the keys (the launcher, the clipboard): no window looks chosen.
         if (wm.caulis.desktop.keyboardWidget != null) return
+        // A window being moved or resized: it is chosen plainly, no border (it lagged behind it).
+        if (wm.overlay is MoveResizeOverlay || wm.overlay is MoveResizeFloatingOverlay) return
         val down = border.at(reducer(current, 1.0))
         if (down.opacity <= 0.0 || down.box.w <= 0.0 || down.box.h <= 0.0) return
         val b = down.box

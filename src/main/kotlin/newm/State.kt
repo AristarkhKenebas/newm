@@ -134,7 +134,50 @@ class WorkspaceState(
             topBarDy, bottomBarDy, topExcluded, bottomExcluded, stateBeforeOverview, leftExcluded, rightExcluded,
         )
         res.viewStates = viewStates.mapValuesTo(LinkedHashMap()) { it.value.copy() }
+        res.unit = unit
         return res
+    }
+
+    /**
+     * How many grid tiles across one ordinary tile is: 1, then 2, 4, ... each time the grid is
+     * made finer ([refined]) — a new window gets one ordinary tile, not one of the finer ones.
+     */
+    var unit: Double = 1.0
+
+    /**
+     * The size of a new window (and of Super+S's halves) in tiles: one ordinary tile — at least
+     * half the view across (a grid made finer before [unit] was kept still gets windows of a size
+     * that can be seen).
+     */
+    fun newTile(): Double {
+        val view = sizeOrigin ?: size
+        var fromView = 1.0
+        while (fromView * 2 <= view / 2 + 1e-9) fromView *= 2
+        return maxOf(unit, fromView)
+    }
+
+    /**
+     * The grid as coarse again as it can be: while every tiled window's place and size are even,
+     * each 2 x 2 tiles become one (nothing moves on screen) — the opposite of [refined].
+     */
+    fun coarsened(): WorkspaceState {
+        fun even(x: Double) = Math.abs(x / 2 - Math.rint(x / 2)) < 1e-6
+        var r = this
+        while (r.unit >= 2.0 && r.viewStates.values.filter { it.isTiled }.all { even(it.i) && even(it.j) && even(it.w) && even(it.h) }) {
+            val c = r.copy(i = r.i / 2, j = r.j / 2, size = r.size / 2, sizeOrigin = r.sizeOrigin?.div(2))
+            c.intermediateRows.clear()
+            c.intermediateCols.clear()
+            for (v in c.viewStates.values) if (v.isTiled) {
+                v.i /= 2
+                v.j /= 2
+                v.w /= 2
+                v.h /= 2
+            }
+            c.unit = r.unit / 2
+            r = c
+        }
+        if (r !== this) log.info { "The grid made coarser again (one tile: ${r.unit} of them)" }
+        return r
     }
 
     /**
@@ -152,6 +195,7 @@ class WorkspaceState(
             v.w *= 2
             v.h *= 2
         }
+        r.unit = unit * 2
         return r
     }
 

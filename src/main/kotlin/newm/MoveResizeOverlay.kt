@@ -431,7 +431,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
                 this.i = i; this.j = j; this.w = w; this.h = h
                 scaleOrigin = null
                 moveOrigin = null
-            }.focusingView(view),
+            }.coarsened().focusingView(view),
         )
         state.validateStackIndices(view)
         return state to confAnimT()

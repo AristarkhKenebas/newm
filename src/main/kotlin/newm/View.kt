@@ -484,15 +484,17 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         minW *= size / wsState.usableWidth()
         minH *= size / wsState.usableHeight()
 
-        val w = max(ceil(minW), 1)
-        val h = max(ceil(minH), 1)
-
         val referenceState = when {
             state.allInOverview() -> state.withOverviewSet(false)
             wsState.isInOverview() -> state.withOverviewSet(false, onlyWorkspace = ws)
             else -> state.copy()
         }
         val referenceWsState = forFirstWindow(referenceState.workspaceState(ws))
+
+        // One ordinary tile (on a grid made finer: as many of the finer ones), or more if the program needs it.
+        val tile = pyRound(referenceWsState.newTile()).coerceAtLeast(1)
+        val w = max(ceil(minW), tile)
+        val h = max(ceil(minH), tile)
 
         val (i1, j1) = wm.placeInitial(ws, referenceWsState, w, h)
 
@@ -523,7 +525,8 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     // The workspace as the first window sees it: zoomed in on one tile, if it is empty.
     private fun forFirstWindow(wsState: WorkspaceState): WorkspaceState {
         if (!confFillFirst() || wsState.viewStates.values.any { it.isTiled } || wsState.isInOverview() || wsState.isFullscreen()) return wsState
-        return wsState.copy(i = 0.0, j = 0.0, size = 1.0, sizeOrigin = null)
+        // (Empty: the grid starts coarse again.)
+        return wsState.copy(i = 0.0, j = 0.0, size = 1.0, sizeOrigin = null).also { it.unit = 1.0 }
     }
 
     // --- Init and map

@@ -1089,6 +1089,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         log.trace { "Going to enter $overlay..." }
         keyProcessor.onOtherAction()
         this.overlay = overlay
+        focusBorders.damage() // (no border while a window is moved or resized)
         overlay.init()
         // What a gesture does, said while it runs (they are not known by heart at first).
         if (confGestureHints()) when (overlay) {
@@ -1120,6 +1121,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         log.trace { "Overlay destroyed" }
         queue.onOverlayDestroyed()
         overlay = null
+        focusBorders.damage()
         log.trace { "Resetting gesture" }
         resetGesture()
     }
@@ -1528,36 +1530,40 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             val (fs, wsState, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to s0
             val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return@animateTo null to s0
             if (!fs.isTiled || wsState.isFullscreen()) return@animateTo null to s0
-            val fi = pyRound(fs.i)
-            val fj = pyRound(fs.j)
-            fun inRow(i: Int) = wsState.viewStates.entries.firstOrNull { (h, v) -> h != view.handle && v.isTiled && pyRound(v.i) == i && pyRound(v.j) == fj }
-            val other = inRow(fi + pyRound(fs.w)) ?: inRow(fi - 1)
+            // In ordinary tiles (on a grid made finer: as many of the finer ones).
+            val u = pyRound(wsState.newTile()).coerceAtLeast(1).toDouble()
+            fun near(a: Double, b: Double) = Math.abs(a - b) < 0.01
+            // The window right beside it in its row (its right neighbour, else its left one).
+            val row = wsState.viewStates.entries.filter { (h, v) -> h != view.handle && v.isTiled && near(v.j, fs.j) }
+            val other = row.firstOrNull { near(it.value.i, fs.i + fs.w) } ?: row.firstOrNull { near(it.value.i + it.value.w, fs.i) }
             if (other == null) {
                 caulis.notify("Open a second window first: Logo+S puts it beside this one.", title = "newm")
                 return@animateTo null to s0
             }
             val os = other.value
-            if (fs.h >= 2.0 && os.h >= 2.0 && fs.w == 1.0 && os.w == 1.0) {
+            if (near(fs.w, u) && near(os.w, u) && near(fs.h, 2 * u) && near(os.h, 2 * u)) {
                 // Apart again: one tile each, the focused one on the screen.
-                fs.h = 1.0
-                os.h = 1.0
-                val next = s.replacingWorkspaceState(ws) { copy(size = 1.0, i = fs.i, j = fs.j) }
+                fs.h = u
+                os.h = u
+                val next = s.replacingWorkspaceState(ws) { copy(size = u, i = fs.i, j = fs.j) }
                 next.constrain()
                 return@animateTo null to next
             }
-            // The rows below make room (moved one down), then both are two tiles tall.
+            // The rows below make room, then both are one tile wide and two tall, side by side.
+            val fj = fs.j
             for ((h, v) in wsState.viewStates) {
                 if (h == view.handle || h == other.key || !v.isTiled) continue
-                if (v.j >= fj + 1 - 0.01) v.j += 1.0
+                if (v.j >= fj + minOf(fs.h, os.h) - 0.01) v.j += 2 * u - minOf(fs.h, os.h)
             }
-            fs.w = 1.0
-            fs.h = 2.0
-            os.w = 1.0
-            os.h = 2.0
-            os.j = fj.toDouble()
-            val left = minOf(fi, pyRound(os.i)).toDouble()
-            val next = s.replacingWorkspaceState(ws) { copy(size = 2.0, i = left, j = fj.toDouble()) }
-            log.info { "Side by side: ${view.appId} and ${views[other.key]?.appId}" }
+            val left = minOf(fs.i, os.i)
+            fs.w = u
+            fs.h = 2 * u
+            os.w = u
+            os.h = 2 * u
+            os.j = fj
+            if (fs.i < os.i) os.i = fs.i + u else fs.i = os.i + u
+            val next = s.replacingWorkspaceState(ws) { copy(size = 2 * u, i = left, j = fj) }
+            log.info { "Side by side: ${view.appId} and ${views[other.key]?.appId} (a tile: $u)" }
             null to next.constrain()
         }, confAnimT())
     }
@@ -1791,7 +1797,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 val next = wsState.replacingViewState(view) { this.i = i; this.j = j; this.w = w; this.h = h }
                 if (confResizePushes()) makeRoom(next, view.handle, vs, i, j, w, h)
                 s.validateStackIndices(view)
-                null to s.settingWorkspaceState(ws, next.focusingView(view))
+                null to s.settingWorkspaceState(ws, next.coarsened().focusingView(view))
             } catch (e: Exception) {
                 log.warn("The window could not be resized: $e")
                 null to s

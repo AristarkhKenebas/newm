@@ -283,7 +283,7 @@ screenshots {
     selection = "adjust"            // область: "adjust" (потом двигать и тянуть) или "new" (каждый раз новая)
     overviewStart = "windows"       // в обзоре: "windows" (несколько окон целиком), "region", ... или "" (последний)
     sharpWindows = true             // часть обзора собирается из окон — чётко
-    sharpBackground = "none"        // фон под ними: "none" (прозрачный), "#RRGGBB", "theme"
+    sharpBackground = "wallpaper"   // фон под ними: "wallpaper" (обои), "none" (прозрачный), "#RRGGBB", "theme"
     fileName = "Screenshot from {date} {time}"   // {date}, {time}, {kind}
     format = "png"; quality = 92    // или "jpg" (качество 10..100)
     then = "satty --filename {file}"            // команда для каждого файла (редактор)

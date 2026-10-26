@@ -50,7 +50,7 @@ internal class SessionKeeper(private val wm: Layout) {
                 "focused" to view.isFocused(),
             )
         }
-        val views = wm.workspaces.map { ws -> wm.state.workspaceState(ws).let { mapOf("i" to it.i, "j" to it.j, "size" to it.size) } }
+        val views = wm.workspaces.map { ws -> wm.state.workspaceState(ws).let { mapOf("i" to it.i, "j" to it.j, "size" to it.size, "unit" to it.unit) } }
         try {
             Files.createDirectories(file.parent)
             Files.writeString(file, Json.write(mapOf("saved" to System.currentTimeMillis(), "windows" to windows, "views" to views)))
@@ -130,7 +130,8 @@ internal class SessionKeeper(private val wm: Layout) {
                 val i = (v["i"] as? Number)?.toDouble() ?: continue
                 val j = (v["j"] as? Number)?.toDouble() ?: continue
                 val size = (v["size"] as? Number)?.toDouble() ?: continue
-                next = next.replacingWorkspaceState(ws) { copy(i = i, j = j, size = size) }
+                val unit = (v["unit"] as? Number)?.toDouble()
+                next = next.replacingWorkspaceState(ws) { copy(i = i, j = j, size = size).also { c -> unit?.let { c.unit = it } } }
             }
             null to next
         }, 0.3)

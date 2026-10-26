@@ -280,7 +280,7 @@ screenshots {
     selection = "adjust"            // a part: "adjust" (drag and resize it after) or "new" (each drag a new one)
     overviewStart = "windows"       // over the overview: "windows" (several, whole), "region", ... or "" (the last used)
     sharpWindows = true             // a part of the overview: put together from the windows, sharp
-    sharpBackground = "none"        // behind them: "none" (see-through), "#RRGGBB", "theme"
+    sharpBackground = "wallpaper"   // behind them: "wallpaper", "none" (see-through), "#RRGGBB", "theme"
     fileName = "Screenshot from {date} {time}"   // {date}, {time}, {kind}
     format = "png"; quality = 92    // or "jpg" (quality 10..100)
     then = "satty --filename {file}"            // a command with each file (an editor)
