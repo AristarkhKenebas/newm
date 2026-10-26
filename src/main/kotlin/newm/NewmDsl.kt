@@ -111,6 +111,12 @@ class NewmConfig(
     /** What shows on the screen by itself (a card when Wi-Fi, a cable or Bluetooth comes or goes). */
     fun osd(configure: OsdSection.() -> Unit) = section("osd", ::OsdSection, configure)
 
+    /** The overview (Super alone): clicks there. */
+    fun overview(configure: OverviewSection.() -> Unit) = section("overview", ::OverviewSection, configure)
+
+    /** The mouse with Super: moving and resizing windows. */
+    fun mouse(configure: MouseSection.() -> Unit) = section("mouse", ::MouseSection, configure)
+
     /** The clipboard's history (its key: toggleClipboard() in keys { }). */
     fun clipboard(configure: ClipboardSection.() -> Unit) = section("clipboard", ::ClipboardSection, configure)
 
@@ -476,6 +482,24 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
 
     /** A command run with each file saved, {file} being it (an editor: "satty --filename {file}"). */
     var then by setting<String>("then")
+}
+
+/** overview { }: the windows seen from afar (Super alone). */
+class OverviewSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** The windows take clicks there (false, the default: they are only looked at). */
+    var input by setting<Boolean>("input")
+
+    /** A click on a window chooses it: the overview ends there, the window focused (true). */
+    var choose by setting<Boolean>("choose")
+}
+
+/** mouse { }: the mouse with Super. */
+class MouseSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /**
+     * "button" (the default, as Hyprland): Super + left drag moves a window, Super + right
+     * drag resizes it. "motion": Super and the mouse moved alone move it (as newm had it).
+     */
+    var superMove by setting<String>("super_move")
 }
 
 /** osd { }: what shows on the screen by itself. */

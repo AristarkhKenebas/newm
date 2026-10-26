@@ -74,7 +74,8 @@ private val GESTURES = listOf(
     "3 fingers" to "Move over the wall",
     "4 fingers up / down" to "Zoom out / in",
     "5 fingers" to "Launcher",
-    "Super + 1 finger" to "Move the window",
+    "Super + left drag" to "Move the window",
+    "Super + right drag" to "Resize the window",
     "Super + 2 fingers" to "Resize the window",
 )
 

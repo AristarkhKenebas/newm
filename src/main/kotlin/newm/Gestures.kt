@@ -70,6 +70,7 @@ abstract class GestureProvider(protected val onGesture: (NewmGesture) -> Boolean
     open fun onTouchpad(gesture: dev.caulis.core.input.Gesture): Int = 0
     open fun onMotion(timeMillis: Int, dx: Double, dy: Double): Int = 0
     open fun onAxis(timeMillis: Int, vertical: Boolean, delta: Double): Int = 0
+    open fun onButton(timeMillis: Int, button: Int, pressed: Boolean): Int = 0
 
     /** A running gesture nobody took is forgotten, so a new one can start. */
     open fun resetGesture() {}
@@ -79,21 +80,34 @@ abstract class GestureProvider(protected val onGesture: (NewmGesture) -> Boolean
 
 private val confScale = configuredValue("gestures.c.scale_px", 800.0)
 
+// mouse { superMove = "button" (Super+left drag moves, Super+right drag resizes) | "motion" (Super and a move alone moves, as newm) }
+private val confSuperMove = configuredValue("mouse.super_move", "button")
+
 /**
  * newm's CGestureProvider (gestures/provider/c_gestures.py): the touchpad's swipes as the
  * compositor gets them from libinput (pywm there, Caulis here), the pointer's movement as
  * "move-1" and two-finger scrolling as "swipe-2". A gesture of the last two ends when nothing
  * came for a quarter of a second.
  */
-class CGestureProvider(onGesture: (NewmGesture) -> Boolean, private val every: (Long, () -> Unit) -> AutoCloseable) : GestureProvider(onGesture) {
+class CGestureProvider(
+    onGesture: (NewmGesture) -> Boolean,
+    private val every: (Long, () -> Unit) -> AutoCloseable,
+    /** For a drag with a button: the pixels a gesture's 1 is (the window then follows the pointer one to one). */
+    private val dragScale: () -> Double = { confScale() },
+) : GestureProvider(onGesture) {
     private var captured: NewmGesture? = null
     private var reference = 0.0 to 0.0
     private var d2s = 0.0
     private var active: Boolean? = null
     private var ticker: AutoCloseable? = null
 
+    // The mouse button a gesture is held with (Super+left: moving, Super+right: resizing), or null.
+    private var heldButton: Int? = null
+
     override fun start() {
         ticker = every(250) {
+            // (Held with a button: it ends when the button is let go, not when the mouse rests.)
+            if (heldButton != null) return@every
             when (active) {
                 true -> active = false
                 false -> finish()
@@ -121,8 +135,9 @@ class CGestureProvider(onGesture: (NewmGesture) -> Boolean, private val every: (
 
     private fun update(dx0: Double, dy0: Double): Int {
         val c = captured ?: return 0
-        val dx = dx0 / confScale()
-        val dy = dy0 / confScale()
+        val scale = if (heldButton != null) dragScale() else confScale()
+        val dx = dx0 / scale
+        val dy = dy0 / scale
         reference = reference.first + dx to reference.second + dy
         d2s += dx * dx + dy * dy
         c.update(mapOf("delta_x" to reference.first, "delta_y" to reference.second, "delta2_s" to d2s))
@@ -144,9 +159,29 @@ class CGestureProvider(onGesture: (NewmGesture) -> Boolean, private val every: (
     }
 
     override fun onMotion(timeMillis: Int, dx: Double, dy: Double): Int {
-        start(1)
+        // By default a window moves with a button held (as Hyprland's Super+drag), not with
+        // Super and the mouse alone: that moved windows by surprise.
+        if (confSuperMove() != "motion" && heldButton == null) return 0
+        if (heldButton == null) start(1)
         active = true
         return update(dx, dy)
+    }
+
+    override fun onButton(timeMillis: Int, button: Int, pressed: Boolean): Int {
+        if (confSuperMove() == "motion") return 0
+        if (pressed) {
+            if (captured != null || button != BTN_LEFT && button != BTN_RIGHT) return 0
+            // Left: moving ("move-1"); right: resizing ("swipe-2", as two fingers do). Taken
+            // only when the layout wants it (Super held): else the program gets the click.
+            if (start(if (button == BTN_LEFT) 1 else 2) != 2) return 0
+            heldButton = button
+            active = true
+            return 2
+        }
+        if (button != heldButton) return 0
+        heldButton = null
+        finish()
+        return 2
     }
 
     override fun onAxis(timeMillis: Int, vertical: Boolean, delta: Double): Int {
@@ -158,5 +193,10 @@ class CGestureProvider(onGesture: (NewmGesture) -> Boolean, private val every: (
 
     override fun resetGesture() {
         if (captured == null) log.trace { "Gesture reset" }
+    }
+
+    private companion object {
+        const val BTN_LEFT = 272
+        const val BTN_RIGHT = 273
     }
 }

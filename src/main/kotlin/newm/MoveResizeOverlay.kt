@@ -10,6 +10,9 @@ private val confResizeGridOvr = configuredValue("resize.grid_ovr", 0.1)
 private val confResizeGridM = configuredValue("resize.grid_m", 3.0)
 private val confHyst = configuredValue("resize.hyst", 0.2)
 private val confGestureFactor = configuredValue("move_resize.gesture_factor", 2.0)
+
+/** How far a gesture's 1 moves a window (in tiles, times the view's size). */
+internal fun moveResizeFactor(): Double = confGestureFactor()
 private val confAnimT = configuredValue("anim_time", .3)
 internal val confLpFreq = configuredValue("gestures.lp_freq", 60.0)
 internal val confLpInertia = configuredValue("gestures.lp_inertia", .8)

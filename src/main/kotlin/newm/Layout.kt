@@ -53,6 +53,9 @@ private val confEnableUnlockCommand = configuredValue("enable_unlock_command", t
 private val confGestureBindingSwipeToZoom = configuredValue<List<String?>>("gesture_bindings.swipe_to_zoom", listOf(null, "swipe-4"))
 private val confGestureBindingSwipe = configuredValue<List<String?>>("gesture_bindings.swipe", listOf(null, "swipe-3"))
 private val confResizePushes = configuredValue("view.resize_pushes", true)
+// overview { input = false: windows take no clicks there; choose = true: a click chooses one (and leaves) }
+private val confOverviewInput = configuredValue("overview.input", false)
+private val confOverviewChoose = configuredValue("overview.choose", true)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
 private val confGestureBindingLauncher = configuredValue<List<String?>>("gesture_bindings.launcher", listOf(null, "swipe-5"))
 
@@ -484,7 +487,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (clip?.let { it.width <= 0 || it.height <= 0 } == true) return null
         return WindowPlace(
             b.x, b.y, b.w, b.h, alpha = alpha.toFloat(), cornerRadius = down.cornerRadius.toFloat(), clip = clip,
-            z = down.zIndex, takesInput = down.acceptsInput && lockHidden == 0.0,
+            z = down.zIndex, takesInput = down.acceptsInput && lockHidden == 0.0 && (confOverviewInput() || !overviewShown()),
         )
     }
 
@@ -597,7 +600,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         gestureProviders.forEach(GestureProvider::stop)
         val dbusProvider = if (confEnableDBusGestures()) DBusGestureProvider(::gestureProviderCallback) else null
         dbusEndpoint.gestureProvider = dbusProvider
-        gestureProviders = listOfNotNull(if (confEnableCGestures()) CGestureProvider(::gestureProviderCallback, ::every) else null, dbusProvider)
+        gestureProviders = listOfNotNull(if (confEnableCGestures()) CGestureProvider(::gestureProviderCallback, ::every) { moveResizeFactor() * (activeMonitor() ?: caulis.desktop.monitors.firstOrNull())?.area?.width?.toDouble().let { it ?: 1920.0 } } else null, dbusProvider)
         gestureProviders.forEach(GestureProvider::start)
 
         if (reconfigure) views.values.forEach(View::update)
@@ -890,8 +893,38 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         return false
     }
 
+    /** The active workspace is seen from afar (the overview). */
+    fun overviewShown(): Boolean = runCatching { state.workspaceState(activeWorkspace()).isInOverview() }.getOrDefault(false)
+
+    // In the overview a click on a window chooses it: the overview ends there (newm let it
+    // click inside the window, small as it is). overview { choose = false }: not.
+    private fun chooseInOverview(button: Int, pressed: Boolean): Boolean {
+        if (confOverviewInput() || !overviewShown() || overlay != null) return false
+        if (button != 272) return true // (no other button inside the windows either)
+        if (pressed) return true
+        if (!confOverviewChoose()) return true
+        val d = caulis.desktop
+        val view = views.values.lastOrNull { v ->
+            d.drawnNow(v.window) && d.shownRect(v.window)?.let { r -> d.pointerX >= r.x && d.pointerX < r.right && d.pointerY >= r.y && d.pointerY < r.bottom } == true
+        } ?: return true
+        log.info { "Chosen in the overview: $view" }
+        animateTo({ s ->
+            view.focus()
+            null to s.withOverviewSet(false, activeWorkspace(), view)
+        }, confAnimT())
+        return true
+    }
+
     fun onButton(timeMillis: Int, button: Int, pressed: Boolean): Boolean {
         if (isLocked()) return false
+        // A click while Super is held: no "Super alone" (the overview) when it is let go.
+        if (pressed) keyProcessor.onOtherAction()
+        for (g in gestureProviders) {
+            val res = g.onButton(timeMillis, button, pressed)
+            if (res == 2) return true
+            if (res == 1) break
+        }
+        if (overlay == null && chooseInOverview(button, pressed)) return true
         overlay?.takeIf { it.ready }?.let { return it.onButton(timeMillis, button, pressed) }
         return false
     }
@@ -938,7 +971,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val moveResize = confGestureBindingMoveResize()
         if (hasModifier(moveResize[0]) && (gesture.kind == moveResize[1] || gesture.kind == moveResize[2])) {
             log.trace { "...MoveResize" }
-            val view = findFocusedView()
+            // The window under the pointer (as Hyprland's Super+drag), focused; else the focused one.
+            val view = caulis.desktop.let { d -> d.windowAt(d.pointerX, d.pointerY) }?.let(::viewOf)?.also { if (!it.isFocused()) it.focus() } ?: findFocusedView()
             if (view != null && view.isFloat(state)) return enter(MoveResizeFloatingOverlay(this, view))
             if (view != null && view.isTiled(state)) return enter(MoveResizeOverlay(this, view))
         }
@@ -1288,6 +1322,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val y = w.getOrNull(1)?.toDoubleOrNull() ?: return "x y [left|right|middle|scroll n]"
         when (w.getOrNull(2)) {
             null -> caulis.simulatePointer(x, y)
+            // (As a mouse moves: by steps, through onPointerMotion.)
+            "move" -> caulis.desktop.let { d -> caulis.simulateMotion(x - d.pointerX, y - d.pointerY) }
             "scroll" -> {
                 caulis.simulatePointer(x, y)
                 caulis.simulateScroll(w.getOrNull(3)?.toIntOrNull() ?: 1)

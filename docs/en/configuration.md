@@ -311,3 +311,23 @@ The bar's grid button (before the power button) opens quick actions: the screen'
 brightness, caffeine (its arrow: for how long), a screenshot, the clipboard's history, the
 light or dark scheme, the colours and the keys. The wheel over it changes the brightness.
 `bar { quickButton = false }` takes it away; put "quick" into a list to place it yourself.
+
+### Moving windows with the mouse, the overview
+
+Super + left drag moves the window under the pointer, Super + right drag resizes it (as in
+Hyprland); on a touchpad Super and two fingers resize too. Super and the mouse moved alone do
+nothing any more:
+
+```kotlin
+mouse { superMove = "button" }   // "motion": Super and the mouse alone move it, as newm had it
+```
+
+In the overview (Super alone) the windows take no clicks: a click chooses one and the
+overview ends there.
+
+```kotlin
+overview {
+    input = false     // true: the windows take clicks there, as newm had it
+    choose = true     // a click chooses a window
+}
+```

@@ -197,6 +197,8 @@ private val RU: Map<String, String> = mapOf(
     "4 fingers up / down" to "4 пальца вверх / вниз",
     "5 fingers" to "5 пальцев",
     "Super + 1 finger" to "Super + 1 палец",
+    "Super + left drag" to "Super + тянуть ЛКМ",
+    "Super + right drag" to "Super + тянуть ПКМ",
     "Super + 2 fingers" to "Super + 2 пальца",
     "↑ ↓ choose   ·   Enter start   ·   Esc close" to "↑ ↓ выбрать   ·   Enter запустить   ·   Esc закрыть",
     "Any key closes this" to "Любая клавиша закрывает",
