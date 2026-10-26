@@ -149,7 +149,16 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
     private var closed = false
 
     init {
-        val found = layout.state.findViewOrNull(view)
+        // Already as small as a tile lets it be (the first window, filling the screen): the grid
+        // is made finer first (nothing moves on screen), so it can be dragged smaller.
+        var found = layout.state.findViewOrNull(view)
+        found?.let { (vs0, ws0, handle) ->
+            val (mw, mh) = view.minTiles(ws0)
+            if ((vs0.w <= mw || vs0.h <= mh) && ws0.size * 2 <= MAX_GRID && !ws0.isFullscreen() && !ws0.isInOverview()) {
+                layout.update(layout.state.settingWorkspaceState(layout.workspaces.first { it.handle == handle }, ws0.refined()))
+                found = layout.state.findViewOrNull(view)
+            }
+        }
         if (found != null) {
             val (vs, ws, wsHandle) = found
             wsState = ws

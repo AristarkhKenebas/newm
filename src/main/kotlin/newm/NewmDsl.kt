@@ -244,6 +244,9 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
     /** How opaque windows without the focus are (1.0: as they are; 0.85: a little see-through). */
     var unfocusedOpacity by setting<Double>("unfocused_opacity")
 
+    /** A window being resized is drawn at its own size, not stretched: no flicker when its new picture comes (true). */
+    var crispResize by setting<Boolean>("crisp_resize")
+
     /** A window made wider or taller pushes its neighbours aside instead of stacking on them (default true). */
     var resizePushes by setting<Boolean>("resize_pushes")
 

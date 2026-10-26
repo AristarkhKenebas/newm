@@ -331,3 +331,13 @@ overview {
     choose = true     // a click chooses a window
 }
 ```
+
+### Making windows smaller, crisp resizing
+
+A window as small as a tile lets it be — the first one fills the screen as one tile — can
+still be made narrower or shorter (Super+Ctrl+H/K, Super+right drag): the grid is made finer
+first (each tile 2 x 2, nothing moves on screen). A window is never made smaller than its
+program can be (Spotify: 800 x 600).
+
+While a window is resized it is drawn at its own size, not stretched, so it does not flicker
+when its new picture comes. `view { crispResize = false }` stretches it, as newm did.

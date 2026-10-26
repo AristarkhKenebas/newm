@@ -33,6 +33,12 @@ data class ViewDown(
     var size: Pair<Int, Int> = -1 to -1,
     var logicalBox: Box = box,
     var isFullscreen: Boolean = false,
+    /**
+     * Being resized (the size asked changes, the zoom does not): desktop units per pixel of the
+     * program's picture, which is then drawn at its own size from the place's top left and cut
+     * to it (not stretched: stretched, it jumped when the new picture came — a flicker). 0: not.
+     */
+    var resizeScale: Double = 0.0,
 )
 
 /** The layout's own downstream state: how far the lock screen and the launcher are in (0..1). */
@@ -44,6 +50,9 @@ fun interface Interpolation<T> {
 }
 
 private val confSizeAdjustment = configuredValue("interpolation.size_adjustment", .5)
+
+// view { crispResize = true }: a window being resized drawn at its own size, not stretched (false: as newm).
+private val confCrispResize = configuredValue("view.crisp_resize", true)
 
 class LayoutDownInterpolation(state0: LayoutDown, state1: LayoutDown) : Interpolation<LayoutDown> {
     private val lock = state0.lockPerc to state1.lockPerc
@@ -73,6 +82,7 @@ class ViewDownInterpolation(layout: Layout, state0: ViewDown, state1: ViewDown) 
     private val workspace: Box?
     private var anim = true
     private var sizeAdjustment: Double
+    private var resizeScale = 0.0
 
     init {
         val w0 = state0.workspace
@@ -115,6 +125,17 @@ class ViewDownInterpolation(layout: Layout, state0: ViewDown, state1: ViewDown) 
         fun outside(b: Box, ws: Box) = (b.x + b.w - 1.0 < ws.x) || (b.y + b.h - 1.0 < ws.y) || (ws.x + ws.w - 1.0 < b.x) || (ws.y + ws.h - 1.0 < b.y)
         if (w0 != null && outside(state0.box, w0)) sizeAdjustment = 0.0
         if (w1 != null && outside(state1.box, w1)) sizeAdjustment = 0.99
+        // Resized, not zoomed (the same units per pixel before and after): the program is asked
+        // for its new size at once and drawn unstretched while its place glides (see resizeScale).
+        val (a0, a1) = size
+        if (confCrispResize() && a0.first > 0 && a0.second > 0 && a1.first > 0 && a1.second > 0 && a0 != a1 && state1.box.w > 0 && state0.box.w > 0) {
+            val k0 = state0.box.w / a0.first
+            val k1 = state1.box.w / a1.first
+            if (Math.abs(k0 - k1) < 0.02 * k1) {
+                sizeAdjustment = -1.0
+                resizeScale = k1
+            }
+        }
     }
 
     override fun get(at: Double): ViewDown {
@@ -133,6 +154,7 @@ class ViewDownInterpolation(layout: Layout, state0: ViewDown, state1: ViewDown) 
             res.workspace = workspace
             res.fixedOutput = if (t > sizeAdjustment) fixedOutput.second else fixedOutput.first
             res.logicalBox = res.box
+            if (t < 1.0) res.resizeScale = resizeScale
         }
     }
 }

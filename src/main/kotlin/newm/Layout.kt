@@ -53,6 +53,9 @@ private val confEnableUnlockCommand = configuredValue("enable_unlock_command", t
 private val confGestureBindingSwipeToZoom = configuredValue<List<String?>>("gesture_bindings.swipe_to_zoom", listOf(null, "swipe-4"))
 private val confGestureBindingSwipe = configuredValue<List<String?>>("gesture_bindings.swipe", listOf(null, "swipe-3"))
 private val confResizePushes = configuredValue("view.resize_pushes", true)
+
+// The finest grid made by making windows smaller (tiles across the view).
+internal const val MAX_GRID = 8.0
 // overview { input = false: windows take no clicks there; choose = true: a click chooses one (and leaves) }
 private val confOverviewInput = configuredValue("overview.input", false)
 private val confOverviewChoose = configuredValue("overview.choose", true)
@@ -398,7 +401,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } else if (previous != null && previous.size != up.size && up.size != requestedSize[window]) {
                 view.onResized(up.size.first, up.size.second, clientLeading = true)
             }
-            return placeOf(down, up.size.takeIf { !animating && !view.animating })
+            return placeOf(down, up.size, steady = !animating && !view.animating)
         }
 
         override fun decorate(window: Window, place: WindowPlace, canvas: OverlayCanvas, above: Boolean) {
@@ -444,7 +447,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // A view's downstream state as Caulis places windows: its box, the part shown (the mask,
     // within its workspace), how strongly, in which order, and whether it takes input.
-    private fun placeOf(down: ViewDown, drawn: Pair<Int, Int>? = null): WindowPlace? {
+    private fun placeOf(down: ViewDown, drawn: Pair<Int, Int>? = null, steady: Boolean = true): WindowPlace? {
         var b = down.box
         if (b.w <= 0.0 || b.h <= 0.0) return null
         // The program drew another size than asked (a smallest size of its own, as Spotify's):
@@ -454,7 +457,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val tileBox = b
         val asked = down.size
         var cut = false
-        if (drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked) {
+        // Being resized: its picture at its own size from the top left, cut to the gliding place.
+        if (down.resizeScale > 0.0 && drawn != null && drawn.first > 0 && drawn.second > 0) {
+            b = Box(b.x, b.y, drawn.first * down.resizeScale, drawn.second * down.resizeScale)
+            cut = true
+        } else if (steady && drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked) {
             val sx = b.w / asked.first
             val sy = b.h / asked.second
             var w = drawn.first * sx
@@ -1730,29 +1737,34 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         animateTo({ s ->
             val view = findFocusedView() ?: return@animateTo null to s
             try {
-                val vs = s.viewState(view)
-                var i = vs.i
-                var j = vs.j
-                // (Never smaller than the program can be.)
-                val (minW, minH) = view.minTiles(s.workspaceState(workspaces.first { it.handle == s.findView(view).third }))
-                var w = (vs.w + di).let { if (di < 0) maxOf(it, minW) else it }
-                var h = (vs.h + dj).let { if (dj < 0) maxOf(it, minH) else it }
-                if (w == vs.w && h == vs.h && (di < 0 || dj < 0)) return@animateTo null to s
-                if (w == 0.0) {
-                    w = 2.0
-                    i -= 1
-                }
-                if (h == 0.0) {
-                    h = 2.0
-                    j -= 1
-                }
-                val (_, wsState, wsHandle) = s.findView(view)
+                val (_, found, wsHandle) = s.findView(view)
                 val ws = workspaces.first { it.handle == wsHandle }
+                var wsState = found
+                var vs = wsState.views[view.handle] ?: return@animateTo null to s
+                // (Never smaller than the program can be.)
+                var (minW, minH) = view.minTiles(wsState)
+                // Smaller than one tile (the first window fills the screen as one): the grid is
+                // made finer first — each tile 2 x 2, nothing moves on screen — and then it shrinks
+                // by one of the finer tiles (to half the screen across, the whole height kept).
+                if ((di < 0 && vs.w + di < minW || dj < 0 && vs.h + dj < minH) && wsState.size * 2 <= MAX_GRID &&
+                    !wsState.isFullscreen() && !wsState.isInOverview()
+                ) {
+                    wsState = wsState.refined()
+                    vs = wsState.views[view.handle] ?: return@animateTo null to s
+                    view.minTiles(wsState).let { (mw, mh) -> minW = mw; minH = mh }
+                    log.info { "The grid made finer (${wsState.size / 2} → ${wsState.size} tiles across) to make $view smaller" }
+                }
+                val i = vs.i
+                val j = vs.j
+                val w = (vs.w + di).let { if (di < 0) maxOf(it, minW) else it }
+                val h = (vs.h + dj).let { if (dj < 0) maxOf(it, minH) else it }
+                if (w == vs.w && h == vs.h && (di < 0 || dj < 0)) return@animateTo null to s
                 val next = wsState.replacingViewState(view) { this.i = i; this.j = j; this.w = w; this.h = h }
                 if (confResizePushes()) makeRoom(next, view.handle, vs, i, j, w, h)
                 s.validateStackIndices(view)
                 null to s.settingWorkspaceState(ws, next.focusingView(view))
             } catch (e: Exception) {
+                log.warn("The window could not be resized: $e")
                 null to s
             }
         }, confAnimT())

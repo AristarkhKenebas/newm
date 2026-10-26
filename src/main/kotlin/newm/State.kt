@@ -137,6 +137,24 @@ class WorkspaceState(
         return res
     }
 
+    /**
+     * The same picture on a grid twice as fine: every tile split into 2 x 2, the view and the
+     * tiled windows' places doubled with it — nothing moves on screen, but a window of one
+     * tile can then be made smaller.
+     */
+    fun refined(): WorkspaceState {
+        val r = copy(i = i * 2, j = j * 2, size = size * 2, sizeOrigin = sizeOrigin?.times(2))
+        r.intermediateRows.clear()
+        r.intermediateCols.clear()
+        for (v in r.viewStates.values) if (v.isTiled) {
+            v.i *= 2
+            v.j *= 2
+            v.w *= 2
+            v.h *= 2
+        }
+        return r
+    }
+
     fun replacingViewState(view: View, change: ViewState.() -> Unit): WorkspaceState {
         val res = copy()
         res.updateViewState(view, change)
