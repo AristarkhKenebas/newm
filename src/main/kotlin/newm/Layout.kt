@@ -1236,6 +1236,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 arg?.trim()?.takeIf { it.isNotEmpty() }?.let(::scratchpad)
                 null
             }
+            // full-redraw [on | off]: every frame drawn whole (to find out whether a flicker
+            // comes from drawing only what changed).
+            "full-redraw" -> desktopOrNull()?.let { d ->
+                d.fullRedraw = when (arg?.trim()) { "on" -> true; "off" -> false; else -> !d.fullRedraw }
+                if (d.fullRedraw) "on" else "off"
+            }
             "caffeine" -> {
                 // caffeine [minutes | on | off]
                 when (val a = arg?.trim()?.ifEmpty { null }) {

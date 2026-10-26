@@ -348,3 +348,7 @@ when its new picture comes. `view { crispResize = false }` stretches it, as newm
 again afterwards: each program starts again (a terminal in the folder its shell was in) and its
 window goes back to its place. What can be kept is a program's command line; what a program
 had open inside it (tabs, files) is its own to bring back.
+
+If windows flicker, `newm cmd full-redraw on` draws every frame whole (a little slower) and
+`newm cmd full-redraw off` goes back. If the flicker is gone while it is on, say so in a bug
+report: it comes from drawing only what changed.
