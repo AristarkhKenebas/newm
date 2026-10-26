@@ -87,11 +87,11 @@ private fun PopupContent(model: BarModel, popup: Popup) {
     Box(
         Modifier.fillMaxSize()
             .padding(POPUP_SHADOW.dp)
+            .softShadow(14.dp, 10.dp, shown = { appear.value })
             .graphicsLayer {
                 alpha = appear.value
                 translationY = (1 - appear.value) * (if (popup.bar.top) -6f else 6f) * density
             }
-            .softShadow(14.dp, 10.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
             .padding(if (popup.kind == PopupKind.TOOLTIP) 9.dp else 12.dp),
@@ -103,6 +103,7 @@ private fun PopupContent(model: BarModel, popup: Popup) {
             PopupKind.BLUETOOTH -> BluetoothPopup(model, popup, colors, text)
             PopupKind.BATTERY -> BatteryAndPowerPopup(model, colors, text)
             PopupKind.POWER -> PowerPopup(model, popup, colors, text)
+            PopupKind.COLORS -> ColorsPopup(model, colors, text)
             PopupKind.TRAY_MENU -> TrayMenu(model, popup, colors, text)
             PopupKind.TOOLTIP -> BasicText(popup.text, style = text.copy(fontSize = 12.sp))
         }
@@ -138,7 +139,7 @@ private fun MenuRow(colors: BarColors, enabled: Boolean = true, onClick: () -> U
 private fun Calendar(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val today = model.now.toLocalDate()
     val month = today.withDayOfMonth(1).plusMonths(popup.monthOffset.toLong())
-    val locale = Locale.getDefault()
+    val locale = if (language() == "ru") Locale.forLanguageTag("ru") else Locale.getDefault()
     val firstDay = WeekFields.of(locale).firstDayOfWeek
     Column {
         androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().height(30.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -258,7 +259,7 @@ internal fun setBrightness(model: BarModel, level: Float) {
     }, "newm-brightness").apply { isDaemon = true }.start()
 }
 
-private fun runQuietly(vararg command: String): Boolean = try {
+internal fun runQuietly(vararg command: String): Boolean = try {
     val p = ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
     p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0
 } catch (_: Exception) {
@@ -283,11 +284,16 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
         Triple("logout", Glyph.LOGOUT, "Log out"),
         Triple("reboot", Glyph.RESTART, "Restart"),
         Triple("poweroff", Glyph.POWER, "Shut down"),
+        Triple("colors", Glyph.BRIGHTNESS, "Colors…"),
     )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((id, glyph, label) in entries) {
             val asking = popup.confirming == id
             MenuRow(colors, onClick = {
+                if (id == "colors") {
+                    model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX)
+                    return@MenuRow
+                }
                 val final = id == "lock" || id == "suspend" || asking
                 if (!final) {
                     popup.confirming = id
@@ -306,7 +312,7 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
                 androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                     GlyphIcon(glyph, if (asking) colors.danger else colors.text, 16.dp)
                     Spacer(Modifier.width(12.dp))
-                    BasicText(if (asking) "$label? Click again" else label, style = text.copy(color = if (asking) colors.danger else colors.text, fontWeight = if (asking) FontWeight.SemiBold else FontWeight.Normal))
+                    BasicText(if (asking) tr("%s? Click again").replace("%s", tr(label)) else tr(label), style = text.copy(color = if (asking) colors.danger else colors.text, fontWeight = if (asking) FontWeight.SemiBold else FontWeight.Normal))
                 }
             }
         }

@@ -663,7 +663,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
     // (Asked of Caulis now: the upstream state is a frame old when the focus has just changed,
     // and the border stayed on the window before.)
-    fun isFocused(): Boolean = window === wm.caulis.desktop.focusedWindow
+    fun isFocused(): Boolean = window === runCatching { wm.caulis.desktop.focusedWindow }.getOrNull()
 
     fun focus() = wm.focusWindow(window)
 

@@ -40,7 +40,7 @@ panels = {
     enabled = true,
     height = 32, margin = 6, corner_radius = 12,
     theme = "auto",                  -- "light", "dark"
-    left = { "wall", "window" },
+    left = { "window" },
     center = { "clock" },
     right = { "tray", "layout", "bluetooth", "network", "volume", "battery", "power" },
     clock = "HH:mm", date = "EEE d MMM",

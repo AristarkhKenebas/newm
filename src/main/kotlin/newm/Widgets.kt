@@ -381,7 +381,7 @@ private val confStyle = BarSetting("style", "islands")
 private val confMargin = BarSetting("margin", 6)
 private val confRadius = BarSetting("corner_radius", 12)
 private val confTheme = BarSetting("theme", "auto")
-private val confLeft = BarSetting("left", listOf("wall", "window"))
+private val confLeft = BarSetting("left", listOf("window"))
 private val confCenter = BarSetting("center", listOf("clock"))
 private val confRight = BarSetting("right", listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power"))
 private val confClock = BarSetting("clock", "HH:mm")
@@ -393,6 +393,8 @@ private val confIconSize = BarSetting("icon_size", 16)
 private val confShowPercent = BarSetting("show_percent", true)
 private val confShowPassive = BarSetting("show_passive", false)
 private val confTitleWidth = BarSetting("title_width", 360)
+private val confTrayHide = BarSetting("tray_hide", listOf("nm-applet", "blueman"))
+private val confMenuButton = BarSetting("menu_button", true)
 
 // "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
 private fun layoutLabel(name: String): String = when (val code = name.substringBefore('(').trim().lowercase()) {
@@ -440,7 +442,10 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val accentColor: String? get() = confAccentColor(top)
 
     /** The modules of each island ("wall", "window", "clock", "tray", "network", "volume", "battery", "power", "texts"). */
-    val left: List<String> get() = confLeft(top)
+    val left: List<String> get() = confLeft(top).let { left ->
+        // The menu's button (three lines) first, unless it is placed elsewhere or turned off.
+        if (confMenuButton(top) && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
+    }
     val center: List<String> get() = confCenter(top)
     val right: List<String> get() = confRight(top)
     val clockPattern: String get() = confClock(top)
@@ -449,6 +454,9 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val showPercent: Boolean get() = confShowPercent(top)
     val showPassive: Boolean get() = confShowPassive(top)
     val titleWidth: Int get() = confTitleWidth(top)
+
+    /** Tray icons not shown, by their name or title (those the bar shows itself: nm-applet's Wi-Fi, blueman's Bluetooth). */
+    val trayHide: List<String> get() = confTrayHide(top)
 
     /** The room it keeps at the edge: windows stay out of it. */
     val room: Int get() = if (islands) height + 2 * margin else height

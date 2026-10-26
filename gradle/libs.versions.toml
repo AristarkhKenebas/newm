@@ -10,6 +10,7 @@ junit = "6.1.3"
 [libraries]
 caulis-wm = { module = "io.github.aristarkhkenebas:caulis-wm", version.ref = "caulis" }
 caulis-compose = { module = "io.github.aristarkhkenebas:caulis-compose", version.ref = "caulis" }
+caulis-screenshot = { module = "io.github.aristarkhkenebas:caulis-screenshot", version.ref = "caulis" }
 kotlin-scripting-jvm-host = { module = "org.jetbrains.kotlin:kotlin-scripting-jvm-host", version.ref = "kotlin" }
 kotlin-scripting-jvm = { module = "org.jetbrains.kotlin:kotlin-scripting-jvm", version.ref = "kotlin" }
 kotlin-scripting-common = { module = "org.jetbrains.kotlin:kotlin-scripting-common", version.ref = "kotlin" }

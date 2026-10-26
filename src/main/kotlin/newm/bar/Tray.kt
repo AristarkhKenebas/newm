@@ -37,6 +37,10 @@ class TrayItem internal constructor(
 
     var title by mutableStateOf("")
         internal set
+
+    /** Its own name ("nm-applet", "blueman", "telegram"). */
+    var id by mutableStateOf("")
+        internal set
     var tooltip by mutableStateOf("")
         internal set
 
@@ -208,6 +212,7 @@ class Tray(private val caulis: Caulis) {
 
     private fun apply(item: TrayItem, props: Map<String, Any?>) {
         item.title = props["Title"] as? String ?: item.title
+        item.id = props["Id"] as? String ?: item.id
         item.status = props["Status"] as? String ?: item.status
         item.menu = (props["Menu"] as? ObjectPath)?.value?.takeIf { it != "/" }
         item.itemIsMenu = props["ItemIsMenu"] as? Boolean ?: false

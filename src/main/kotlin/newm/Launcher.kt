@@ -64,6 +64,8 @@ import dev.caulis.log.Logger
 import newm.bar.BarColors
 import newm.bar.softShadow
 import newm.bar.IconTheme
+import androidx.compose.foundation.gestures.scrollBy
+import kotlinx.coroutines.launch
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -103,8 +105,8 @@ internal object LaunchCounts {
  * Logo+D again closes it. With nothing typed: the programs you start most, then all.
  */
 @Composable
-internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
-    val colors = if (wm.caulis.colorSchemeNow == ColorScheme.DARK) BarColors.DARK else BarColors.LIGHT
+internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, closing: Boolean = false) {
+    val colors = wm.barModel.colorsNow()
     var query by remember(opened) { mutableStateOf("") }
     var selected by remember(opened) { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
@@ -113,8 +115,33 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
     val appear = remember(opened) { Animatable(0f) }
     LaunchedEffect(opened) {
         runCatching { focus.requestFocus() }
-        appear.animateTo(1f, tween(170))
+        appear.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 520f))
     }
+
+    // Closing: it fades away (newm's launcher animation is running meanwhile).
+    val gone = remember(opened) { Animatable(1f) }
+    LaunchedEffect(closing) { if (closing) gone.animateTo(0f, tween(200)) }
+
+    // The wheel and the touchpad: what they scroll is added up and the list glides after it, a
+    // frame at a time while there is something left (Compose scrolled by whole steps: jerky).
+    var scrollWanted by remember(opened) { mutableStateOf(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var gliding by remember(opened) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    fun glide(by: Float) {
+        scrollWanted += by
+        if (gliding?.isActive == true) return
+        gliding = scope.launch {
+            while (Math.abs(scrollWanted) > 0.5f) {
+                androidx.compose.runtime.withFrameNanos { }
+                val step = scrollWanted * 0.3f
+                list.scrollBy(step)
+                scrollWanted -= step
+            }
+            scrollWanted = 0f
+        }
+    }
+    // The first rows come in one after the other when it opens.
+    val introduced = remember(opened) { HashSet<Int>() }
 
     // Nothing typed: the frequent ones first (then by name); else the matches, the frequent first among equals.
     val shown = remember(apps, query) {
@@ -147,8 +174,14 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
     val shape = RoundedCornerShape(20.dp)
     Box(
         Modifier.fillMaxSize().padding(16.dp)
-            .graphicsLayer { alpha = appear.value; scaleX = 0.96f + 0.04f * appear.value; scaleY = scaleX; translationY = (1 - appear.value) * -10f * density }
-            .softShadow(20.dp, 14.dp)
+            .softShadow(20.dp, 14.dp, shown = { appear.value.coerceIn(0f, 1f) * gone.value })
+            .graphicsLayer {
+                val shown = appear.value.coerceIn(0f, 1.05f) * gone.value
+                alpha = shown.coerceIn(0f, 1f)
+                scaleX = 0.94f + 0.06f * appear.value
+                scaleY = scaleX
+                translationY = (1 - appear.value) * -16f * density
+            }
             .background(colors.island.copy(alpha = 0.97f), shape)
             .border(1.dp, colors.edge, shape),
     ) {
@@ -163,7 +196,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) BasicText("Search programs", style = text.copy(color = colors.dim, fontSize = 18.sp))
+                    if (query.isEmpty()) BasicText(newm.bar.tr("Search programs"), style = text.copy(color = colors.dim, fontSize = 18.sp))
                     BasicTextField(
                         query, { query = it; selected = 0; byKeys++ },
                         Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
@@ -184,17 +217,28 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
             }
             Spacer(Modifier.height(10.dp))
             if (shown.isEmpty()) {
-                BasicText(if (apps.isEmpty()) "Looking for programs…" else "Nothing called “$query”", style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
+                BasicText(newm.bar.tr(if (apps.isEmpty()) "Looking for programs…" else "Nothing called “$query”"), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
             }
-            LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(opened) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        if (e.type == PointerEventType.Scroll) {
+                            val dy = e.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                            glide(dy * 64.dp.toPx())
+                            e.changes.forEach { it.consume() }
+                        }
+                    }
+                }
+            }) {
                 itemsIndexed(shown, key = { _, app -> app.id.ifEmpty { app.name } }) { i, app ->
-                    if (query.isBlank() && i == 0 && frequent > 0) Label("Frequent", colors)
-                    if (query.isBlank() && i == frequent) Label("All programs", colors)
-                    AppRow(app, i == selected, colors, text, icons, wm, onHover = { selected = i }, onClick = { start(app) })
+                    if (query.isBlank() && i == 0 && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
+                    if (query.isBlank() && i == frequent) Label(newm.bar.tr("All programs"), colors)
+                    AppRow(app, i == selected, colors, text, icons, wm, intro = if (i < 9 && introduced.add(i)) i else -1, onHover = { selected = i }, onClick = { start(app) })
                 }
             }
             Spacer(Modifier.height(6.dp))
-            BasicText("↑ ↓ choose   ·   Enter start   ·   Esc close", style = text.copy(color = colors.dim, fontSize = 11.sp), modifier = Modifier.padding(start = 6.dp))
+            BasicText(newm.bar.tr("↑ ↓ choose   ·   Enter start   ·   Esc close"), style = text.copy(color = colors.dim, fontSize = 11.sp), modifier = Modifier.padding(start = 6.dp))
         }
     }
 }
@@ -206,11 +250,20 @@ private fun Label(title: String, colors: BarColors) {
 }
 
 @Composable
-private fun AppRow(app: DesktopApp, selected: Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, onHover: () -> Unit, onClick: () -> Unit) {
+private fun AppRow(app: DesktopApp, selected: Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, intro: Int, onHover: () -> Unit, onClick: () -> Unit) {
+    // The first rows come in one after another ([intro]: its place; -1: shown at once).
+    val come = remember { Animatable(if (intro >= 0) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (intro >= 0) {
+            kotlinx.coroutines.delay(40L + intro * 22L)
+            come.animateTo(1f, tween(220))
+        }
+    }
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     LaunchedEffect(hovered) { if (hovered) onHover() }
-    val bg by animateColorAsState(if (selected) colors.accent.copy(alpha = 0.18f) else Color.Transparent, tween(90))
+    // (At once: an animation here drew the whole launcher anew for frames on each row passed.)
+    val bg = if (selected) colors.accent.copy(alpha = 0.18f) else Color.Transparent
     val key = app.icon.ifEmpty { app.id }
     LaunchedEffect(key) {
         if (key.isNotEmpty() && key !in icons) {
@@ -219,7 +272,12 @@ private fun AppRow(app: DesktopApp, selected: Boolean, colors: BarColors, text: 
         }
     }
     Row(
-        Modifier.fillMaxWidth().height(52.dp).background(bg, RoundedCornerShape(12.dp)).hoverable(source)
+        Modifier.fillMaxWidth().height(52.dp)
+            .graphicsLayer {
+                alpha = come.value
+                translationY = (1 - come.value) * 10f * density
+            }
+            .background(bg, RoundedCornerShape(12.dp)).hoverable(source)
             .pointerInput(onClick) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onClick() } }
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

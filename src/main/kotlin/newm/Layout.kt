@@ -3,6 +3,8 @@ package newm
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import dev.caulis.compose.compose
+import newm.bar.hintPill
+import newm.bar.showOsd
 import newm.bar.showPopups
 import dev.caulis.core.Monitor
 import dev.caulis.core.OverlayCanvas
@@ -22,6 +24,8 @@ private val log = Logger("layout")
 private val confScreensOffAfter = configuredValue("energy.screens_off_after", 0)
 // A new window goes right of the focused one (false: newm's first free place in view).
 private val confPlaceBesideFocused = configuredValue("view.place_beside_focused", true)
+// What a gesture does, shown at the bottom while it runs.
+private val confGestureHints = configuredValue("gestures.hints", true)
 private val confLockProgram = configuredValue<String?>("panels.lock.program", null)
 private val confBackgroundPath = configuredValue<String?>("background.path", "resource:wallpaper.jpg")
 private val confSendFullscreenToViews = configuredValue("view.send_fullscreen", true)
@@ -266,13 +270,30 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private var topBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
     private var bottomBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
 
+    /** The wallpaper's most telling colour (the colours are made from it), once it was read. */
+    var wallpaperSeed: dev.caulis.render.Color? = null
+
+    /** newm's own bars now (top and bottom, every monitor). */
+    fun barsNow(): List<Bar> = topBars + bottomBars
+
     /** What newm's bars share: the tray, the computer's state, the popups (started with the first islands bar). */
-    val barModel = newm.bar.BarModel(this)
+    val barModel: newm.bar.BarModel = newm.bar.BarModel(this)
     private val corners = Corners(this)
     private var wallpaper: Pair<String?, Wallpaper?>? = null
     private val queue = LayoutQueue(this)
 
     private var idleInhibitUser = false
+
+    /** Caffeine: the screen stays on (no dimming, locking or sleeping) until then (Long.MAX_VALUE: until turned off); null: off. */
+    var caffeineUntil by androidx.compose.runtime.mutableStateOf<Long?>(null)
+        private set
+    val caffeineOn: Boolean get() = caffeineUntil?.let { it > System.currentTimeMillis() } == true
+
+    /** Caffeine for [minutes] (0: until turned off; null: off now). */
+    fun caffeine(minutes: Int?) {
+        caffeineUntil = minutes?.let { if (it <= 0) Long.MAX_VALUE else System.currentTimeMillis() + it * 60_000L }
+        log.info { if (minutes == null) "Caffeine off" else if (minutes <= 0) "Caffeine on" else "Caffeine for $minutes min" }
+    }
 
     // The workspace the cursor is on, and the one a focused view overrides it with.
     private var activeWorkspacePair: Pair<Workspace, Workspace?> = workspaces[0] to null
@@ -303,6 +324,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onMonitorAdded { onLayoutChange() }
         caulis.onMonitorRemoved { onLayoutChange() }
         caulis.onSleep { onSleep() }
+        // One lock screen: newm's (or the configuration's locker), never Caulis's swaylock as well.
+        caulis.locker { ensureLocked() }
+        caulis.lockBeforeSleep = false
         caulis.onWake { onWakeup() }
         // Idle: Caulis says when nobody is there (programs that keep the screen on hold it off),
         // newm counts the seconds and goes through energy.idle_times.
@@ -495,6 +519,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         barModel.close()
         topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh).also(Bar::look) } else emptyList()
         bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh).also(Bar::look) } else emptyList()
+        barModel.refreshPalette()
+        shots?.apply()
         // The tray and the rest only with newm's islands bar (else another bar's tray stays its own).
         if ((topBars + bottomBars).any { it.islands }) barModel.start()
 
@@ -507,9 +533,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             if (path != null) {
                 Thread({
                     val image = Wallpaper.read(path)
+                    // Its colour, for the colours made from it.
+                    val seed = image?.let { runCatching { dev.caulis.core.appearance.Palette.seedOf(it) }.getOrNull() }
                     caulis.post {
                         if (image != null && wallpaper?.first == path) {
                             wallpaper = path to Wallpaper.of(caulis.desktop.renderer, image)
+                            wallpaperSeed = seed
                             setupWidgets()
                         }
                     }
@@ -553,6 +582,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         setup(reconfigure = false)
         addWidgetDrawings({ backgrounds }, corners) { topBars + bottomBars }
         panelsUi.start()
+        clipboardHistory.start()
         // The native bars (Compose), their texts asked for every second.
         caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
             topBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
@@ -561,6 +591,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             bottomBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
         }
         barModel.showPopups()
+        barModel.showOsd()
         showKeyHelp()
         every(1000) { (topBars + bottomBars).forEach(Bar::refresh) }
         // The wall and the focused window, as the bars show them; a popup goes with its bar.
@@ -905,7 +936,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
      * screen over and over (newm issue 98).
      */
     fun onIdle(elapsed: Double, idleInhibited: Boolean) {
-        val inhibited = idleInhibited || idleInhibitUser
+        if (caffeineUntil != null && !caffeineOn) caffeine(null)
+        val inhibited = idleInhibited || idleInhibitUser || caffeineOn
         if (elapsed == 0.0 && screensOff) {
             screensOff = false
             caulis.run("dpms on")
@@ -966,6 +998,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         keyProcessor.onOtherAction()
         this.overlay = overlay
         overlay.init()
+        // What a gesture does, said while it runs (they are not known by heart at first).
+        if (confGestureHints()) when (overlay) {
+            is SwipeOverlay -> barModel.hintPill("Three fingers: moving over the wall — let go to stay")
+            is SwipeToZoomOverlay -> barModel.hintPill("Four fingers: up shows more windows, down fewer")
+            is MoveResizeOverlay, is MoveResizeFloatingOverlay -> barModel.hintPill("Moving the window — two fingers resize it")
+            else -> {}
+        }
     }
 
     fun forceCloseOverlay() {
@@ -1092,6 +1131,16 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 idleInhibitUser = true
                 null
             }
+            "caffeine" -> {
+                // caffeine [minutes | on | off]
+                when (val a = arg?.trim()?.ifEmpty { null }) {
+                    null -> caffeine(if (caffeineOn) null else 0)
+                    "off" -> caffeine(null)
+                    "on" -> caffeine(0)
+                    else -> a.toIntOrNull()?.let { caffeine(it) }
+                }
+                null
+            }
             "finish-inhibit-idle" -> {
                 idleInhibitUser = false
                 null
@@ -1105,6 +1154,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 null
             }
             "bar" -> barCommand(arg.orEmpty())
+            // `newm cmd colors [wallpaper[:style] | nord | #RRGGBB[:style] | caulis-palette:…]`: the colours, or what they are now.
+            "colors" -> {
+                val choice = arg?.trim().orEmpty()
+                if (choice.isNotEmpty()) {
+                    newm.bar.NewmColors.choose(choice)
+                    barModel.refreshPalette()
+                }
+                barModel.palette?.code ?: "nord (the classic colours)"
+            }
             // For newm's own tests only (NEWM_TEST_INPUT=1): the pointer moved, clicked, scrolled.
             "test-pointer" -> if (System.getenv("NEWM_TEST_INPUT") == "1") testPointer(arg.orEmpty()) else "Disabled"
             // "56+42" presses Alt and Shift together, then lets them go (evdev codes).
@@ -1358,6 +1416,25 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }, confAnimT())
     }
 
+    // Screenshots (made when the compositor runs).
+    private var shots: Shots? = null
+
+    private fun shotsNow(): Shots = shots ?: Shots(this).also { shots = it }.also { it.apply() }
+
+    /** A screenshot: the chooser (a part of the screen first, as Super+Shift+S on Windows). */
+    fun screenshot() = shotsNow().choose()
+
+    /** A screenshot of the screen with the pointer, at once (saved and copied). */
+    fun screenshotScreen() = shotsNow().screen()
+
+    /** A screenshot of the focused window, at once. */
+    fun screenshotWindow() = shotsNow().window()
+
+    /** The clipboard's history (Logo+V): what was copied lately, to copy again. */
+    val clipboardHistory by lazy { ClipboardHistory(this) }
+
+    fun toggleClipboard() = clipboardHistory.toggle()
+
     /** The keys' help: every key of the configuration and what it does (Logo+/). */
     var keyHelpShown by androidx.compose.runtime.mutableStateOf(false)
 
@@ -1365,8 +1442,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         keyHelpShown = !keyHelpShown
     }
 
-    /** The keys and what they do, as the configuration says (for the help). */
-    fun keyHelp(): List<Pair<String, String>> = confKeyHelp().ifEmpty { confKeyBindings()(this).map { it.first to "" } }
+    /** The keys and what they do, as the configuration says (for the help): those given words, if any are. */
+    fun keyHelp(): List<Pair<String, String>> {
+        val all = confKeyHelp().ifEmpty { confKeyBindings()(this).map { it.first to "" } }
+        // Keys with words are the help ("L-b"("Firefox") { ... }); without any (config.py), all of them.
+        val described = all.filter { it.second.isNotBlank() }
+        return described.ifEmpty { all }
+    }
 
     fun basicScale(deltaS: Int) {
         val ws = activeWorkspace()

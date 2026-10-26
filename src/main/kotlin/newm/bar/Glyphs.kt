@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** The bar's own small pictures, drawn as lines (sharp at any scale, in the bar's colours). */
-enum class Glyph { WIFI, WIFI_OFF, WIRED, SPEAKER, BATTERY, POWER, LOCK, LOGOUT, MOON, RESTART, CHEVRON_LEFT, CHEVRON_RIGHT, BRIGHTNESS, BLUETOOTH, CHECK, MIC }
+enum class Glyph { WIFI, WIFI_OFF, WIRED, SPEAKER, BATTERY, POWER, LOCK, LOGOUT, MOON, RESTART, CHEVRON_LEFT, CHEVRON_RIGHT, BRIGHTNESS, BLUETOOTH, CHECK, MIC, LEAF, BOLT, BALANCE, COFFEE, MENU }
 
 /**
  * [glyph] at [size] in [color]; [level] (0..1) fills what has a level (Wi-Fi's strength, the
@@ -168,6 +168,49 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, level: Float, slash:
                 drawLine(color, Offset(s / 2 + (inner * Math.cos(a)).toFloat(), s / 2 + (inner * Math.sin(a)).toFloat()),
                     Offset(s / 2 + (outer * Math.cos(a)).toFloat(), s / 2 + (outer * Math.sin(a)).toFloat()), w * 0.9f, StrokeCap.Round)
             }
+        }
+        Glyph.LEAF -> {
+            // A leaf: two arcs meeting at the tips, a stem through it.
+            val p = Path().apply {
+                moveTo(s * 0.2f, s * 0.8f)
+                cubicTo(s * 0.12f, s * 0.38f, s * 0.42f, s * 0.14f, s * 0.84f, s * 0.16f)
+                cubicTo(s * 0.86f, s * 0.58f, s * 0.62f, s * 0.86f, s * 0.2f, s * 0.8f)
+                close()
+            }
+            drawPath(p, color, style = line)
+            drawLine(color, Offset(s * 0.2f, s * 0.8f), Offset(s * 0.6f, s * 0.4f), w * 0.85f, StrokeCap.Round)
+        }
+        Glyph.BOLT -> {
+            val p = Path().apply {
+                moveTo(s * 0.58f, s * 0.08f); lineTo(s * 0.24f, s * 0.56f); lineTo(s * 0.48f, s * 0.56f)
+                lineTo(s * 0.42f, s * 0.92f); lineTo(s * 0.76f, s * 0.42f); lineTo(s * 0.52f, s * 0.42f); close()
+            }
+            drawPath(p, color, style = Stroke(width = w, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+        Glyph.BALANCE -> {
+            // A balance: a post, a beam, two pans.
+            drawLine(color, Offset(s / 2, s * 0.14f), Offset(s / 2, s * 0.84f), w, StrokeCap.Round)
+            drawLine(color, Offset(s * 0.32f, s * 0.84f), Offset(s * 0.68f, s * 0.84f), w, StrokeCap.Round)
+            drawLine(color, Offset(s * 0.14f, s * 0.26f), Offset(s * 0.86f, s * 0.26f), w, StrokeCap.Round)
+            for (x in listOf(0.22f, 0.78f)) {
+                val r = s * 0.14f
+                drawArc(color, 0f, 180f, false, Offset(s * x - r, s * 0.42f - r), Size(2 * r, 2 * r), style = line)
+                drawLine(color, Offset(s * x, s * 0.26f), Offset(s * x - r, s * 0.42f), w * 0.7f, StrokeCap.Round)
+                drawLine(color, Offset(s * x, s * 0.26f), Offset(s * x + r, s * 0.42f), w * 0.7f, StrokeCap.Round)
+            }
+        }
+        Glyph.COFFEE -> {
+            // A cup with a handle, steam above.
+            val p = Path().apply {
+                moveTo(s * 0.16f, s * 0.42f); lineTo(s * 0.68f, s * 0.42f); lineTo(s * 0.68f, s * 0.66f)
+                cubicTo(s * 0.68f, s * 0.84f, s * 0.16f, s * 0.84f, s * 0.16f, s * 0.66f); close()
+            }
+            drawPath(p, color, style = line)
+            drawArc(color, -90f, 180f, false, Offset(s * 0.6f, s * 0.46f), Size(s * 0.22f, s * 0.2f), style = line)
+            for (x in listOf(0.32f, 0.5f)) drawLine(color.copy(alpha = color.alpha * if (level > 0.5f) 1f else 0.6f), Offset(s * x, s * 0.14f), Offset(s * x, s * 0.3f), w * 0.85f, StrokeCap.Round)
+        }
+        Glyph.MENU -> {
+            for (y in listOf(0.28f, 0.5f, 0.72f)) drawLine(color, Offset(s * 0.18f, s * y), Offset(s * 0.82f, s * y), w * 1.1f, StrokeCap.Round)
         }
     }
 }

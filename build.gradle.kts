@@ -29,6 +29,7 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     implementation(libs.caulis.wm)
     implementation(libs.caulis.compose)
+    implementation(libs.caulis.screenshot)
     // config.lua.
     implementation(libs.luaj)
     // config.kts, compiled by newm itself.

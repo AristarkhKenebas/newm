@@ -135,7 +135,11 @@ class Panels(private val wm: Layout) {
     private var opened by mutableIntStateOf(0)
 
     /** The launcher opens: the keyboard to it, the programs looked up anew. */
+    // The launcher is going (it fades while newm's animation runs).
+    private var launcherClosing by mutableStateOf(false)
+
     fun launcherOpened() {
+        launcherClosing = false
         launcherWidget?.let { wm.caulis.desktop.focusWidget(it) }
         Thread({
             val found = DesktopApp.installed()
@@ -145,6 +149,7 @@ class Panels(private val wm: Layout) {
     }
 
     fun launcherClosed() {
+        launcherClosing = true
         if (wm.caulis.desktop.keyboardWidget === launcherWidget) wm.caulis.desktop.focusWidget(null)
     }
 
@@ -166,7 +171,7 @@ class Panels(private val wm: Layout) {
             desktop, post,
             place = { m -> if (ownLauncher) launcherArea(m) else null },
             level = DrawingLevel.ON_TOP, takesKeyboard = true,
-        ) { LauncherPanel(wm, apps, opened) }
+        ) { LauncherPanel(wm, apps, opened, launcherClosing) }
         lockWidget = lock
         launcherWidget = launcher
         wm.caulis.addWidget(lock)

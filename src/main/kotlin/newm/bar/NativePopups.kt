@@ -42,11 +42,11 @@ internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
             Spacer(Modifier.width(8.dp))
             Switch(nm.wifiEnabled, colors) { nm.setWifi(it) }
         }
-        if (!nm.available) return@Column BasicText("NetworkManager is not running.", style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
-        nm.problem?.let { BasicText(it, style = text.copy(color = colors.danger, fontSize = 12.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+        if (!nm.available) return@Column BasicText(tr("NetworkManager is not running."), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+        nm.problem?.let { BasicText(tr(it), style = text.copy(color = colors.danger, fontSize = 12.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
         if (nm.wired) ListRow("Wired connection", colors, text, subtitle = "Connected", selected = true, leading = { GlyphIcon(Glyph.WIRED, colors.accent, 16.dp) })
-        if (!nm.wifiEnabled) return@Column BasicText("Wi-Fi is off.", style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
-        if (nm.networks.isEmpty()) BasicText("Looking for networks…", style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+        if (!nm.wifiEnabled) return@Column BasicText(tr("Wi-Fi is off."), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+        if (nm.networks.isEmpty()) BasicText(tr("Looking for networks…"), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
         Column(Modifier.heightIn(max = 330.dp).verticalScroll(rememberScrollState())) {
             for (n in nm.networks) {
                 val connecting = nm.connecting == n.ssid
@@ -83,7 +83,7 @@ internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
                             onSubmit = { if (popup.password.length >= 8) { nm.connect(n, popup.password); popup.password = ""; popup.expanded = null } },
                             onCancel = { popup.expanded = null; popup.password = "" })
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            BasicText(if (popup.password.isNotEmpty() && popup.password.length < 8) "At least 8 characters" else "", style = text.copy(color = colors.dim, fontSize = 11.sp))
+                            BasicText(if (popup.password.isNotEmpty() && popup.password.length < 8) tr("At least 8 characters") else "", style = text.copy(color = colors.dim, fontSize = 11.sp))
                             Spacer(Modifier.weight(1f))
                             SmallButton("Connect", colors, text, accent = true) {
                                 if (popup.password.length >= 8) { nm.connect(n, popup.password); popup.password = ""; popup.expanded = null }
@@ -109,8 +109,8 @@ internal fun BluetoothPopup(model: BarModel, popup: Popup, colors: BarColors, te
             Spacer(Modifier.width(8.dp))
             Switch(bt.powered, colors) { bt.switchPower(it) }
         }
-        bt.problem?.let { BasicText(it, style = text.copy(color = colors.danger, fontSize = 12.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
-        if (!bt.powered) return@Column BasicText("Bluetooth is off.", style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+        bt.problem?.let { BasicText(tr(it), style = text.copy(color = colors.danger, fontSize = 12.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+        if (!bt.powered) return@Column BasicText(tr("Bluetooth is off."), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
         val paired = bt.devices.filter { it.paired }
         val found = bt.devices.filter { !it.paired }
         Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
@@ -118,7 +118,7 @@ internal fun BluetoothPopup(model: BarModel, popup: Popup, colors: BarColors, te
             for (d in paired) DeviceRow(model, popup, d, colors, text)
             if (bt.scanning || found.isNotEmpty()) Section(if (bt.scanning) "Nearby (looking…)" else "Nearby", colors, text)
             for (d in found) DeviceRow(model, popup, d, colors, text)
-            if (paired.isEmpty() && found.isEmpty() && !bt.scanning) BasicText("No devices yet: “Find devices” looks for them.", style = text.copy(color = colors.dim, fontSize = 12.sp), modifier = Modifier.padding(6.dp))
+            if (paired.isEmpty() && found.isEmpty() && !bt.scanning) BasicText(tr("No devices yet: “Find devices” looks for them."), style = text.copy(color = colors.dim, fontSize = 12.sp), modifier = Modifier.padding(6.dp))
         }
     }
 }
@@ -160,7 +160,7 @@ private fun DeviceRow(model: BarModel, popup: Popup, d: BluetoothDevice, colors:
 
 // --- sound ---------------------------------------------------------------------------------------
 
-/** Sound from the bar: the volume and the microphone, which device each uses, the screen's brightness. */
+/** Sound from the bar: the volume and the microphone, which device each uses. */
 @Composable
 internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
     val sound = model.sound
@@ -169,7 +169,7 @@ internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
         val out = sound.outputs.firstOrNull { it.isDefault } ?: sound.outputs.firstOrNull()
         Header("Sound", colors, text)
         if (out == null) {
-            BasicText("No sound device", style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+            BasicText(tr("No sound device"), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
         } else {
             LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }) { sound.setVolume(out, it, true) }
             if (sound.outputs.size > 1) {
@@ -185,24 +185,14 @@ internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
             if (sound.inputs.size > 1) for (d in sound.inputs) ListRow(d.description, colors, text, selected = d.isDefault, onClick = { sound.use(d, false) },
                 leading = { if (d.isDefault) GlyphIcon(Glyph.CHECK, colors.accent, 12.dp) })
         }
-        model.status.brightness?.let { b ->
-            Section("Screen", colors, text)
-            LevelRow(Glyph.BRIGHTNESS, b, false, colors, text, onMute = null) { setBrightness(model, it / 100f) }
-        }
     }
 }
 
-// A level: its icon (a click mutes), a slider, the percent.
+// A level: a Pixel's wide slider, its icon inside (a click on it mutes), the percent at the right.
 @Composable
 private fun LevelRow(glyph: Glyph, percent: Int, muted: Boolean, colors: BarColors, text: TextStyle, onMute: (() -> Unit)?, onSet: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.foundation.layout.Box(Modifier.size(28.dp).then(if (onMute != null) Modifier.onClick(onClick = onMute) else Modifier), contentAlignment = Alignment.Center) {
-            GlyphIcon(glyph, if (muted) colors.dim else colors.text, 17.dp, level = percent / 100f, slash = muted)
-        }
-        Spacer(Modifier.width(8.dp))
-        Slider(colors, percent / 100f, Modifier.weight(1f)) { level -> onSet((level * 100).toInt()) }
-        Spacer(Modifier.width(8.dp))
-        BasicText(if (muted) "off" else "$percent%", style = text.copy(color = colors.dim, fontSize = 12.sp), modifier = Modifier.width(38.dp))
+    LevelSlider(glyph, percent / 100f, colors, text, if (muted) tr("off") else "$percent%", Modifier.padding(vertical = 3.dp), dim = muted, onIcon = onMute) { level ->
+        onSet(Math.round(level * 100))
     }
 }
 
@@ -212,37 +202,129 @@ private fun LevelRow(glyph: Glyph, percent: Int, muted: Boolean, colors: BarColo
 internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: TextStyle) {
     val b = model.status.battery
     val profiles = model.powerProfiles
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (b != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
-            GlyphIcon(Glyph.BATTERY, colors.text, 38.dp, level = b.percent / 100f, bolt = b.charging,
+            GlyphIcon(Glyph.BATTERY, colors.text, 38.dp, level = b.percent / 100f, bolt = b.plugged,
                 accent = if (b.charging || b.full) colors.accent else if (b.percent <= 20) colors.warning else colors.text)
             Spacer(Modifier.width(12.dp))
             Column {
-                BasicText("${b.percent}%", style = text.copy(fontSize = 19.sp, fontWeight = FontWeight.SemiBold))
+                BasicText(tr("${b.percent}%"), style = text.copy(fontSize = 19.sp, fontWeight = FontWeight.SemiBold))
                 val minutes = b.minutesLeft
-                BasicText(when {
+                BasicText(tr(when {
                     b.full -> "Fully charged"
                     b.charging && minutes != null -> "Charging · full in ${hoursOf(minutes)}"
                     b.charging -> "Charging"
+                    b.plugged -> "Plugged in · held at its charge limit"
                     minutes != null -> "${hoursOf(minutes)} left"
                     else -> "On battery"
-                }, style = text.copy(color = colors.dim, fontSize = 12.sp))
+                }), style = text.copy(color = colors.dim, fontSize = 12.sp))
             }
+        }
+        model.status.brightness?.let { level ->
+            LevelRow(Glyph.BRIGHTNESS, level, false, colors, text, onMute = null) { setBrightness(model, it / 100f) }
         }
         if (profiles.profiles.isNotEmpty()) {
             Section("Power mode", colors, text)
-            for (p in profiles.profiles) {
-                val name = when (p) {
-                    "power-saver" -> "Power saver"
-                    "balanced" -> "Balanced"
-                    "performance" -> "Performance"
-                    else -> p
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (p in profiles.profiles) {
+                    val (glyph, name) = when (p) {
+                        "power-saver" -> Glyph.LEAF to "Power saver"
+                        "balanced" -> Glyph.BALANCE to "Balanced"
+                        "performance" -> Glyph.BOLT to "Performance"
+                        else -> Glyph.POWER to p
+                    }
+                    ChoiceTile(glyph, name, p == profiles.active, colors, text, Modifier.weight(1f)) { profiles.use(p) }
                 }
-                ListRow(name, colors, text, selected = p == profiles.active, onClick = { profiles.use(p) },
-                    leading = { if (p == profiles.active) GlyphIcon(Glyph.CHECK, colors.accent, 12.dp) })
             }
+        }
+        CaffeineRow(model, colors, text)
+    }
+}
+
+// Caffeine: the screen stays on for a while (or until turned off), whatever the energy settings say.
+@Composable
+private fun CaffeineRow(model: BarModel, colors: BarColors, text: TextStyle) {
+    val wm = model.wm
+    val until = wm.caffeineUntil
+    // The minutes left, looked at again every few seconds while it is on.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(until) {
+        while (until != null) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(5000)
+        }
+    }
+    val on = until != null && until > now
+    Section("Caffeine", colors, text)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        GlyphIcon(Glyph.COFFEE, if (on) colors.accent else colors.text, 18.dp, level = if (on) 1f else 0f)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            BasicText(tr("The screen stays on"), style = text)
+            BasicText(when {
+                !on -> tr("Off")
+                until == Long.MAX_VALUE -> tr("On until turned off")
+                else -> tr("On · %s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
+            }, style = text.copy(color = colors.dim, fontSize = 11.sp))
+        }
+        Switch(on, colors) { wm.caffeine(if (it) 0 else null) }
+    }
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val left = if (on && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
+        for ((minutes, label) in listOf(30 to "30 min", 60 to "1 h", 120 to "2 h", 0 to "∞")) {
+            // The chosen one: the time asked for (what is left is at most that, more than the shorter one).
+            val chosen = on && if (minutes == 0) until == Long.MAX_VALUE else left in (minutes / 2 + 1)..minutes && (minutes != 30 || left <= 30)
+            ChoiceChip(label, chosen, colors, text, Modifier.weight(1f)) { wm.caffeine(if (chosen) null else minutes) }
         }
     }
 }
 
-internal fun hoursOf(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
+internal fun hoursOf(minutes: Int): String = tr(if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min")
+
+// --- colours ---------------------------------------------------------------------------------
+
+/** The colours: made from the wallpaper in one of five styles (as a Pixel's), or the classic Nord ones; a palette's code to copy. */
+@Composable
+internal fun ColorsPopup(model: BarModel, colors: BarColors, text: TextStyle) {
+    val seed = model.wm.wallpaperSeed
+    val (source, style) = NewmColors.setting()
+    val dark = model.scheme == dev.caulis.core.appearance.ColorScheme.DARK
+    Column {
+        Header("Colors", colors, text) {
+            model.palette?.let { p -> SmallButton("Copy code", colors, text) { model.wm.caulis.desktop.copyText?.invoke(p.code); model.toast("Palette copied: ${p.code}") } }
+        }
+        val styles = listOf(
+            dev.caulis.core.appearance.PaletteStyle.TONAL_SPOT to "Tonal",
+            dev.caulis.core.appearance.PaletteStyle.VIBRANT to "Vibrant",
+            dev.caulis.core.appearance.PaletteStyle.EXPRESSIVE to "Expressive",
+            dev.caulis.core.appearance.PaletteStyle.NEUTRAL to "Neutral",
+            dev.caulis.core.appearance.PaletteStyle.MONOCHROME to "Monochrome",
+        )
+        for ((s, name) in styles) {
+            val palette = seed?.let { dev.caulis.core.appearance.Palette(it, s) }
+            ListRow(name, colors, text, subtitle = if (seed == null) "The wallpaper is not read yet" else "From the wallpaper",
+                selected = source == "wallpaper" && style == s, enabled = seed != null,
+                onClick = { NewmColors.choose("wallpaper:${s.name.lowercase()}"); model.refreshPalette() },
+                leading = { palette?.let { Swatches(it.scheme(dark)) } })
+        }
+        ListRow("Classic", colors, text, subtitle = "newm's Nord colours", selected = source == "nord" || source == "classic",
+            onClick = { NewmColors.choose("nord"); model.refreshPalette() },
+            leading = { Swatches(null) })
+    }
+}
+
+// Four colours of a scheme (or Nord's) in a little square.
+@Composable
+private fun Swatches(scheme: dev.caulis.core.appearance.PaletteScheme?) {
+    fun c(x: dev.caulis.render.Color) = androidx.compose.ui.graphics.Color(x.red, x.green, x.blue)
+    val four = scheme?.let { listOf(c(it.primary), c(it.secondary), c(it.tertiary), c(it.surfaceContainer)) }
+        ?: listOf(androidx.compose.ui.graphics.Color(0xFF88C0D0), androidx.compose.ui.graphics.Color(0xFF5E81AC), androidx.compose.ui.graphics.Color(0xFFB48EAD), androidx.compose.ui.graphics.Color(0xFFECEFF4))
+    androidx.compose.foundation.Canvas(Modifier.size(20.dp)) {
+        val h = size.width / 2
+        val r = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+        four.forEachIndexed { k, color ->
+            drawRoundRect(color, androidx.compose.ui.geometry.Offset((k % 2) * h, (k / 2) * h), androidx.compose.ui.geometry.Size(h - 1, h - 1), r)
+        }
+    }
+}

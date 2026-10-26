@@ -47,6 +47,14 @@ class NetworkManager(private val caulis: Caulis) {
     var problem by mutableStateOf<String?>(null)
         private set
 
+    /** Told what happened in words ("Connected to Home"): a toast. */
+    var onEvent: (String) -> Unit = {}
+
+    // The network in use at the last look (null: not looked yet), and whether a cable was.
+    private var activeBefore: String? = null
+    private var lookedOnce = false
+    private var wiredBefore = false
+
     private var bus: DBusConnection? = null
     private var wifiDevice: String? = null
     private var knownSsids = emptyMap<String, String>()
@@ -91,6 +99,8 @@ class NetworkManager(private val caulis: Caulis) {
                 if (type == 2 && wifiDevice == null) wifiDevice = device
                 if (type == 1 && state == 100) wiredSeen = true
                 if (--pending == 0) {
+                    if (lookedOnce && wiredSeen != wiredBefore) onEvent(if (wiredSeen) "Cable connected" else "Cable disconnected")
+                    wiredBefore = wiredSeen
                     wired = wiredSeen
                     readNetworks()
                 }
@@ -117,6 +127,12 @@ class NetworkManager(private val caulis: Caulis) {
                         if (ssid.isNotBlank()) found += WifiNetwork(ssid, (p["Strength"] as? Number)?.toInt() ?: 0, secure, ap, ap == activeAp, ssid in knownSsids)
                     }
                     if (--pending == 0) {
+                        val active = found.firstOrNull { it.active }?.ssid
+                        if (lookedOnce && active != activeBefore) {
+                            if (active != null) onEvent("Connected to $active") else activeBefore?.let { onEvent("Disconnected from $it") }
+                        }
+                        activeBefore = active
+                        lookedOnce = true
                         networks = found.groupBy { it.ssid }.map { (_, same) -> same.firstOrNull { it.active } ?: same.maxBy { it.strength } }
                             .sortedWith(compareByDescending<WifiNetwork> { it.active }.thenByDescending { it.known }.thenByDescending { it.strength })
                     }

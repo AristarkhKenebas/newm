@@ -79,7 +79,7 @@ private val GESTURES = listOf(
 
 @Composable
 private fun KeyHelpPanel(wm: Layout) {
-    val colors = if (wm.caulis.colorSchemeNow == ColorScheme.DARK) BarColors.DARK else BarColors.LIGHT
+    val colors = wm.barModel.colorsNow()
     val surface = colors.island.copy(alpha = 0.96f)
     val text = TextStyle(color = colors.text, fontSize = 13.sp)
     val appear = remember { Animatable(0f) }
@@ -88,17 +88,17 @@ private fun KeyHelpPanel(wm: Layout) {
     val keys = helpRows(wm.keyHelp())
     Box(
         Modifier.fillMaxSize().padding(14.dp)
+            .softShadow(18.dp, 14.dp, shown = { appear.value })
             .graphicsLayer { alpha = appear.value; scaleX = 0.97f + 0.03f * appear.value; scaleY = scaleX }
-            .softShadow(18.dp, 14.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
             .padding(horizontal = 22.dp, vertical = 16.dp),
     ) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BasicText("Keys", style = text.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
+                BasicText(newm.bar.tr("Keys"), style = text.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
                 Spacer(Modifier.weight(1f))
-                BasicText("Any key closes this", style = text.copy(color = colors.dim, fontSize = 12.sp))
+                BasicText(newm.bar.tr("Any key closes this"), style = text.copy(color = colors.dim, fontSize = 12.sp))
             }
             Spacer(Modifier.height(12.dp))
             for (pair in keys.chunked(2)) {
@@ -108,14 +108,14 @@ private fun KeyHelpPanel(wm: Layout) {
                 }
             }
             Spacer(Modifier.height(14.dp))
-            BasicText("Touchpad", style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+            BasicText(newm.bar.tr("Touchpad"), style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(6.dp))
             for (pair in GESTURES.chunked(2)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     for ((how, what) in pair) Row(Modifier.weight(1f).height(26.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Cap(how, colors)
+                        Cap(newm.bar.tr(how), colors)
                         Spacer(Modifier.width(10.dp))
-                        BasicText(what, style = text, maxLines = 1)
+                        BasicText(newm.bar.tr(what), style = text, maxLines = 1)
                     }
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
@@ -137,26 +137,26 @@ private fun KeyRow(combos: List<String>, what: String, colors: BarColors, text: 
             if (shared) {
                 for (m in mods) {
                     Cap(m, colors)
-                    BasicText("+", style = faint, modifier = Modifier.padding(horizontal = 3.dp))
+                    BasicText(newm.bar.tr("+"), style = faint, modifier = Modifier.padding(horizontal = 3.dp))
                 }
                 named.forEachIndexed { k, steps ->
-                    if (k > 0) BasicText(" / ", style = faint)
+                    if (k > 0) BasicText(newm.bar.tr(" / "), style = faint)
                     Cap(steps[0].last(), colors)
                 }
             } else {
                 named.take(2).forEachIndexed { c, steps ->
-                    if (c > 0) BasicText(" or ", style = faint)
+                    if (c > 0) BasicText(newm.bar.tr("or").let { " $it " }, style = faint)
                     steps.forEachIndexed { k, step ->
-                        if (k > 0) BasicText(" then ", style = faint)
+                        if (k > 0) BasicText(newm.bar.tr(" then "), style = faint)
                         step.forEachIndexed { n, part ->
-                            if (n > 0) BasicText("+", style = faint, modifier = Modifier.padding(horizontal = 3.dp))
+                            if (n > 0) BasicText(newm.bar.tr("+"), style = faint, modifier = Modifier.padding(horizontal = 3.dp))
                             Cap(part, colors)
                         }
                     }
                 }
             }
         }
-        BasicText(what.ifEmpty { "—" }, style = text.copy(color = if (what.isEmpty()) colors.dim else colors.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BasicText(newm.bar.tr(what).ifEmpty { "—" }, style = text.copy(color = if (what.isEmpty()) colors.dim else colors.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -194,7 +194,7 @@ internal fun keyNames(combo: String): List<List<String>> = combo.trim().split(Re
         key.length == 1 -> key.uppercase()
         else -> KEY_NAMES[key] ?: key
     }
-    if (name == null) listOf(mods.joinToString("+") + " alone") else mods + name
+    if (name == null) listOf(newm.bar.tr("%s alone").replace("%s", mods.joinToString("+"))) else mods + name
 }
 
 private val KEY_NAMES = mapOf(

@@ -44,12 +44,19 @@ view {
 
 focus {
     enabled = true                          // a line around the focused window
-    color = "#E5E9F0AA"                     // "#RRGGBB" or "#RRGGBBAA" (see-through)
+    color = "auto"                          // "auto": the colours' accent; or "#RRGGBB" / "#RRGGBBAA" (see-through)
     distance = 4.0                          // how far outside the window
     width = 2.0
     // animTime = 0.3
     // animateOnChange = false              // the line glides to the next window
 }
+
+// The colours of the bar, the menus and the focus border: made from the wallpaper, as phones do.
+// The bar's power menu has "Colors…" to choose among them; set them here to keep them fixed.
+// colors {
+//     source = "wallpaper"                // "wallpaper", "nord" (the classic ones) or "#5b8cc8"
+//     style = "tonal"                     // "tonal", "vibrant", "expressive", "neutral", "monochrome"
+// }
 
 panels {
     // newm's own bar at the top: three see-through islands floating at the edge — the wall
@@ -63,7 +70,7 @@ panels {
         theme = "auto"                      // "auto" (follows light/dark), "light", "dark"
         fontSize = 13
         // font = "Inter"
-        left = listOf("wall", "window")
+        left = listOf("window")             // also "wall": a small map of your wall
         center = listOf("clock")
         right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power")
         clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"
@@ -113,8 +120,8 @@ input {
 
 // --- Keys ------------------------------------------------------------------------------------
 // "L" is the Logo (Super) key, "S" Shift, "C" Ctrl, "A" Alt: "L-S-h" is Logo+Shift+h, and
-// "L-H" means the same. "L-" is Logo tapped alone. "L-x"("what it does") { } says it in the
-// help (Logo+/). Inside { } the layout is at hand: move(...),
+// "L-H" means the same. "L-" is Logo tapped alone. "L-x"("what it does") { } shows it in the
+// help (Logo+/); a key without words is left out of it. Inside { } the layout is at hand: move(...),
 // toggleOverview(), ... (all of them: docs/en/settings.md).
 
 val terminal = defaultTerminal()             // $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
@@ -171,7 +178,8 @@ keys {
     // Windows
     "L-q"("Close the window") { closeFocusedView() }
     "L-f"("Fullscreen, and back") { toggleFullscreen() }
-    "L-v"("Float, and back") { toggleFocusedViewFloating() }
+    "L-v"("Clipboard history") { toggleClipboard() }
+    "L-S-v"("Float, and back") { toggleFocusedViewFloating() }
 
     // The session
     "L-slash"("These keys") { toggleKeyHelp() }
@@ -186,7 +194,11 @@ keys {
     "XF86AudioLowerVolume"("Quieter") { caulis.run("volume -5") }
     "XF86AudioMute"("Sound off, and on") { caulis.run("volume mute") }
     "XF86AudioMicMute"("Microphone off, and on") { caulis.run("mic-mute") }
-    "Print"("Screenshot") { launch("grim") }
+    // Screenshots, as Windows has them
+    "L-S-s"("Screenshot: choose a part") { screenshot() }
+    "L-Print"("Screenshot of the screen") { screenshotScreen() }
+    "Print"("Screenshot: choose") { screenshot() }
+    "A-Print"("Screenshot of the window") { screenshotWindow() }
 }
 
 // --- Gestures (touchpads) ----------------------------------------------------------------------

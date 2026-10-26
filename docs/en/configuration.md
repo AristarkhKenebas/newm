@@ -179,3 +179,36 @@ caulis.colorScheme = dev.caulis.core.appearance.ColorScheme.DARK
 `caulis` is the compositor library newm is built on ([Caulis](https://github.com/AristarkhKenebas/caulis)).
 Everything its guide describes works here too, for example a scheme that follows the time of
 day.
+
+### The clipboard's history
+
+Super+V shows what you copied lately, texts and pictures, newest first. Type to search; Enter
+or a click copies one again; Delete or its ✕ takes one away; "Clear all" empties it. It is kept
+in memory only, never on disk, and what password managers mark as secret is not kept.
+
+```kotlin
+clipboard {
+    enabled = true      // false: nothing is kept, Super+V does nothing
+    size = 50           // how many things are kept
+}
+keys {
+    "L-v"("Clipboard history") { toggleClipboard() }   // or another key
+}
+```
+
+### Caffeine
+
+The battery's popup has Caffeine: the screen stays on (no dimming, locking or sleeping) for
+30 minutes, an hour, two, or until you turn it off. A cup shows in the bar meanwhile. From a
+terminal: `newm cmd caffeine 45`, `newm cmd caffeine on`, `newm cmd caffeine off`.
+
+### The menu's button and the language
+
+The bar starts with a button of three lines that opens the launcher. `bar { menuButton = false }`
+takes it away; put `"menu"` into `left`, `center` or `right` to place it yourself.
+
+newm's menus speak Russian when the system's language is Russian. To choose:
+
+```kotlin
+language = "en"     // "auto" (the system's, the default), "en" or "ru"
+```

@@ -15,7 +15,14 @@ import java.util.concurrent.TimeUnit
 private val log = Logger("bar")
 
 /** The battery: [percent] full, charging or not, and how long until full or empty (minutes, if known). */
-data class Battery(val percent: Int, val charging: Boolean, val full: Boolean, val minutesLeft: Int?)
+data class Battery(
+    val percent: Int,
+    val charging: Boolean,
+    val full: Boolean,
+    val minutesLeft: Int?,
+    /** On the charger (also when it does not charge: full, or kept below a limit to spare the battery). */
+    val plugged: Boolean = charging,
+)
 
 /** The network: Wi-Fi (its name and strength 0..100), a cable, or none. */
 data class Network(val kind: Kind, val name: String = "", val strength: Int = 0) {
@@ -39,6 +46,10 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
     var volume by mutableStateOf<Volume?>(null)
         private set
 
+    /** The computer's address on its network (IPv4, else IPv6), if it has one. */
+    var address by mutableStateOf<String?>(null)
+        private set
+
     /** The screen's brightness (0..100), if it can be read. */
     var brightness by mutableStateOf<Int?>(null)
         private set
@@ -58,16 +69,23 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
         worker.execute { readAll() }
     }
 
+    /** The volume as it is about to be (shown at once, before the sound server says it). */
+    fun showVolume(percent: Int) {
+        volume = (volume ?: Volume(percent, false)).copy(percent = percent, muted = false)
+    }
+
     private fun readAll() {
         val b = try { readBattery() } catch (e: Exception) { log.trace { "battery: $e" }; null }
         val n = try { readNetwork() } catch (e: Exception) { log.trace { "network: $e" }; Network(Network.Kind.NONE) }
         val v = try { readVolume() } catch (e: Exception) { log.trace { "volume: $e" }; null }
         val l = try { readBrightness() } catch (e: Exception) { null }
+        val a = try { readAddress() } catch (e: Exception) { null }
         caulis.post {
             if (battery != b) battery = b
             if (network != n) network = n
             if (volume != v) volume = v
             if (brightness != l) brightness = l
+            if (address != a) address = a
         }
     }
 
@@ -75,12 +93,18 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
 
     private fun readBattery(): Battery? {
         val supplies = File("/sys/class/power_supply").listFiles().orEmpty()
-        val bat = supplies.firstOrNull { read(it.toPath().resolve("type")) == "Battery" && read(it.toPath().resolve("present")) != "0" } ?: return null
+        // The laptop's own (not a mouse's or headphones': their scope is "Device").
+        val bat = supplies.firstOrNull { read(it.toPath().resolve("type")) == "Battery" && read(it.toPath().resolve("present")) != "0" && read(it.toPath().resolve("scope")) != "Device" } ?: return null
         val dir = bat.toPath()
         val percent = read(dir.resolve("capacity"))?.toIntOrNull() ?: return null
         val status = read(dir.resolve("status")) ?: ""
         val charging = status == "Charging"
         val full = status == "Full" || (status == "Not charging" && percent >= 95)
+        // On the charger: an adapter (Mains) or a USB-C charger that is online.
+        val plugged = charging || supplies.any { s ->
+            val type = read(s.toPath().resolve("type"))
+            (type == "Mains" || type?.startsWith("USB") == true) && read(s.toPath().resolve("online")) == "1"
+        }
         // Energy (µWh) and power (µW), or charge (µAh) and current (µA).
         val now = (read(dir.resolve("energy_now")) ?: read(dir.resolve("charge_now")))?.toLongOrNull()
         val whenFull = (read(dir.resolve("energy_full")) ?: read(dir.resolve("charge_full")))?.toLongOrNull()
@@ -88,7 +112,7 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
         val minutes = if (now != null && rate != null && rate > 0) {
             if (charging && whenFull != null) ((whenFull - now) * 60 / rate).toInt() else if (!charging) (now * 60 / rate).toInt() else null
         } else null
-        return Battery(percent.coerceIn(0, 100), charging, full, minutes?.takeIf { it in 1..(48 * 60) })
+        return Battery(percent.coerceIn(0, 100), charging, full, minutes?.takeIf { it in 1..(48 * 60) && (charging || !plugged) }, plugged)
     }
 
     private fun readNetwork(): Network {
@@ -122,6 +146,15 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
         val percent = run("pactl", "get-sink-volume", "@DEFAULT_SINK@")?.let { Regex("(\\d+)%").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: return null
         val muted = run("pactl", "get-sink-mute", "@DEFAULT_SINK@")?.contains("yes") == true
         return Volume(percent, muted)
+    }
+
+    // The first global address of an interface that is up (not loopback, not a virtual bridge).
+    private fun readAddress(): String? {
+        val all = java.net.NetworkInterface.networkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback && !it.isVirtual && !it.name.startsWith("docker") && !it.name.startsWith("br-") && !it.name.startsWith("veth") }
+            .flatMap { it.inetAddresses.toList() }
+            .filter { !it.isLoopbackAddress && !it.isLinkLocalAddress }
+        return (all.firstOrNull { it is java.net.Inet4Address } ?: all.firstOrNull())?.hostAddress?.substringBefore('%')
     }
 
     private fun readBrightness(): Int? {

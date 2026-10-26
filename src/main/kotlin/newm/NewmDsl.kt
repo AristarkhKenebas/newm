@@ -65,6 +65,9 @@ class NewmConfig(
     /** Lock the screen when the computer wakes up. */
     var lockOnWakeup by setting<Boolean>("lock_on_wakeup")
 
+    /** The language of newm's menus: "auto" (the system's), "en" or "ru". */
+    var language by setting<String>("language")
+
     /** The user of greetd's greeter (newm as the login screen). */
     var greeterUser by setting<String>("greeter_user")
 
@@ -99,6 +102,15 @@ class NewmConfig(
     fun panels(configure: PanelsSection.() -> Unit) = section("panels", ::PanelsSection, configure)
 
     /** Idle times, what happens then, suspending. */
+    /** Where the colours of the bar, menus and borders come from (unset: the colours menu's choice, else the wallpaper). */
+    fun colors(configure: ColorsSection.() -> Unit) = section("colors", ::ColorsSection, configure)
+
+    /** The screenshots' settings (the keys: screenshot(), screenshotScreen(), screenshotWindow() in keys { }). */
+    fun screenshots(configure: ScreenshotsSection.() -> Unit) = section("screenshots", ::ScreenshotsSection, configure)
+
+    /** The clipboard's history (its key: toggleClipboard() in keys { }). */
+    fun clipboard(configure: ClipboardSection.() -> Unit) = section("clipboard", ::ClipboardSection, configure)
+
     fun energy(configure: EnergySection.() -> Unit) = section("energy", ::EnergySection, configure)
 
     /** Touchpad gestures: which fingers do what, and how they feel. */
@@ -377,7 +389,7 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
 
     /**
      * What each island shows, in order: "wall" (the wall, small), "window" (the focused
-     * window), "clock", "tray" (background programs), "network", "volume", "battery",
+     * window), "menu" (the launcher's button), "clock", "tray" (background programs), "network", "volume", "battery",
      * "power", "texts" (those of texts { }). An empty list: no island there.
      */
     var left by setting<List<String>>("left")
@@ -393,8 +405,46 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
     var showPercent by setting<Boolean>("show_percent")
     var titleWidth by setting<Int>("title_width")
 
+    /** Tray icons left out, by name or title (default: nm-applet and blueman, whose Wi-Fi and Bluetooth the bar shows itself). */
+    var trayHide by setting<List<String>>("tray_hide")
+
+    /** The menu's button (three lines, the launcher) first on the left (false: none; or place "menu" yourself). */
+    var menuButton by setting<Boolean>("menu_button")
+
     /** Tray icons that say they are not needed now ("Passive") shown too. */
     var showPassive by setting<Boolean>("show_passive")
+}
+
+/** colors { }: where newm's colours come from. */
+class ColorsSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** "wallpaper" (made from it, as phones do), "nord" (the classic ones), or a colour of yours ("#5b8cc8"). */
+    var source by setting<String>("source")
+
+    /** "tonal", "vibrant", "expressive", "neutral" or "monochrome". */
+    var style by setting<String>("style")
+}
+
+/** screenshots { }: the screenshot chooser's settings (its keys are in keys { }). */
+class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** Screenshots at all (false: the keys do nothing). */
+    var enabled by setting<Boolean>("enabled")
+
+    /** Where they are saved ("~/Pictures/Screenshots" by default). */
+    var folder by setting<String>("folder")
+
+    /** Saved as files, put on the clipboard, with the pointer in them. */
+    var save by setting<Boolean>("save")
+    var copy by setting<Boolean>("copy")
+    var pointer by setting<Boolean>("pointer")
+}
+
+/** clipboard { }: the clipboard's history (kept in memory only, never on disk). */
+class ClipboardSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** The history at all (false: nothing is kept, the key does nothing). */
+    var enabled by setting<Boolean>("enabled")
+
+    /** How many things are kept (50 by default). */
+    var size by setting<Int>("size")
 }
 
 class EnergySection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
