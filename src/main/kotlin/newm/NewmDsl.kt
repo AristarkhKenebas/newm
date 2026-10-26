@@ -256,6 +256,15 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
     /** A window being resized is drawn at its own size, not stretched: no flicker when its new picture comes (true). */
     var crispResize by setting<Boolean>("crisp_resize")
 
+    /**
+     * A program in a place smaller than it can be (Spotify: 800 x 600) is asked for the shape of
+     * its place, bigger, and drawn shrunk to fill it (true); false: its smallest size, fitted inside.
+     */
+    var minSizeKeepsShape by setting<Boolean>("min_size_keeps_shape")
+
+    /** How far such a program may be shrunk: down to this part of its smallest size (0.6; 1: never smaller). */
+    var minSizeShrink by setting<Double>("min_size_shrink")
+
     /** A window made wider or taller pushes its neighbours aside instead of stacking on them (default true). */
     var resizePushes by setting<Boolean>("resize_pushes")
 

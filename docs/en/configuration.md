@@ -356,6 +356,12 @@ program can be (Spotify: 800 x 600).
 While a window is resized it is drawn at its own size, not stretched, so it does not flicker
 when its new picture comes. `view { crispResize = false }` stretches it, as newm did.
 
+A program that cannot be as small as its tile (Spotify will not go below 800 x 600) is drawn
+at a bigger size of the tile's own shape and shrunk to fill the tile exactly — no empty sides.
+`view { minSizeKeepsShape = false }` gives it its smallest size, fitted inside the tile. Such a
+window can be made smaller than the program allows, down to `view { minSizeShrink = 0.6 }` of
+it (more would make everything in it too small).
+
 ### Restarting with your windows
 
 `newm cmd restart keep` restarts newm (a new build, a changed setting) and opens your windows

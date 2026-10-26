@@ -827,7 +827,9 @@ private fun QuickModule(bar: Bar, model: BarModel, colors: BarColors) {
         onX = { x = it }, onPrimary = { model.toggle(PopupKind.QUICK, bar, bar.originX + x) },
         // The wheel: the screen's brightness.
         onScroll = { dy -> model.stepBrightness(if (dy < 0) 5 else -5) }) {
-        GlyphIcon(if (model.wm.caffeineOn) Glyph.COFFEE else Glyph.GRID, if (model.wm.caffeineOn) colors.accent else colors.text, bar.iconSize.dp)
+        // Its own picture: caffeine shows beside the battery (here only on a computer without one).
+        val cup = model.wm.caffeineOn && model.status.battery == null
+        GlyphIcon(if (cup) Glyph.COFFEE else Glyph.GRID, if (cup) colors.accent else colors.text, bar.iconSize.dp)
     }
 }
 

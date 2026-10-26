@@ -188,6 +188,13 @@ class Panels(private val wm: Layout) {
                 if (e >= 1f) dev.caulis.compose.Appearance.SHOWN else dev.caulis.compose.Appearance(alpha = e, scale = 0.94f + 0.06f * e, dy = (1f - e) * -16f)
             },
         ) { LauncherPanel(wm, apps, opened, launcherClosing) }
+        // A click beside the launcher closes it (and goes no further).
+        launcher.onPressOutside = { _, _, _ ->
+            if (ownLauncher && wm.overlay is LauncherOverlay && wm.layoutDown.launcherPerc > 0.5) {
+                wm.exitOverlay()
+                true
+            } else false
+        }
         lockWidget = lock
         launcherWidget = launcher
         wm.caulis.addWidget(lock)

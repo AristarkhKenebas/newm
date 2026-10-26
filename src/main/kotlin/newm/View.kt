@@ -12,6 +12,8 @@ private val log = Logger("view")
 private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 private val confPadding = configuredValue("view.padding", 6.0)
 private val confFullscreenPadding = configuredValue("view.fullscreen_padding", 0.0)
+private val confMinSizeKeepsShape = configuredValue("view.min_size_keeps_shape", true)
+private val confMinSizeShrink = configuredValue("view.min_size_shrink", 0.6)
 // Windows without the focus a little see-through (1: not at all; newm issue 139).
 private val confUnfocusedOpacity = configuredValue("view.unfocused_opacity", 1.0)
 // Windows fade in when they open and out when they close.
@@ -418,6 +420,19 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         // Override: Keep aspect-ratio of windows
         if (!ignoreMinSize) {
             val (minW, maxW, minH, maxH) = up.sizeConstraints.toList()
+            // Smaller than the program can be (Spotify: 800 x 600): it is asked for the same shape
+            // as its place, only as much bigger as it needs, and drawn shrunk to fill its place
+            // exactly — no empty sides, no stretching while the view moves.
+            val grow = maxOf(if (minW > 0 && width in 1 until minW) minW.toDouble() / width else 1.0,
+                if (minH > 0 && height in 1 until minH) minH.toDouble() / height else 1.0)
+            if (grow > 1.0 && confMinSizeKeepsShape()) {
+                val gw = Math.ceil(width * grow).toInt()
+                val gh = Math.ceil(height * grow).toInt()
+                if ((maxW <= 0 || gw <= maxW) && (maxH <= 0 || gh <= maxH)) {
+                    width = gw
+                    height = gh
+                }
+            }
             if (width < minW && minW > 0) width = minW
             if (width > maxW && maxW > 0) width = maxW
             if (height < minH && minH > 0) height = minH
@@ -470,8 +485,10 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     fun minTiles(wsState: WorkspaceState): Pair<Double, Double> {
         val up = upState ?: return 1.0 to 1.0
         val size = wsState.sizeOrigin ?: wsState.size
-        val w = up.sizeConstraints[0].toDouble() * size / wsState.usableWidth()
-        val h = up.sizeConstraints[2].toDouble() * size / wsState.usableHeight()
+        // Drawn shrunk in its own shape (minSizeKeepsShape): down to this much of its smallest size.
+        val shrink = if (confMinSizeKeepsShape()) confMinSizeShrink().coerceIn(0.3, 1.0) else 1.0
+        val w = up.sizeConstraints[0].toDouble() * shrink * size / wsState.usableWidth()
+        val h = up.sizeConstraints[2].toDouble() * shrink * size / wsState.usableHeight()
         return maxOf(kotlin.math.ceil(w - 0.05), 1.0) to maxOf(kotlin.math.ceil(h - 0.05), 1.0)
     }
 
