@@ -352,7 +352,7 @@ private fun Island(bar: Bar, colors: BarColors, index: Int, content: @Composable
     Row(
         Modifier
             .fillMaxHeight()
-            .shadow(5.dp, shape, ambientColor = Color(0x30000000), spotColor = Color(0x40000000))
+            .softShadow(bar.cornerRadius.dp, 4.dp, 0.10f)
             .background(colors.island, shape)
             .border(1.dp, colors.edge, shape)
             .onGloballyPositioned { c ->

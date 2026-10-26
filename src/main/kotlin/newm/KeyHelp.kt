@@ -35,6 +35,7 @@ import dev.caulis.compose.compose
 import dev.caulis.core.appearance.ColorScheme
 import dev.caulis.geometry.Rect
 import newm.bar.BarColors
+import newm.bar.softShadow
 
 /** The keys' help (Logo+/): every key of the configuration and what it does, over the screen's middle. */
 internal fun Layout.showKeyHelp(): AutoCloseable {
@@ -88,7 +89,7 @@ private fun KeyHelpPanel(wm: Layout) {
     Box(
         Modifier.fillMaxSize().padding(14.dp)
             .graphicsLayer { alpha = appear.value; scaleX = 0.97f + 0.03f * appear.value; scaleY = scaleX }
-            .shadow(16.dp, shape)
+            .softShadow(18.dp, 14.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
             .padding(horizontal = 22.dp, vertical = 16.dp),

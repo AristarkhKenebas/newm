@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -48,6 +49,25 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+/**
+ * A soft shadow below a rounded shape of [radius]: a few faint rounded layers growing out by
+ * [spread] (Compose's own shadow came out as a dark, hard smear on some screens).
+ */
+fun Modifier.softShadow(radius: androidx.compose.ui.unit.Dp, spread: androidx.compose.ui.unit.Dp = 10.dp, strength: Float = 0.16f): Modifier = drawBehind {
+    val steps = 6
+    val s = spread.toPx()
+    for (k in steps downTo 1) {
+        val grow = s * k / steps
+        val alpha = strength * (1f - (k - 1f) / steps) / steps * 1.6f
+        drawRoundRect(
+            Color.Black.copy(alpha = alpha.coerceIn(0f, 1f)),
+            topLeft = Offset(-grow, -grow + s * 0.25f),
+            size = androidx.compose.ui.geometry.Size(size.width + 2 * grow, size.height + 2 * grow),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.toPx() + grow),
+        )
+    }
+}
 
 /** Does [onClick] when clicked (released over it). */
 internal fun Modifier.onClick(enabled: Boolean = true, onClick: () -> Unit): Modifier = pointerInput(enabled, onClick) {

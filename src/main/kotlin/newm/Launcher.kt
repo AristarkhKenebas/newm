@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import dev.caulis.core.appearance.ColorScheme
 import dev.caulis.log.Logger
 import newm.bar.BarColors
+import newm.bar.softShadow
 import newm.bar.IconTheme
 import java.nio.file.Files
 import java.nio.file.Path
@@ -122,7 +123,18 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
     }
     val frequent = if (query.isBlank()) shown.takeWhile { LaunchCounts.of(it) > 0 }.take(6).size else 0
     if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0)
-    LaunchedEffect(selected, shown) { if (shown.isNotEmpty()) list.animateScrollToItem(selected) }
+    // Chosen with the keys: scrolled into sight if it is not (the pointer only chooses what it is on:
+    // scrolling then moved the list under a still pointer, which chose the next one, on and on).
+    var byKeys by remember(opened) { mutableIntStateOf(0) }
+    LaunchedEffect(byKeys) {
+        if (byKeys == 0 || shown.isEmpty()) return@LaunchedEffect
+        val visible = list.layoutInfo.visibleItemsInfo.filter { it.offset >= 0 && it.offset + it.size <= list.layoutInfo.viewportEndOffset }.map { it.index }
+        if (selected !in visible) {
+            // Below: it becomes the last one in sight; above: the first.
+            val target = if (selected > (visible.maxOrNull() ?: 0)) selected - visible.size + 1 else selected
+            list.animateScrollToItem(target.coerceAtLeast(0))
+        }
+    }
 
     fun start(app: DesktopApp) {
         LaunchCounts.started(app)
@@ -136,7 +148,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
     Box(
         Modifier.fillMaxSize().padding(16.dp)
             .graphicsLayer { alpha = appear.value; scaleX = 0.96f + 0.04f * appear.value; scaleY = scaleX; translationY = (1 - appear.value) * -10f * density }
-            .shadow(18.dp, shape)
+            .softShadow(20.dp, 14.dp)
             .background(colors.island.copy(alpha = 0.97f), shape)
             .border(1.dp, colors.edge, shape),
     ) {
@@ -153,12 +165,12 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) BasicText("Search programs", style = text.copy(color = colors.dim, fontSize = 18.sp))
                     BasicTextField(
-                        query, { query = it; selected = 0 },
+                        query, { query = it; selected = 0; byKeys++ },
                         Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
                             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (e.key) {
-                                Key.DirectionDown, Key.Tab -> { selected = (selected + 1).coerceAtMost(shown.size - 1); true }
-                                Key.DirectionUp -> { selected = (selected - 1).coerceAtLeast(0); true }
+                                Key.DirectionDown, Key.Tab -> { selected = (selected + 1).coerceAtMost(shown.size - 1); byKeys++; true }
+                                Key.DirectionUp -> { selected = (selected - 1).coerceAtLeast(0); byKeys++; true }
                                 Key.Enter, Key.NumPadEnter -> { shown.getOrNull(selected)?.let(::start); true }
                                 Key.Escape -> { wm.exitOverlay(); true }
                                 else -> false

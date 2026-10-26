@@ -91,7 +91,7 @@ private fun PopupContent(model: BarModel, popup: Popup) {
                 alpha = appear.value
                 translationY = (1 - appear.value) * (if (popup.bar.top) -6f else 6f) * density
             }
-            .shadow(10.dp, shape, ambientColor = Color(0x38000000), spotColor = Color(0x50000000))
+            .softShadow(14.dp, 10.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
             .padding(if (popup.kind == PopupKind.TOOLTIP) 9.dp else 12.dp),
