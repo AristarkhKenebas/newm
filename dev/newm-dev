@@ -83,7 +83,8 @@ notice=""
 quick_crashes=0
 while :; do
     started=$(date +%s)
-    NEWM_NOTICE="$notice" "$good/bin/newm"
+    # (What newm says before its own log is open — a Java that will not start — is kept too.)
+    NEWM_NOTICE="$notice" "$good/bin/newm" 2> "$cache/newm.stderr"
     code=$?
     notice=""
     ran=$(( $(date +%s) - started ))
@@ -93,7 +94,8 @@ while :; do
         0) say "newm ended (logged out)"; exit 0 ;;
         3) say "restarting with the new build"; quick_crashes=0; [ "$fresh" = true ] && touch "$cache/fresh-running" ;;
         *)
-            say "newm stopped with $code after ${ran}s (the log: ~/.local/state/newm/newm.log.old)"
+            say "newm stopped with $code after ${ran}s (the log: ~/.local/state/newm/newm.log.old; what it said first: $cache/newm.stderr)"
+            tail -5 "$cache/newm.stderr" | sed 's/^/    /' >> "$log"
             if [ "$ran" -lt 20 ] && [ -e "$cache/fresh-running" ] && [ -d "$good.prev" ]; then
                 rm -rf "$good.broken" && mv "$good" "$good.broken" && mv "$good.prev" "$good"
                 notice="The new build crashed at the start: the one before runs. Its log: ~/.local/state/newm/newm.log.old"
