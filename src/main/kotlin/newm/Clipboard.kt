@@ -98,6 +98,9 @@ class ClipboardHistory(private val wm: Layout) {
     private var opened by mutableIntStateOf(0)
     private var widget: ComposeWidget? = null
 
+    // Its coming and going (done by the compositor).
+    private val fade = newm.bar.Fade(inMillis = 200, outMillis = 140)
+
     // What newm itself put back on the clipboard (not kept again as new).
     private var ours: ClipboardData? = null
 
@@ -105,7 +108,7 @@ class ClipboardHistory(private val wm: Layout) {
         val caulis = wm.caulis
         caulis.clipboard.onClipboardChanged { data -> if (data != null && data !== ours && confEnabled()) take(data) }
         val w = ComposeWidget(caulis.desktop, { task -> caulis.post { task.run() } }, place = { m ->
-            if (!shown) null else {
+            if (!fade.visible) null else {
                 val d = caulis.desktop
                 val target = d.monitors.firstOrNull { it.area.contains(Rect(d.pointerX.toInt(), d.pointerY.toInt(), 1, 1)) } ?: d.monitors.firstOrNull()
                 if (m !== target) null else {
@@ -114,7 +117,8 @@ class ClipboardHistory(private val wm: Layout) {
                     Rect(m.area.x + (m.area.width - width) / 2, m.area.y + (m.area.height * 0.13).toInt(), width, height)
                 }
             }
-        }, level = DrawingLevel.ON_TOP, takesKeyboard = true) { ClipboardPanel(this) }
+        }, level = DrawingLevel.ON_TOP, takesKeyboard = true,
+            appearance = { _ -> fade.appearance(rise = -12f, smallest = 0.95f) }, moving = { fade.moving }) { ClipboardPanel(this) }
         widget = w
         caulis.addWidget(w)
         // A click elsewhere closes it.
@@ -181,29 +185,27 @@ class ClipboardHistory(private val wm: Layout) {
         if (!confEnabled()) return run { wm.caulis.notify(newm.bar.tr("The clipboard's history is off (clipboard { enabled = true } turns it on)."), title = "newm") }
         opened++
         shown = true
+        fade.show()
         widget?.let { wm.caulis.desktop.focusWidget(it) }
     }
 
     fun close() {
         if (!shown) return
         shown = false
+        fade.hide()
         if (wm.caulis.desktop.keyboardWidget === widget) wm.caulis.desktop.focusWidget(null)
     }
 
     @Composable
     private fun ClipboardPanel(history: ClipboardHistory) {
-        if (!history.shown) return
+        if (!history.shown && !fade.visible) return
         val colors = wm.barModel.colorsNow()
         val text = TextStyle(color = colors.text, fontSize = 14.sp)
         var query by remember(opened) { mutableStateOf("") }
         var selected by remember(opened) { mutableIntStateOf(0) }
         val focus = remember { FocusRequester() }
         val list = rememberLazyListState()
-        val appear = remember(opened) { Animatable(0f) }
-        LaunchedEffect(opened) {
-            runCatching { focus.requestFocus() }
-            appear.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = 520f))
-        }
+        LaunchedEffect(opened) { runCatching { focus.requestFocus() } }
         val shown = history.entries.filter { e -> query.isBlank() || e.text?.contains(query, ignoreCase = true) == true || (e.png != null && "picture image".contains(query.lowercase())) }
         if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0)
         var byKeys by remember(opened) { mutableIntStateOf(0) }
@@ -212,8 +214,7 @@ class ClipboardHistory(private val wm: Layout) {
         val shape = RoundedCornerShape(20.dp)
         Box(
             Modifier.fillMaxSize().padding(16.dp)
-                .softShadow(20.dp, 14.dp, shown = { appear.value.coerceIn(0f, 1f) })
-                .graphicsLayer { alpha = appear.value.coerceIn(0f, 1f); scaleX = 0.95f + 0.05f * appear.value; scaleY = scaleX; translationY = (1 - appear.value) * -14f * density }
+                .softShadow(20.dp, 14.dp)
                 .background(colors.island.copy(alpha = 0.97f), shape)
                 .border(1.dp, colors.edge, shape)
                 .padding(14.dp),

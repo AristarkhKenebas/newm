@@ -121,8 +121,8 @@ class Popup(val kind: PopupKind, val bar: Bar, val anchorX: Double, val item: Tr
     var expanded by mutableStateOf<String?>(null)
     var password by mutableStateOf("")
 
-    /** The tallest it was while open (it does not shrink). */
-    internal var tallest = 0
+    /** How tall it is now, measured (0: not yet). */
+    internal var measured by mutableStateOf(0)
 
     /** What a hint is of. */
     internal var hintKey: Any? = null
@@ -148,6 +148,27 @@ class BarModel(val wm: Layout) {
         private set
 
     var popup by mutableStateOf<Popup?>(null)
+
+    /** The popup on screen: the open one, or the one fading away. */
+    var shownPopup by mutableStateOf<Popup?>(null)
+        internal set
+
+    /** The window asking for a Wi-Fi password. */
+    val passwordDialog = WifiPasswordDialog(this)
+
+    /** Asks for [network]'s password in a window in the middle of the screen. */
+    fun askPassword(network: WifiNetwork) = passwordDialog.ask(network)
+
+    // Another popup on screen: its scene starts over (one scene changing its whole content
+    // tripped Compose up).
+    internal fun showPopup(next: Popup) {
+        if (shownPopup !== next) popupWidget?.restart()
+        shownPopup = next
+        popupFade.show()
+    }
+
+    /** The popups' coming and going (done by the compositor). */
+    val popupFade = Fade(inMillis = 190, outMillis = 130)
 
     /** The colours made from the wallpaper (or a colour of yours); null: the classic Nord ones. */
     var palette by mutableStateOf<dev.caulis.core.appearance.Palette?>(null)
@@ -274,6 +295,7 @@ class BarModel(val wm: Layout) {
         close()
         val next = Popup(kind, bar, anchorX, item)
         popup = next
+        showPopup(next)
         if (kind == PopupKind.TRAY_MENU && item != null) tray.menuOf(item) { entries -> if (popup === next) next.entries = entries }
         when (kind) {
             PopupKind.VOLUME -> { status.refreshSoon(); sound.refresh() }
@@ -292,6 +314,8 @@ class BarModel(val wm: Layout) {
     fun close() {
         val open = popup ?: return
         popup = null
+        // (Still shown while it fades away.)
+        popupFade.hide()
         // The keys go back to the window that had them.
         val d = wm.caulis.desktop
         if (popupWidget != null && d.keyboardWidget === popupWidget) d.focusWidget(null)
@@ -302,15 +326,19 @@ class BarModel(val wm: Layout) {
     fun popupRect(popup: Popup): Rect? {
         val bar = popup.bar
         val place = bar.place() ?: return null
-        // Only growing while it is open (a list that changes would make it jump, and draw it all anew).
-        val (w, h0) = popupSize(popup)
-        val h = if (popup.kind == PopupKind.TOOLTIP) h0 else maxOf(h0, popup.tallest).also { popup.tallest = it }
+        // As tall as what it shows now (measured; at first a guess), growing and shrinking smoothly.
+        val (w0, h0) = popupSize(popup)
+        val w = w0.coerceAtMost(POPUP_WIDEST)
+        val h = (popup.measured.takeIf { it > 0 } ?: h0).coerceAtMost(POPUP_TALLEST)
         val area = bar.monitor.area
         val x = (popup.anchorX - w / 2.0).coerceIn(area.x + 8.0, area.right - 8.0 - w).toInt()
         val y = if (bar.top) place.y + place.height - bar.margin + 6 else place.y - h - 6 + bar.margin
         // (With room around it for its shadow.)
         return Rect(x - POPUP_SHADOW, y - POPUP_SHADOW, w + 2 * POPUP_SHADOW, h + 2 * POPUP_SHADOW)
     }
+
+    /** How wide [popup] is (desktop units, without its shadow). */
+    fun popupWidth(popup: Popup): Int = popupSize(popup).first.coerceAtMost(POPUP_WIDEST)
 
     private fun popupSize(popup: Popup): Pair<Int, Int> = when (popup.kind) {
         PopupKind.CALENDAR -> 292 to 282
@@ -348,6 +376,12 @@ class BarModel(val wm: Layout) {
 
 /** The room around a popup for its shadow. */
 internal const val POPUP_SHADOW = 14
+
+/** The widest a popup gets. */
+internal const val POPUP_WIDEST = 400
+
+/** The tallest a popup gets (its rows scroll beyond). */
+internal const val POPUP_TALLEST = 600
 
 internal fun composeColor(text: String): Color? = try {
     val c = newm.color(text)
@@ -606,16 +640,19 @@ internal fun BarModel.hint(on: Boolean, bar: Bar, x: Double, key: Any, text: () 
     }
     hintWanted = key
     if (open != null && open.kind != PopupKind.TOOLTIP) return
-    wm.caulis.after(550) {
+    // (A moment later: not for a pointer passing by.)
+    wm.caulis.after(800) {
         if (hintWanted !== key) return@after
         val current = popup
         if (current != null && current.kind != PopupKind.TOOLTIP) return@after
         val words = tr(text().trim())
         if (words.isEmpty()) return@after
-        popup = Popup(PopupKind.TOOLTIP, bar, x).also {
+        val hint = Popup(PopupKind.TOOLTIP, bar, x).also {
             it.text = words.take(300)
             it.hintKey = key
         }
+        popup = hint
+        showPopup(hint)
     }
 }
 

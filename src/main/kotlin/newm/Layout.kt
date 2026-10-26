@@ -417,8 +417,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 if (lastUsable != null) animateTo({ s -> null to s.copy() }, confAnimT())
                 lastUsable = usable
             }
-            return constantDamage > 0 || animating || focusBorders.animating || views.values.any { it.animating } ||
+            val moving = constantDamage > 0 || animating || focusBorders.animating || views.values.any { it.animating } ||
                 topBars.any { it.animating } || bottomBars.any { it.animating }
+            if (moving) log.trace {
+                "Moving: " + listOfNotNull("damage $constantDamage".takeIf { constantDamage > 0 }, "layout".takeIf { animating }, "borders".takeIf { focusBorders.animating },
+                    views.values.filter { it.animating }.takeIf { it.isNotEmpty() }?.joinToString(prefix = "views ") { it.handle.toString() },
+                    "bars".takeIf { topBars.any { it.animating } || bottomBars.any { it.animating } }).joinToString()
+            }
+            return moving
         }
 
         override fun requested(window: Window, request: WindowRequest, on: Boolean): Boolean {
@@ -1049,6 +1055,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val (s, wsState, _) = state.findViewOrNull(view) ?: run {
             // (A view destroyed before it was shown.)
             views.remove(view.handle)
+            view.releaseDamage()
             return
         }
 
@@ -1106,10 +1113,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                     st.unswallowing(view).withoutViewState(view).constrain()
                 }
                 null to result
-            }, confAnimT(), { views.remove(view.handle) })
+            }, confAnimT(), { views.remove(view.handle); view.releaseDamage() })
         } else {
             if (view.isFocused()) focusBorders.unfocus()
-            animateTo({ st -> null to st.unswallowing(view).withoutViewState(view).constrain() }, confAnimT(), { views.remove(view.handle) })
+            animateTo({ st -> null to st.unswallowing(view).withoutViewState(view).constrain() }, confAnimT(), { views.remove(view.handle); view.releaseDamage() })
         }
     }
 
@@ -1185,6 +1192,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // For newm's own tests only (NEWM_TEST_INPUT=1): the pointer moved, clicked, scrolled.
             "test-pointer" -> if (System.getenv("NEWM_TEST_INPUT") == "1") testPointer(arg.orEmpty()) else "Disabled"
             // "56+42" presses Alt and Shift together, then lets them go (evdev codes).
+            "test-ask-password" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
+                barModel.askPassword(newm.bar.WifiNetwork(arg ?: "Test", 70, true, "/", false, false))
+                null
+            } else "NEWM_TEST_INPUT=1 only"
             "test-keys" -> if (System.getenv("NEWM_TEST_INPUT") == "1") {
                 val codes = arg.orEmpty().trim().split('+').mapNotNull { it.trim().toIntOrNull() }
                 codes.forEach { caulis.simulateKey(it, true) }
@@ -1461,7 +1472,16 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun toggleClipboard() = clipboardHistory.toggle()
 
     /** The keys' help: every key of the configuration and what it does (Logo+/). */
-    var keyHelpShown by androidx.compose.runtime.mutableStateOf(false)
+    private var keyHelpOpen by androidx.compose.runtime.mutableStateOf(false)
+    var keyHelpShown: Boolean
+        get() = keyHelpOpen
+        set(value) {
+            keyHelpOpen = value
+            if (value) keyHelpFade.show() else keyHelpFade.hide()
+        }
+
+    /** The keys' help coming and going (done by the compositor). */
+    internal val keyHelpFade = newm.bar.Fade(inMillis = 200, outMillis = 140)
 
     fun toggleKeyHelp() {
         keyHelpShown = !keyHelpShown

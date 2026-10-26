@@ -171,6 +171,12 @@ class Panels(private val wm: Layout) {
             desktop, post,
             place = { m -> if (ownLauncher) launcherArea(m) else null },
             level = DrawingLevel.ON_TOP, takesKeyboard = true,
+            // Coming and going with newm's launcher animation: see-through, smaller, a little higher.
+            appearance = { _ ->
+                val p = wm.layoutDown.launcherPerc.toFloat().coerceIn(0f, 1f)
+                val e = 1f - (1f - p) * (1f - p) * (1f - p)
+                if (e >= 1f) dev.caulis.compose.Appearance.SHOWN else dev.caulis.compose.Appearance(alpha = e, scale = 0.94f + 0.06f * e, dy = (1f - e) * -16f)
+            },
         ) { LauncherPanel(wm, apps, opened, launcherClosing) }
         lockWidget = lock
         launcherWidget = launcher

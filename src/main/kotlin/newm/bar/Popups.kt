@@ -1,5 +1,9 @@
 package newm.bar
 
+import androidx.compose.runtime.key
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -60,14 +64,26 @@ fun BarModel.showPopups(): AutoCloseable {
     val caulis = wm.caulis
     var handle: AutoCloseable? = null
     val start = caulis.after(0) {
+        // A scene as big as the biggest popup: a popup that grows (more networks, a device
+        // found) only shows more of it, nothing made anew.
         val widget = dev.caulis.compose.ComposeWidget(caulis.desktop, post = { task -> caulis.post { task.run() } }, place = { m ->
-            popup?.takeIf { it.bar.monitor === m }?.let(::popupRect)
-        }, takesKeyboard = true) { m ->
-            val open = popup
+            if (!popupFade.visible) {
+                // Gone: forgotten.
+                if (shownPopup != null && popup == null) caulis.post { if (!popupFade.visible && popup == null) shownPopup = null }
+                null
+            } else shownPopup?.takeIf { it.bar.monitor === m }?.let(::popupRect)
+        }, takesKeyboard = true,
+            sceneSize = { _ -> POPUP_WIDEST + 2 * POPUP_SHADOW to POPUP_TALLEST + 2 * POPUP_SHADOW },
+            appearance = { _ -> popupFade.appearance(rise = if (shownPopup?.bar?.top != false) -6f else 6f, smallest = 0.97f) },
+            moving = { popupFade.moving },
+        ) { m ->
+            val open = shownPopup
             if (open != null && open.bar.monitor === m) PopupContent(model, open)
         }
         popupWidget = widget
-        handle = caulis.desktop.addWidget(widget)
+        val dialog = passwordDialog.start()
+        val popups = caulis.desktop.addWidget(widget)
+        handle = AutoCloseable { popups.close(); dialog.close() }
     }
     return AutoCloseable {
         start.close()
@@ -81,19 +97,18 @@ private fun PopupContent(model: BarModel, popup: Popup) {
     // Popups are solid (no blur behind them): a little more opaque than the bar.
     val surface = colors.island.copy(alpha = (colors.island.alpha + 0.16f).coerceAtMost(0.97f))
     val text = TextStyle(color = colors.text, fontSize = 13.sp, fontFamily = popup.bar.fontFamily)
-    val appear = remember(popup) { Animatable(0f) }
-    LaunchedEffect(popup) { appear.animateTo(1f, tween(150)) }
     val shape = RoundedCornerShape(if (popup.kind == PopupKind.TOOLTIP) 9.dp else 14.dp)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // As wide as its place; as tall as it is (measured: its place follows), growing smoothly.
+    Box(Modifier.width(with(density) { (model.popupWidth(popup) + 2 * POPUP_SHADOW).toDp() }).wrapContentHeight(Alignment.Top, unbounded = false)
+        .onSizeChanged { size -> popup.measured = with(density) { size.height.toDp().value.toInt() } - 2 * POPUP_SHADOW }) {
     Box(
-        Modifier.fillMaxSize()
+        Modifier.fillMaxWidth()
             .padding(POPUP_SHADOW.dp)
-            .softShadow(14.dp, 10.dp, shown = { appear.value })
-            .graphicsLayer {
-                alpha = appear.value
-                translationY = (1 - appear.value) * (if (popup.bar.top) -6f else 6f) * density
-            }
+            .softShadow(14.dp, 10.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
+            .animateContentSize(androidx.compose.animation.core.spring(stiffness = 700f, dampingRatio = 0.9f))
             .padding(if (popup.kind == PopupKind.TOOLTIP) 9.dp else 12.dp),
     ) {
         when (popup.kind) {
@@ -107,6 +122,7 @@ private fun PopupContent(model: BarModel, popup: Popup) {
             PopupKind.TRAY_MENU -> TrayMenu(model, popup, colors, text)
             PopupKind.TOOLTIP -> BasicText(popup.text, style = text.copy(fontSize = 12.sp))
         }
+    }
     }
 }
 

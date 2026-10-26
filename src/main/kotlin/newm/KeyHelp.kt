@@ -44,22 +44,23 @@ internal fun Layout.showKeyHelp(): AutoCloseable {
         if (pressed && keyHelpShown) keyHelpShown = false
         false
     }
-    return caulis.compose(place = { m ->
+    return caulis.compose(appearance = { _ -> keyHelpFade.appearance(rise = 10f, smallest = 0.95f) }, moving = { keyHelpFade.moving }, place = { m ->
         // On the monitor with the pointer.
         val d = caulis.desktop
         val target = d.monitors.firstOrNull { it.area.contains(Rect(d.pointerX.toInt(), d.pointerY.toInt(), 1, 1)) } ?: d.monitors.firstOrNull()
-        if (!keyHelpShown || m !== target) {
+        if (!keyHelpFade.visible || m !== target) {
             null
         } else {
             val w = minOf(1060, m.area.width - 80)
             val h = minOf(keyHelpHeight(), m.area.height - 80)
             Rect(m.area.x + (m.area.width - w) / 2, m.area.y + (m.area.height - h) / 2, w, h)
         }
-    }) { _ -> if (keyHelpShown) KeyHelpPanel(this) }
+    }) { _ -> if (keyHelpFade.visible || keyHelpShown) KeyHelpPanel(this) }
 }
 
 // Rows of two keys, a title and the gestures below.
-private fun Layout.keyHelpHeight(): Int = 64 + (helpRows(keyHelp()).size + 1) / 2 * 32 + 56 + 3 * 26 + 56
+// (Its margins and title, the rows, the touchpad's title and rows, a little room below them.)
+private fun Layout.keyHelpHeight(): Int = 60 + 40 + (helpRows(keyHelp()).size + 1) / 2 * 32 + 42 + (GESTURES.size + 1) / 2 * 26 - 2
 
 /** Keys that do the same (the same words) in one row: their combinations, and the words. */
 internal fun helpRows(keys: List<Pair<String, String>>): List<Pair<List<String>, String>> {
@@ -82,20 +83,19 @@ private fun KeyHelpPanel(wm: Layout) {
     val colors = wm.barModel.colorsNow()
     val surface = colors.island.copy(alpha = 0.96f)
     val text = TextStyle(color = colors.text, fontSize = 13.sp)
-    val appear = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { appear.animateTo(1f, tween(160)) }
     val shape = RoundedCornerShape(18.dp)
     val keys = helpRows(wm.keyHelp())
     Box(
         Modifier.fillMaxSize().padding(14.dp)
-            .softShadow(18.dp, 14.dp, shown = { appear.value })
-            .graphicsLayer { alpha = appear.value; scaleX = 0.97f + 0.03f * appear.value; scaleY = scaleX }
+            .softShadow(18.dp, 14.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
-            .padding(horizontal = 22.dp, vertical = 16.dp),
+            .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 12.dp),
     ) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                newm.bar.IconButton(newm.bar.Glyph.CLOSE, colors, 28.dp) { wm.keyHelpShown = false }
+                Spacer(Modifier.width(10.dp))
                 BasicText(newm.bar.tr("Keys"), style = text.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
                 Spacer(Modifier.weight(1f))
                 BasicText(newm.bar.tr("Any key closes this"), style = text.copy(color = colors.dim, fontSize = 12.sp))

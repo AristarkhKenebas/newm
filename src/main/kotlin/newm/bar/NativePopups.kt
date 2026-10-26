@@ -31,28 +31,28 @@ import androidx.compose.ui.unit.sp
 
 // --- Wi-Fi ---------------------------------------------------------------------------------------
 
-/** Wi-Fi from the bar: on and off, the networks in reach, a password asked for in place. */
+/** Wi-Fi from the bar: on and off, the networks in reach (more than five scroll), a password asked for in a window of its own. */
 @Composable
 internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val nm = model.network
     LaunchedEffect(Unit) { nm.refresh(); if (nm.wifiEnabled) nm.scan() }
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Header("Wi-Fi", colors, text) {
-            if (nm.wifiEnabled) SmallButton("Scan", colors, text) { nm.scan() }
-            Spacer(Modifier.width(8.dp))
+            if (nm.wifiEnabled) IconButton(Glyph.REFRESH, colors, spinning = nm.scanning) { nm.scan() }
+            Spacer(Modifier.width(10.dp))
             Switch(nm.wifiEnabled, colors) { nm.setWifi(it) }
         }
-        if (!nm.available) return@Column BasicText(tr("NetworkManager is not running."), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+        if (!nm.available) return@Column Note("NetworkManager is not running.", colors, text)
         nm.problem?.let { BasicText(tr(it), style = text.copy(color = colors.danger, fontSize = 12.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
-        if (nm.wired) ListRow("Wired connection", colors, text, subtitle = "Connected", selected = true, leading = { GlyphIcon(Glyph.WIRED, colors.accent, 16.dp) })
-        if (!nm.wifiEnabled) return@Column BasicText(tr("Wi-Fi is off."), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
-        if (nm.networks.isEmpty()) BasicText(tr("Looking for networks…"), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
-        Column(Modifier.heightIn(max = 330.dp).verticalScroll(rememberScrollState())) {
+        if (nm.wired) TileRow(Glyph.WIRED, "Wired connection", colors, text, subtitle = "Connected", active = true)
+        if (!nm.wifiEnabled) return@Column Note("Wi-Fi is off.", colors, text)
+        if (nm.networks.isEmpty()) return@Column Note("Looking for networks…", colors, text)
+        ScrollingRows(colors, nm.networks.size + if (popup.expanded != null) 1 else 0) {
             for (n in nm.networks) {
                 val connecting = nm.connecting == n.ssid
                 val open = popup.expanded == n.ssid
-                ListRow(
-                    n.ssid, colors, text,
+                TileRow(
+                    Glyph.WIFI, n.ssid, colors, text,
                     subtitle = when {
                         connecting -> "Connecting…"
                         n.active -> "Connected"
@@ -60,40 +60,30 @@ internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
                         n.secure -> null
                         else -> "Open network"
                     },
-                    selected = n.active,
+                    active = n.active, level = n.strength / 100f, expanded = open, busy = connecting,
                     onClick = {
                         when {
-                            n.active || n.known && open -> popup.expanded = if (open) null else n.ssid
-                            nm.needsPassword(n) -> { popup.expanded = if (open) null else n.ssid; popup.password = ""; if (!open) model.wantKeyboard() }
+                            n.active || n.known -> popup.expanded = if (open) null else n.ssid
+                            nm.needsPassword(n) -> model.askPassword(n)
                             else -> nm.connect(n)
                         }
                     },
-                    leading = { GlyphIcon(Glyph.WIFI, if (n.active) colors.accent else colors.text, 16.dp, level = n.strength / 100f) },
-                    trailing = { if (n.secure) GlyphIcon(Glyph.LOCK, colors.dim, 11.dp) },
-                )
-                if (open) Column(Modifier.padding(start = 39.dp, end = 6.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (n.active || n.known) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (n.active) SmallButton("Disconnect", colors, text) { nm.disconnect(); popup.expanded = null }
-                            else SmallButton("Connect", colors, text, accent = true) { nm.connect(n); popup.expanded = null }
-                            SmallButton("Forget", colors, text) { nm.forget(n); popup.expanded = null }
-                        }
-                    } else {
-                        PasswordField(popup.password, colors, text, onChange = { popup.password = it },
-                            onSubmit = { if (popup.password.length >= 8) { nm.connect(n, popup.password); popup.password = ""; popup.expanded = null } },
-                            onCancel = { popup.expanded = null; popup.password = "" })
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            BasicText(if (popup.password.isNotEmpty() && popup.password.length < 8) tr("At least 8 characters") else "", style = text.copy(color = colors.dim, fontSize = 11.sp))
-                            Spacer(Modifier.weight(1f))
-                            SmallButton("Connect", colors, text, accent = true) {
-                                if (popup.password.length >= 8) { nm.connect(n, popup.password); popup.password = ""; popup.expanded = null }
-                            }
-                        }
+                    trailing = { if (n.secure) GlyphIcon(Glyph.LOCK, colors.dim, 13.dp) },
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (n.active) PillButton("Disconnect", colors, text) { nm.disconnect(); popup.expanded = null }
+                        else PillButton("Connect", colors, text, PillKind.PRIMARY) { nm.connect(n); popup.expanded = null }
+                        PillButton("Forget", colors, text, PillKind.DANGER, glyph = Glyph.TRASH) { nm.forget(n); popup.expanded = null }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun Note(words: String, colors: BarColors, text: TextStyle) {
+    BasicText(tr(words), style = text.copy(color = colors.dim), modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp))
 }
 
 // --- Bluetooth -----------------------------------------------------------------------------------
@@ -103,23 +93,23 @@ internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
 internal fun BluetoothPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val bt = model.bluetooth
     LaunchedEffect(Unit) { bt.refresh() }
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Header("Bluetooth", colors, text) {
-            if (bt.powered) SmallButton(if (bt.scanning) "Stop" else "Find devices", colors, text) { bt.scan() }
-            Spacer(Modifier.width(8.dp))
+            if (bt.powered) IconButton(Glyph.REFRESH, colors, spinning = bt.scanning) { bt.scan() }
+            Spacer(Modifier.width(10.dp))
             Switch(bt.powered, colors) { bt.switchPower(it) }
         }
         bt.problem?.let { BasicText(tr(it), style = text.copy(color = colors.danger, fontSize = 12.sp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
-        if (!bt.powered) return@Column BasicText(tr("Bluetooth is off."), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
+        if (!bt.powered) return@Column Note("Bluetooth is off.", colors, text)
         val paired = bt.devices.filter { it.paired }
         val found = bt.devices.filter { !it.paired }
-        Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
+        ScrollingRows(colors, bt.devices.size + (if (found.isNotEmpty() || bt.scanning) 1 else 0) + (if (popup.expanded != null) 1 else 0)) {
             if (paired.isNotEmpty()) Section("Your devices", colors, text)
             for (d in paired) DeviceRow(model, popup, d, colors, text)
             if (bt.scanning || found.isNotEmpty()) Section(if (bt.scanning) "Nearby (looking…)" else "Nearby", colors, text)
             for (d in found) DeviceRow(model, popup, d, colors, text)
-            if (paired.isEmpty() && found.isEmpty() && !bt.scanning) BasicText(tr("No devices yet: “Find devices” looks for them."), style = text.copy(color = colors.dim, fontSize = 12.sp), modifier = Modifier.padding(6.dp))
         }
+        if (paired.isEmpty() && found.isEmpty() && !bt.scanning) Note("No devices yet: “Find devices” looks for them.", colors, text)
     }
 }
 
@@ -128,64 +118,67 @@ private fun DeviceRow(model: BarModel, popup: Popup, d: BluetoothDevice, colors:
     val bt = model.bluetooth
     val busy = bt.busy == d.path
     val open = popup.expanded == d.path
-    var icon by remember(d.icon) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(d.icon) { IconTheme.load(d.icon, TRAY_ICON_PIXELS, null, post = { model.wm.caulis.post { it() } }) { icon = it } }
-    ListRow(
-        d.name, colors, text,
+    TileRow(
+        glyphOfDevice(d.icon), d.name, colors, text,
         subtitle = when {
             busy && d.connected -> "Disconnecting…"
             busy -> if (d.paired) "Connecting…" else "Pairing…"
-            d.connected -> "Connected" + (d.battery?.let { " · battery $it%" } ?: "")
+            d.connected -> d.battery?.let { "Connected · battery $it%" } ?: "Connected"
             d.paired -> null
             else -> "Click to pair"
         },
-        selected = d.connected,
-        onClick = {
-            when {
-                d.paired -> popup.expanded = if (open) null else d.path
-                else -> bt.connect(d)
-            }
-        },
-        leading = {
-            val picture = icon
-            if (picture != null) Image(picture, null, Modifier.size(16.dp), filterQuality = FilterQuality.High) else GlyphIcon(Glyph.BLUETOOTH, colors.text, 16.dp)
-        },
-    )
-    if (open) Row(Modifier.padding(start = 39.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (d.connected) SmallButton("Disconnect", colors, text) { bt.disconnect(d); popup.expanded = null }
-        else SmallButton("Connect", colors, text, accent = true) { bt.connect(d); popup.expanded = null }
-        SmallButton("Forget", colors, text) { bt.forget(d); popup.expanded = null }
+        active = d.connected, expanded = open, busy = busy,
+        onClick = { if (d.paired) popup.expanded = if (open) null else d.path else bt.connect(d) },
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (d.connected) PillButton("Disconnect", colors, text) { bt.disconnect(d); popup.expanded = null }
+            else PillButton("Connect", colors, text, PillKind.PRIMARY) { bt.connect(d); popup.expanded = null }
+            PillButton("Forget", colors, text, PillKind.DANGER, glyph = Glyph.TRASH) { bt.forget(d); popup.expanded = null }
+        }
     }
 }
 
 // --- sound ---------------------------------------------------------------------------------------
 
-/** Sound from the bar: the volume and the microphone, which device each uses. */
+/** Sound from the bar: the volume and the microphone, and which device each uses. */
 @Composable
 internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
     val sound = model.sound
     LaunchedEffect(Unit) { sound.refresh() }
-    Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val out = sound.outputs.firstOrNull { it.isDefault } ?: sound.outputs.firstOrNull()
         Header("Sound", colors, text)
-        if (out == null) {
-            BasicText(tr("No sound device"), style = text.copy(color = colors.dim), modifier = Modifier.padding(6.dp))
-        } else {
-            LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }) { sound.setVolume(out, it, true) }
-            if (sound.outputs.size > 1) {
-                Section("Output", colors, text)
-                for (d in sound.outputs) ListRow(d.description, colors, text, selected = d.isDefault, onClick = { sound.use(d, true) },
-                    leading = { if (d.isDefault) GlyphIcon(Glyph.CHECK, colors.accent, 12.dp) })
-            }
+        if (out == null) return@Column Note("No sound device", colors, text)
+        LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }) { sound.setVolume(out, it, true) }
+        if (sound.outputs.size > 1) {
+            Section("Output", colors, text)
+            for (d in sound.outputs) DeviceChoice(d.description, outputGlyph(d.description), d.isDefault, colors, text) { sound.use(d, true) }
         }
         val mic = sound.inputs.firstOrNull { it.isDefault } ?: sound.inputs.firstOrNull()
         if (mic != null) {
             Section("Microphone", colors, text)
             LevelRow(Glyph.MIC, mic.volume, mic.muted, colors, text, onMute = { sound.toggleMute(mic, false) }) { sound.setVolume(mic, it, false) }
-            if (sound.inputs.size > 1) for (d in sound.inputs) ListRow(d.description, colors, text, selected = d.isDefault, onClick = { sound.use(d, false) },
-                leading = { if (d.isDefault) GlyphIcon(Glyph.CHECK, colors.accent, 12.dp) })
+            if (sound.inputs.size > 1) for (d in sound.inputs) DeviceChoice(d.description, Glyph.MIC, d.isDefault, colors, text) { sound.use(d, false) }
         }
     }
+}
+
+// What kind of output a device's name says it is.
+private fun outputGlyph(name: String): Glyph {
+    val n = name.lowercase()
+    return when {
+        "headphone" in n || "headset" in n || "buds" in n || "bluez" in n || "airpods" in n -> Glyph.HEADPHONES
+        "hdmi" in n || "displayport" in n -> Glyph.MONITOR
+        else -> Glyph.SPEAKER_DEVICE
+    }
+}
+
+// A device to choose: its picture, its name, a check on the one in use.
+@Composable
+private fun DeviceChoice(name: String, glyph: Glyph, chosen: Boolean, colors: BarColors, text: TextStyle, onClick: () -> Unit) {
+    ListRow(name, colors, text, selected = chosen, onClick = onClick,
+        leading = { GlyphIcon(glyph, if (chosen) colors.accent else colors.dim, 16.dp) },
+        trailing = { if (chosen) GlyphIcon(Glyph.CHECK, colors.accent, 14.dp) })
 }
 
 // A level: a Pixel's wide slider, its icon inside (a click on it mutes), the percent at the right.

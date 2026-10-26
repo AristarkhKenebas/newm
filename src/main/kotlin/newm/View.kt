@@ -567,7 +567,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         initialState = state
         damage()
         // Until show animation starts
-        wm.enterConstantDamage()
+        holdDamage()
         return state
     }
 
@@ -581,6 +581,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             return null to null
         }
         log.info { "Show: $this" }
+        releaseDamage()
         readRules()
 
         val ws = workspaceFor()
@@ -688,9 +689,27 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         window.configure()
     }
 
+    // Frames drawn without pause while this view waits (for its show animation, for its
+    // closing one): held once, let go once (newm held them for good, so after a few windows
+    // every frame was drawn anew, even with nothing moving).
+    private var holdsDamage = false
+
+    private fun holdDamage() {
+        if (holdsDamage) return
+        holdsDamage = true
+        wm.enterConstantDamage()
+    }
+
+    /** The view does not wait any more: frames only when something moves. */
+    fun releaseDamage() {
+        if (!holdsDamage) return
+        holdsDamage = false
+        wm.exitConstantDamage()
+    }
+
     fun destroy() {
         // Until exit animation
-        wm.enterConstantDamage()
+        holdDamage()
         destroyed = true
         wm.destroyView(this)
     }

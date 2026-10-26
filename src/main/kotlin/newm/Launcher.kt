@@ -1,5 +1,6 @@
 package newm
 
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -112,15 +113,9 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
     val focus = remember { FocusRequester() }
     val list = rememberLazyListState()
     val icons = remember { mutableStateMapOf<String, ImageBitmap?>() }
-    val appear = remember(opened) { Animatable(0f) }
-    LaunchedEffect(opened) {
-        runCatching { focus.requestFocus() }
-        appear.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 520f))
-    }
-
-    // Closing: it fades away (newm's launcher animation is running meanwhile).
-    val gone = remember(opened) { Animatable(1f) }
-    LaunchedEffect(closing) { if (closing) gone.animateTo(0f, tween(200)) }
+    // (It comes and goes as newm's launcher animation runs: the compositor shows it see-through
+    // and smaller then, nothing here is drawn anew for it.)
+    LaunchedEffect(opened) { runCatching { focus.requestFocus() } }
 
     // The wheel and the touchpad: what they scroll is added up and the list glides after it, a
     // frame at a time while there is something left (Compose scrolled by whole steps: jerky).
@@ -140,8 +135,6 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             scrollWanted = 0f
         }
     }
-    // The first rows come in one after the other when it opens.
-    val introduced = remember(opened) { HashSet<Int>() }
 
     // Nothing typed: the frequent ones first (then by name); else the matches, the frequent first among equals.
     val shown = remember(apps, query) {
@@ -149,7 +142,8 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
         else DesktopApp.matching(apps, query)
     }
     val frequent = if (query.isBlank()) shown.takeWhile { LaunchCounts.of(it) > 0 }.take(6).size else 0
-    if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0)
+    // (Kept in the list, not read here: reading it while composing composed the whole list anew at each row the pointer passed.)
+    LaunchedEffect(shown) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
     // Chosen with the keys: scrolled into sight if it is not (the pointer only chooses what it is on:
     // scrolling then moved the list under a still pointer, which chose the next one, on and on).
     var byKeys by remember(opened) { mutableIntStateOf(0) }
@@ -174,14 +168,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
     val shape = RoundedCornerShape(20.dp)
     Box(
         Modifier.fillMaxSize().padding(16.dp)
-            .softShadow(20.dp, 14.dp, shown = { appear.value.coerceIn(0f, 1f) * gone.value })
-            .graphicsLayer {
-                val shown = appear.value.coerceIn(0f, 1.05f) * gone.value
-                alpha = shown.coerceIn(0f, 1f)
-                scaleX = 0.94f + 0.06f * appear.value
-                scaleY = scaleX
-                translationY = (1 - appear.value) * -16f * density
-            }
+            .softShadow(20.dp, 14.dp)
             .background(colors.island.copy(alpha = 0.97f), shape)
             .border(1.dp, colors.edge, shape),
     ) {
@@ -234,7 +221,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                 itemsIndexed(shown, key = { _, app -> app.id.ifEmpty { app.name } }) { i, app ->
                     if (query.isBlank() && i == 0 && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
                     if (query.isBlank() && i == frequent) Label(newm.bar.tr("All programs"), colors)
-                    AppRow(app, i == selected, colors, text, icons, wm, intro = if (i < 9 && introduced.add(i)) i else -1, onHover = { selected = i }, onClick = { start(app) })
+                    AppRow(app, { selected == i }, colors, text, icons, wm, intro = -1, onHover = { selected = i }, onClick = { start(app) })
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -250,7 +237,7 @@ private fun Label(title: String, colors: BarColors) {
 }
 
 @Composable
-private fun AppRow(app: DesktopApp, selected: Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, intro: Int, onHover: () -> Unit, onClick: () -> Unit) {
+private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, intro: Int, onHover: () -> Unit, onClick: () -> Unit) {
     // The first rows come in one after another ([intro]: its place; -1: shown at once).
     val come = remember { Animatable(if (intro >= 0) 0f else 1f) }
     LaunchedEffect(Unit) {
@@ -262,29 +249,33 @@ private fun AppRow(app: DesktopApp, selected: Boolean, colors: BarColors, text: 
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     LaunchedEffect(hovered) { if (hovered) onHover() }
-    // (At once: an animation here drew the whole launcher anew for frames on each row passed.)
-    val bg = if (selected) colors.accent.copy(alpha = 0.18f) else Color.Transparent
+    // The chosen one lit: read only while drawing, so choosing another redraws two rows, not
+    // the whole list composed anew (that cost a heavy frame at each row the pointer passed).
+    val lit = colors.accent.copy(alpha = 0.18f)
     val key = app.icon.ifEmpty { app.id }
+    val iconPixels = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.roundToPx() }
     LaunchedEffect(key) {
         if (key.isNotEmpty() && key !in icons) {
             icons[key] = null
-            IconTheme.load(key, 64, null, post = { wm.caulis.post { it() } }) { icons[key] = it }
+            // At the size it is drawn in pixels: drawn as it is, not shrunk anew each frame.
+            IconTheme.load(key, iconPixels, null, post = { wm.caulis.post { it() } }) { icons[key] = it }
         }
     }
     Row(
         Modifier.fillMaxWidth().height(52.dp)
-            .graphicsLayer {
+            // A layer of its own only while it comes in (each one costs a picture drawn apart).
+            .then(if (come.value < 1f) Modifier.graphicsLayer {
                 alpha = come.value
                 translationY = (1 - come.value) * 10f * density
-            }
-            .background(bg, RoundedCornerShape(12.dp)).hoverable(source)
+            } else Modifier)
+            .drawBehind { if (selected()) drawRoundRect(lit, cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx())) }.hoverable(source)
             .pointerInput(onClick) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onClick() } }
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val picture = icons[key]
         if (picture != null) {
-            Image(picture, null, Modifier.size(32.dp), filterQuality = FilterQuality.High)
+            Image(picture, null, Modifier.size(32.dp), filterQuality = FilterQuality.Low)
         } else {
             Box(Modifier.size(32.dp).background(colors.accent.copy(alpha = 0.25f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                 BasicText(app.name.take(1).uppercase(), style = text.copy(fontWeight = FontWeight.Bold))
@@ -295,6 +286,6 @@ private fun AppRow(app: DesktopApp, selected: Boolean, colors: BarColors, text: 
             BasicText(app.name, style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (app.comment.isNotBlank()) BasicText(app.comment, style = text.copy(color = colors.dim, fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (selected) BasicText("↵", style = text.copy(color = colors.dim, fontSize = 14.sp))
+        BasicText("↵", style = text.copy(color = colors.dim, fontSize = 14.sp), modifier = Modifier.graphicsLayer { alpha = if (selected()) 1f else 0f })
     }
 }

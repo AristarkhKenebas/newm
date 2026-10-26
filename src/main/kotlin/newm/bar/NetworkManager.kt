@@ -170,11 +170,20 @@ class NetworkManager(private val caulis: Caulis) {
         log.info { "Wi-Fi ${if (on) "on" else "off"}" }
     }
 
+    /** Looking for networks now (after [scan], a few seconds). */
+    var scanning by mutableStateOf(false)
+        private set
+
     /** Looks for networks again (they come in a few seconds). */
     fun scan() {
         val device = wifiDevice ?: return
+        if (scanning) return
+        scanning = true
         bus?.call(NM, ObjectPath(device), WIRELESS, "RequestScan", "a{sv}", listOf(emptyMap<String, Variant>())) { _ -> }
-        caulis.after(3500) { refresh() }
+        caulis.after(3500) {
+            scanning = false
+            refresh()
+        }
     }
 
     /** Whether connecting to [network] needs a password from you (secure and not known). */
