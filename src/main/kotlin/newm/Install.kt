@@ -9,10 +9,30 @@ private val log = Logger("install")
 /** Where display managers (ly, SDDM, GDM) find sessions to choose. */
 val SESSION_FILE: Path = Path.of("/usr/share/wayland-sessions/newm.desktop")
 
-/** The newm program itself (its start script, next to the jars it runs). */
-fun launcherPath(): Path? = System.getProperty("java.class.path").orEmpty().split(':').firstOrNull { it.endsWith(".jar") }
-    ?.let { Path.of(it).toAbsolutePath().parent?.parent?.resolve("bin/newm") }
-    ?.takeIf(Files::isExecutable)
+/**
+ * The newm program itself (its start script, next to the jars it runs). Nix's package runs that
+ * script from $out/share/newm through a wrapper ($out/bin/newm: its Java, its libraries): the
+ * wrapper then, which works on its own.
+ */
+fun launcherPath(): Path? {
+    val script = System.getProperty("java.class.path").orEmpty().split(':').firstOrNull { it.endsWith(".jar") }
+        ?.let { Path.of(it).toAbsolutePath().parent?.parent?.resolve("bin/newm") }
+        ?.takeIf(Files::isExecutable) ?: return null
+    // /nix/store/<hash>-newm/share/newm/bin/newm → /nix/store/<hash>-newm/bin/newm
+    val share = script.parent?.parent
+    if (script.startsWith("/nix/store") && share?.fileName?.toString() == "newm" && share.parent?.fileName?.toString() == "share") {
+        val wrapper = share.parent.parent.resolve("bin/newm")
+        if (Files.isExecutable(wrapper)) return wrapper
+    }
+    return script
+}
+
+// A path as a .desktop file's Exec= takes it: quoted when it has spaces (or other special characters).
+private fun desktopExec(path: Path): String {
+    val text = path.toString()
+    if (text.none { it.isWhitespace() || it in "\"'`$\\<>~|&;*?#()" }) return text
+    return "\"" + text.replace(Regex("[\"`$\\\\]")) { "\\" + it.value } + "\""
+}
 
 /**
  * `newm install-session`: newm in the display manager's list of sessions, and the system's
@@ -26,7 +46,7 @@ fun installSession(): Int {
         [Desktop Entry]
         Name=newm
         Comment=Windows on an endless wall, made for touchpads
-        Exec=$launcher
+        Exec=${launcher.let(::desktopExec)}
         TryExec=$launcher
         Type=Application
         DesktopNames=newm
@@ -120,6 +140,8 @@ object Templates {
                 if (Files.exists(target)) continue
                 Files.createDirectories(target.parent)
                 Files.copy(file, target)
+                // (Nix's files are read-only: the user's copy is theirs to change.)
+                target.toFile().setWritable(true, true)
             }
         }
     }

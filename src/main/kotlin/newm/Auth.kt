@@ -15,6 +15,7 @@ import java.nio.ByteOrder
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.Executors
 
 private val log = Logger("auth")
 
@@ -23,7 +24,8 @@ private val confGreeterUser = configuredValue("greeter_user", "greeter")
 private interface Backend {
     fun initAuth(user: String) {}
     fun enterCred(cred: String) {}
-    fun startSession() {}
+    /** Starts the user's session, then [then] (on the compositor's thread). */
+    fun startSession(then: () -> Unit) = then()
 }
 
 /** newm's _PAMBackend: the password checked by PAM (service "login", as python-pam's default). */
@@ -48,13 +50,22 @@ private class PamBackend(private val auth: AuthBackend) : Backend {
         }, "newm-pam").apply { isDaemon = true }.start()
     }
 
-    override fun startSession() = log.warn("Unsupported operation")
+    override fun startSession(then: () -> Unit) {
+        log.warn("Unsupported operation")
+        then()
+    }
 }
 
-/** newm's _GreetdBackend: newm as the greeter of greetd (its socket in GREETD_SOCK). */
+/**
+ * newm's _GreetdBackend: newm as the greeter of greetd (its socket in GREETD_SOCK). greetd is
+ * talked to on a thread of its own (after a wrong password its answer takes seconds); what it
+ * answers is taken on on the compositor's thread, as [PamBackend] does.
+ */
 private class GreetdBackend(private val auth: AuthBackend) : Backend {
     private var user: String? = null
+    // (Only the greetd thread touches the socket.)
     private var socket: SocketChannel? = null
+    private val worker = Executors.newSingleThreadExecutor { Thread(it, "newm-greetd").apply { isDaemon = true } }
 
     private fun openSocket() {
         val path = System.getenv("GREETD_SOCK") ?: return log.error("Not in a greetd session")
@@ -75,20 +86,63 @@ private class GreetdBackend(private val auth: AuthBackend) : Backend {
         return Json.parseObject(String(reply.array()))
     }
 
+    // [work] on the greetd thread; a broken connection is logged and opened anew next time.
+    private fun talk(what: String, work: () -> Unit) = worker.execute {
+        try {
+            work()
+        } catch (e: Exception) {
+            log.error("greetd: $what failed ($e)")
+            runCatching { socket?.close() }
+            socket = null
+        }
+    }
+
     override fun initAuth(user: String) {
         this.user = user
-        send(mapOf("type" to "cancel_session"))
-        val result = send(mapOf("type" to "create_session", "username" to user))
-        if (result["type"] == "auth_message") auth.requestCred(result["auth_message"] as String?, user)
+        talk("starting a session for $user") {
+            send(mapOf("type" to "cancel_session"))
+            val result = send(mapOf("type" to "create_session", "username" to user))
+            auth.post {
+                when (result["type"]) {
+                    "auth_message" -> auth.requestCred(result["auth_message"] as? String, user)
+                    // (No password needed.)
+                    "success" -> auth.authResult(true)
+                    else -> {
+                        // greetd refused the user: asked for one again.
+                        log.warn("greetd refused $user: ${result["description"] ?: result["error_type"] ?: result["type"]}")
+                        auth.initSession()
+                    }
+                }
+            }
+        }
     }
 
     override fun enterCred(cred: String) {
-        val result = send(mapOf("type" to "post_auth_message_response", "response" to cred))
-        if (result["type"] == "auth_message") auth.requestCred(result["auth_message"] as String?, user) else auth.authResult(result["type"] == "success")
+        val u = user ?: return
+        talk("checking the password") {
+            val result = send(mapOf("type" to "post_auth_message_response", "response" to cred))
+            auth.post {
+                when (result["type"]) {
+                    "auth_message" -> auth.requestCred(result["auth_message"] as? String, u)
+                    "success" -> auth.authResult(true)
+                    else -> {
+                        // A wrong password (greetd's error ends that conversation): a new one, so the password can be typed again.
+                        auth.authResult(false)
+                        if (user == u) initAuth(u)
+                    }
+                }
+            }
+        }
     }
 
-    override fun startSession() {
-        send(mapOf("type" to "start_session", "cmd" to listOf("start-newm")))
+    override fun startSession(then: () -> Unit) {
+        talk("starting the session") {
+            try {
+                send(mapOf("type" to "start_session", "cmd" to listOf("start-newm")))
+            } finally {
+                auth.post(then)
+            }
+        }
     }
 }
 
@@ -180,8 +234,7 @@ class AuthBackend(private val layout: Layout) {
         state = "initial"
         if (isGreeter()) {
             log.info { "Starting session after successful verification" }
-            backend.startSession()
-            layout.terminate()
+            backend.startSession { layout.terminate() }
         } else {
             log.info { "Unlocking after successful verification" }
             layout.trustedUnlock()

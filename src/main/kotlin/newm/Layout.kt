@@ -49,7 +49,8 @@ private val confLockOnWakeup = configuredValue("lock_on_wakeup", true)
 private val confSynchronousUpdate = configuredValue<() -> Unit>("synchronous_update") { }
 private val confEnableCGestures = configuredValue("gestures.c.enabled", true)
 private val confEnableDBusGestures = configuredValue("gestures.dbus.enabled", true)
-private val confEnableUnlockCommand = configuredValue("enable_unlock_command", true)
+// (Off unless asked for: any program of the user's could unlock over the session bus without the password.)
+private val confEnableUnlockCommand = configuredValue("enable_unlock_command", false)
 private val confGestureBindingSwipeToZoom = configuredValue<List<String?>>("gesture_bindings.swipe_to_zoom", listOf(null, "swipe-4"))
 private val confGestureBindingSwipe = configuredValue<List<String?>>("gesture_bindings.swipe", listOf(null, "swipe-3"))
 private val confResizePushes = configuredValue("view.resize_pushes", true)
@@ -59,6 +60,7 @@ internal const val MAX_GRID = 8.0
 // overview { input = false: windows take no clicks there; choose = true: a click chooses one (and leaves) }
 private val confOverviewInput = configuredValue("overview.input", false)
 private val confOverviewChoose = configuredValue("overview.choose", true)
+private val confOverviewFollow = configuredValue("overview.follow_pointer", true)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
 private val confGestureBindingLauncher = configuredValue<List<String?>>("gesture_bindings.launcher", listOf(null, "swipe-5"))
 
@@ -115,52 +117,70 @@ class Animation(
     private var finalState: LayoutState? = null
     private var started = false
     private var finish: Double? = null
+    // The workspaces it was made for (the monitors may change while it runs).
+    private var generation = -1
 
     // (Prevent division by zero.)
     private val duration = max(0.1, duration)
 
     fun checkFinished(): Boolean {
-        if (started && finalState == null) {
-            then?.invoke()
-            layout.doFlushAnimation()
-            return true
-        }
+        if (started && finalState == null) return finished(null)
         if (started && finish == null) finish = layout.finalTimeAll()
         val f = finish
-        if (f != null && now() > f) {
-            finalState?.let(layout::update)
-            then?.invoke()
-            layout.doFlushAnimation()
-            return true
-        }
+        if (f != null && now() > f) return finished(finalState)
         return false
     }
 
+    // Its final state written, `then` run and the parts' animations flushed — whatever fails
+    // on the way, so the queue goes on.
+    private fun finished(state: LayoutState?): Boolean {
+        try {
+            if (state != null) {
+                // Made before the monitors changed: on the workspaces there are now (else a
+                // workspace gone came back with it).
+                if (generation != layout.layoutGeneration) {
+                    log.info { "Animation made for older workspaces: its final state moved onto the ones now" }
+                    state.withWorkspaces(layout)
+                }
+                layout.update(state)
+            }
+            then?.invoke()
+        } catch (e: Exception) {
+            log.error("Finishing an animation", e)
+        } finally {
+            layout.doFlushAnimation()
+        }
+        return true
+    }
+
     fun start() {
+        generation = layout.layoutGeneration
         try {
             reducer(layout.state).let { (i, f) ->
                 initialState = i
                 finalState = f
             }
+            initialState?.let(layout::update)
+            val f = finalState
+            if (f != null) {
+                // Enforce constraints on the final state.
+                f.constrainAndValidate()
+                if (f == layout.state) {
+                    log.trace { "Skipping moot animation" }
+                    finalState = null
+                } else {
+                    layout.animateAll(f, duration)
+                }
+            } else {
+                log.trace { "Animation decided not to take place anymore" }
+            }
         } catch (e: Exception) {
-            log.error("During animation reducer", e)
+            // (No final state: it ends at once and the queue goes on.)
+            log.error("During animation start", e)
             initialState = null
             finalState = null
-        }
-        initialState?.let(layout::update)
-        started = true
-        val f = finalState
-        if (f != null) {
-            // Enforce constraints on the final state.
-            f.constrainAndValidate()
-            if (f == layout.state) {
-                log.trace { "Skipping moot animation" }
-                finalState = null
-            } else {
-                layout.animateAll(f, duration)
-            }
-        } else {
-            log.trace { "Animation decided not to take place anymore" }
+        } finally {
+            started = true
         }
     }
 
@@ -233,7 +253,14 @@ class LayoutQueue(private val layout: Layout) {
                 }
             }
             currentAnimation?.let { a ->
-                if (a.checkFinished()) {
+                // (One that fails to finish is done all the same: never the queue stopped for good.)
+                val done = try {
+                    a.checkFinished()
+                } catch (e: Exception) {
+                    log.error("Unexpected while finishing an animation", e)
+                    true
+                }
+                if (done) {
                     log.trace { "Finishing animation..." }
                     currentAnimation = null
                     layout.exitConstantDamage()
@@ -276,6 +303,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private var backgrounds: List<Background> = emptyList()
     // (Compose state: the bars' parts follow when a reload makes them anew.)
     private var topBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
+
+    /** How far down from a monitor's top the top bar reaches (0: none), for what must stay below it. */
+    fun topBarReach(): Int = topBars.mapNotNull { bar -> bar.place()?.let { it.bottom - bar.monitor.area.y } }.maxOrNull() ?: 0
     private var bottomBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
 
     /** The wallpaper's most telling colour (the colours are made from it), once it was read. */
@@ -313,12 +343,23 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private var constantDamage = 0
     private var modifiers = 0
     private val requestedSize = java.util.IdentityHashMap<Window, Pair<Int, Int>>()
+    // The view with the focus now, and the one that had it when its window closed.
+    private var focusedView: View? = null
+    private var closingFocused: View? = null
     /** The layout's state of this frame (the lock screen's and the launcher's way in). */
     var layoutDown = LayoutDown(0.0)
         private set
 
     // The monitors' room left by bar programs, as last seen.
     private var lastUsable: List<dev.caulis.geometry.Rect>? = null
+    // The monitors' places, sizes and scales, as the workspaces were made for them.
+    private var lastGeometry: List<Triple<String, dev.caulis.geometry.Rect, Double>>? = null
+
+    /** Counted up each time the workspaces are made anew (an animation made before is told by it). */
+    internal var layoutGeneration = 0
+        private set
+
+    private fun geometryNow() = desktopOrNull()?.monitors?.map { Triple(it.name, it.area, it.scale) }
 
     init {
         caulis.director = director()
@@ -328,12 +369,20 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onScroll { vertical, value, _ -> onAxis(now().toMillis(), vertical, value) }
         caulis.onGesture { gesture -> onTouchpadGesture(gesture) }
         caulis.onWindowClosed { window -> viewsByWindow[window]?.destroy() }
-        caulis.onFocusChanged { _ -> for (v in views.values.toList()) v.onFocusChange() }
+        caulis.onFocusChanged { window ->
+            // The focused view, and the one that had it while it closes (Caulis moves the focus
+            // on before newm hears of the window closing).
+            val before = focusedView
+            if (before != null && !before.window.mapped) closingFocused = before
+            focusedView = window?.let(::viewOf)
+            for (v in views.values.toList()) v.onFocusChange()
+        }
         caulis.onMonitorAdded { onLayoutChange() }
         caulis.onMonitorRemoved { onLayoutChange() }
         caulis.onSleep { onSleep() }
         // One lock screen: newm's (or the configuration's locker), never Caulis's swaylock as well.
-        caulis.locker { ensureLocked() }
+        // (Shown once it covers the screen: sleep waits for that, and is not locked twice.)
+        caulis.locker(shows = { layoutDown.lockPerc >= 0.99 }) { ensureLocked() }
         caulis.lockBeforeSleep = false
         caulis.onWake { onWakeup() }
         // Idle: Caulis says when nobody is there (programs that keep the screen on hold it off),
@@ -422,6 +471,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         // Asked once a frame: the layout's own state of this frame (pywm processed it every frame).
         override fun animating(now: Long): Boolean {
             layoutDown = process(reducer(state))
+            // A monitor got another mode, scale or place (Caulis says nothing of it): workspaces anew.
+            val geometry = geometryNow()
+            if (geometry != lastGeometry) {
+                if (lastGeometry != null) {
+                    log.info { "Monitors changed (mode, scale or place): workspaces made anew" }
+                    caulis.post { onLayoutChange() }
+                }
+                lastGeometry = geometry
+            }
             // A bar program came, went or changed its height: windows make way anew.
             val usable = desktopOrNull()?.monitors?.map { it.usableArea }
             if (usable != lastUsable) {
@@ -535,6 +593,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 }
             }
             best?.handle = w.handle
+            best?.focusViewHint = w.focusViewHint
         }
         workspaces = ws.ifEmpty { workspaces }
         for (w in workspaces.filter { it.handle < 0 }) {
@@ -544,14 +603,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
         log.trace { "Setup of newm workspaces" }
         for (w in workspaces) log.trace { "  $w" }
+        layoutGeneration++
         state = state.withWorkspaces(this)
         updateActiveWorkspace()
     }
 
     private fun updateActiveWorkspace() {
-        var (check1, check2) = activeWorkspacePair
-        if (check1.handle !in workspaces.map { it.handle }) check1 = workspaces[0]
-        if (check2 != null && check2.handle !in workspaces.map { it.handle }) check2 = null
+        // (The workspaces made now, never the old ones of the same handle: their size was then.)
+        val check1 = workspaces.firstOrNull { it.handle == activeWorkspacePair.first.handle } ?: workspaces[0]
+        val check2 = activeWorkspacePair.second?.let { w -> workspaces.firstOrNull { it.handle == w.handle } }
         activeWorkspacePair = check1 to check2
 
         val d = desktopOrNull() ?: return
@@ -577,6 +637,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh).also(Bar::look) } else emptyList()
         bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh).also(Bar::look) } else emptyList()
         barModel.refreshPalette()
+        barModel.applyNoticeStyle() // (below the bars made now)
         shots?.apply()
         // The tray and the rest only with newm's islands bar (else another bar's tray stays its own).
         if ((topBars + bottomBars).any { it.islands }) barModel.start()
@@ -813,6 +874,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     /** The monitors changed: workspaces and widgets anew. */
     fun onLayoutChange() {
+        lastGeometry = geometryNow()
         setupWorkspaces()
         setupWidgets()
     }
@@ -905,6 +967,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun onMotion(timeMillis: Int, dx: Double, dy: Double): Boolean {
         updateActiveWorkspace()
         if (isLocked()) return false
+        // In the overview the window under the pointer is the chosen one: its border, and what
+        // Super+drag moves (else it stayed the window one came from).
+        if (overlay == null && confOverviewFollow() && overviewShown()) {
+            viewUnderPointer(dx, dy)?.takeIf { !it.isFocused() && it.window.mapped }?.let { v ->
+                log.trace { "Overview: $v under the pointer, focused" }
+                v.focus()
+            }
+        }
         for (g in gestureProviders) {
             val res = g.onMotion(timeMillis, dx, dy)
             if (res == 2) return true
@@ -915,10 +985,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     /** The window drawn under the pointer now (also where windows take no clicks: the overview). */
-    fun viewUnderPointer(): View? {
+    fun viewUnderPointer(dx: Double = 0.0, dy: Double = 0.0): View? {
         val d = caulis.desktop
+        // (A motion is heard before the pointer moves: [dx], [dy] say where it goes.)
+        val x = d.pointerX + dx
+        val y = d.pointerY + dy
         return views.values.lastOrNull { v ->
-            d.drawnNow(v.window) && d.shownRect(v.window)?.let { r -> d.pointerX >= r.x && d.pointerX < r.right && d.pointerY >= r.y && d.pointerY < r.bottom } == true
+            d.drawnNow(v.window) && d.shownRect(v.window)?.let { r -> x >= r.x && x < r.right && y >= r.y && y < r.bottom } == true
         }
     }
 
@@ -1001,7 +1074,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (hasModifier(moveResize[0]) && (gesture.kind == moveResize[1] || gesture.kind == moveResize[2])) {
             log.trace { "...MoveResize" }
             // The window under the pointer (as Hyprland's Super+drag), focused; else the focused one.
-            val view = caulis.desktop.let { d -> d.windowAt(d.pointerX, d.pointerY) }?.let(::viewOf)?.also { if (!it.isFocused()) it.focus() } ?: findFocusedView()
+            // (In the overview windows take no clicks: the one drawn under the pointer there.)
+            val under = if (overviewShown()) viewUnderPointer() else caulis.desktop.let { d -> d.windowAt(d.pointerX, d.pointerY) }?.let(::viewOf)
+            val view = under?.also { if (!it.isFocused()) it.focus() } ?: findFocusedView()
             if (view != null && view.isFloat(state)) return enter(MoveResizeFloatingOverlay(this, view))
             if (view != null && view.isTiled(state)) return enter(MoveResizeOverlay(this, view))
         }
@@ -1110,11 +1185,17 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
     }
 
+    // The overlay going away now (its exit animation runs): it is destroyed once, not again.
+    private var destroyingOverlay: Overlay? = null
+
     fun forceCloseOverlay() {
         val o = overlay ?: return
         log.trace { "Force-closing $o" }
         try {
-            o.destroy()
+            if (o !== destroyingOverlay) {
+                destroyingOverlay = o
+                o.destroy()
+            }
         } finally {
             overlay = null
         }
@@ -1123,12 +1204,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun exitOverlay() {
         log.trace { "Going to exit overlay..." }
         val o = overlay ?: return log.trace { "...aborted" }
+        if (o === destroyingOverlay) return log.trace { "...already going" }
         log.trace { "...destroy" }
+        destroyingOverlay = o
         o.destroy()
     }
 
     fun onOverlayDestroyed() {
         log.trace { "Overlay destroyed" }
+        destroyingOverlay = null
         queue.onOverlayDestroyed()
         overlay = null
         focusBorders.damage()
@@ -1143,6 +1227,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val window = view.window
         viewsByWindow.remove(window)
         requestedSize.remove(window)
+        // (Caulis gave the focus to another window already: it had it if it had it last.)
+        val wasFocused = view.isFocused() || view === closingFocused || view === focusedView
+        if (closingFocused === view) closingFocused = null
+        if (focusedView === view) focusedView = null
         val (s, wsState, _) = state.findViewOrNull(view) ?: run {
             // (A view destroyed before it was shown.)
             views.remove(view.handle)
@@ -1151,7 +1239,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
 
         var bestView: Int? = null
-        if (view.isFocused()) {
+        if (wasFocused) {
             log.trace { "Finding view to focus since $view closes..." }
             var p = view.parent
             while (p != null && !p.isTiled(state) && p.parent != null) p = p.parent
@@ -1206,7 +1294,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 null to result
             }, confAnimT(), { views.remove(view.handle); view.releaseDamage() })
         } else {
-            if (view.isFocused()) focusBorders.unfocus()
+            if (wasFocused) focusBorders.unfocus()
             animateTo({ st -> null to st.unswallowing(view).withoutViewState(view).constrain() }, confAnimT(), { views.remove(view.handle); view.releaseDamage() })
         }
     }
@@ -1250,6 +1338,18 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
             // full-redraw [on | off]: every frame drawn whole (to find out whether a flicker
             // comes from drawing only what changed).
+            // log <area> <0..3> | log <area> reset: one area of the log in more detail, now (render, input, ...).
+            "log" -> {
+                val w = arg.orEmpty().trim().split(Regex("\\s+"))
+                val area = w.getOrNull(0)?.takeIf { it in dev.caulis.log.Log.AREAS }
+                    ?: return "log <area> <0..3>; the areas: ${dev.caulis.log.Log.AREAS.keys.joinToString()}"
+                when (val level = w.getOrNull(1)) {
+                    "reset" -> dev.caulis.log.Log.clearLevel(area)
+                    else -> dev.caulis.log.Log.setLevel(area, level?.toIntOrNull()?.coerceIn(0, 3) ?: return "a level is 0, 1, 2 or 3")
+                }
+                log.info { "The log of $area: ${w.getOrNull(1)}" }
+                null
+            }
             "full-redraw" -> desktopOrNull()?.let { d ->
                 d.fullRedraw = when (arg?.trim()) { "on" -> true; "off" -> false; else -> !d.fullRedraw }
                 if (d.fullRedraw) "on" else "off"
@@ -1429,6 +1529,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     fun ensureLocked(anim: Boolean = true, dim: Boolean = false) {
+        // What is newm's own on top goes first: the clipboard's history, the launcher, the keys' help.
+        clipboardHistory.close()
+        if (overlay is LauncherOverlay) exitOverlay()
+        keyHelpShown = false
         fun focusLock() {
             // Meanwhile no keys of newm's or Caulis's but the laptop's (XF86) ones.
             safelyEnterMode(LOCKED_MODE)
@@ -1499,11 +1603,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             val fs = wsState.isFullscreen()
             if (fs == definedState) return@animateTo null to null
 
-            if (confSendFullscreenToViews()) for (v in tiles()) v.setFullscreen(!fs)
-
+            // Told to the programs of that workspace's tiles, only when it changes.
+            fun tell(on: Boolean) {
+                if (confSendFullscreenToViews()) for (v in tiles(ws)) v.setFullscreen(on)
+            }
             when {
-                fs -> null to s.settingWorkspaceState(ws, wsState.withoutFullscreen())
-                view != null -> null to s.settingWorkspaceState(ws, wsState.withFullscreen(view))
+                fs -> {
+                    tell(false)
+                    null to s.settingWorkspaceState(ws, wsState.withoutFullscreen())
+                }
+                view != null -> {
+                    tell(true)
+                    null to s.settingWorkspaceState(ws, wsState.withFullscreen(view))
+                }
                 else -> null to null
             }
         }, confAnimT())

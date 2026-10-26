@@ -52,7 +52,18 @@ class ConfiguredValue<T>(private val name: String, value: Any?, private val defa
 
     @Suppress("UNCHECKED_CAST")
     internal fun update(value: Any?) {
-        current = if (value == null) default else coerce(value, default) as T
+        if (value == null) {
+            current = default
+            return
+        }
+        val coerced = coerce(value, default)
+        // A value of another kind than the default (a word where a number goes, ...): the default, and a warning.
+        if (!fits(coerced, default)) {
+            log.warn("$name: ${coerced::class.simpleName} given where ${default!!::class.simpleName} is wanted, the default ($default) is used")
+            current = default
+            return
+        }
+        current = coerced as T
     }
 
     override fun invoke(): T = current
@@ -60,6 +71,18 @@ class ConfiguredValue<T>(private val name: String, value: Any?, private val defa
     override fun toString() = "%-60s %-40s %s".format(name, current, if (current != default) "(default: $default)" else "")
 
     private companion object {
+        private val log = Logger("config")
+
+        // Whether [value] is of the default's kind (no default, or a function: anything goes).
+        fun fits(value: Any, default: Any?): Boolean = when (default) {
+            is Number -> value is Number
+            is String -> value is String
+            is Boolean -> value is Boolean
+            is List<*> -> value is List<*>
+            is Map<*, *> -> value is Map<*, *>
+            else -> true
+        }
+
         // Numbers as the default has them (Python mixes 1 and 1.0 freely).
         fun coerce(value: Any, default: Any?): Any = when {
             value is Number && default is Double -> value.toDouble()

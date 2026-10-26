@@ -34,6 +34,7 @@ fun main(args: Array<String>) {
         noticeStyle = dev.caulis.core.NoticeStyle.cards(dark = colorScheme == dev.caulis.core.appearance.ColorScheme.DARK)
         // (Light or dark as programs are, also when that changes.)
         onColorSchemeChanged { scheme ->
+            // (newm's bar then gives them its own look: BarModel.applyNoticeStyle.)
             noticeStyle = dev.caulis.core.NoticeStyle.cards(dark = scheme == dev.caulis.core.appearance.ColorScheme.DARK)
             applySettings()
         }
@@ -66,9 +67,15 @@ fun main(args: Array<String>) {
         onStart { System.getenv("NEWM_NOTICE")?.takeIf { it.isNotBlank() }?.let { notify(it, title = "newm") } }
         layout = Layout(this)
 
+        // The configuration's warnings while it is first taken on (a value of the wrong kind):
+        // Caulis shows them only once it runs, so they are kept and shown then.
+        val early = java.util.concurrent.CopyOnWriteArrayList<dev.caulis.log.Log.Entry>()
+        val watching = dev.caulis.log.Log.watch { if (it.area == "config" && (it.isWarning || it.isError)) early += it }
         val settings = config.load() ?: config.loadDefault() ?: defaultConfig(layout)
         Config.loadConfig(settings)
         applyHostSettings(settings)
+        watching.close()
+        onStart { early.forEach { notify(it.message, if (it.isError) dev.caulis.core.NoticeLevel.ERROR else dev.caulis.core.NoticeLevel.WARNING, "newm") } }
 
         // updateConfig, and every save: on a mistake the settings stay as they were.
         layout.reloadConfig = { apply ->
@@ -95,6 +102,18 @@ const val RESTART_EXIT = 3
 // The pywm and outputs sections, as Caulis's settings.
 @Suppress("UNCHECKED_CAST")
 private fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) {
+    // (A mistake here never stops newm: the rest of the settings still count, and it is shown.)
+    try {
+        applyHostSettingsNow(settings)
+    } catch (e: Exception) {
+        hostLog.warn("The pywm and outputs settings could not all be taken on: $e", e)
+    }
+}
+
+private val hostLog = dev.caulis.log.Logger("config")
+
+@Suppress("UNCHECKED_CAST")
+private fun dev.caulis.wm.Caulis.applyHostSettingsNow(settings: Map<String, Any?>) {
     // The keyboard's layouts: the configuration's, else the system's (with a switch between them).
     val pywm = settings["pywm"] as? Map<String, Any?>
     if (pywm?.get("xkb_layout") == null) {
@@ -124,7 +143,7 @@ private class DeferredApi(make: () -> LayoutApi) : PyConfig.Handler, LayoutApiSo
 private fun logPathDir(): java.nio.file.Path? = try {
     val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") }
         ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
-    java.nio.file.Path.of(state, "newm").also { java.nio.file.Files.createDirectories(it) }
+    privateFolder(java.nio.file.Path.of(state, "newm"))
 } catch (_: Exception) {
     null
 }
@@ -133,8 +152,8 @@ private fun logPathDir(): java.nio.file.Path? = try {
 private fun logPath(): java.nio.file.Path? = try {
     val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") }
         ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
-    val dir = java.nio.file.Path.of(state, "newm")
-    java.nio.file.Files.createDirectories(dir)
+    // (Only its user may read it: the log tells what was done.)
+    val dir = privateFolder(java.nio.file.Path.of(state, "newm"))
     val file = dir.resolve("newm.log")
     if (java.nio.file.Files.exists(file)) java.nio.file.Files.move(file, dir.resolve("newm.log.old"), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     file

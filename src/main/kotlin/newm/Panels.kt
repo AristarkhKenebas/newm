@@ -91,7 +91,8 @@ class Panels(private val wm: Layout) {
 
     // The launcher: in the upper middle of the screen, while it is open (or opening).
     private fun launcherArea(m: Monitor): Rect? {
-        if (wm.layoutDown.launcherPerc <= 0.0 || m !== monitorShown()) return null
+        // (Never over the lock screen: neither drawn nor clickable there.)
+        if (wm.layoutDown.launcherPerc <= 0.0 || m !== monitorShown() || wm.lockShown()) return null
         val a = m.area
         val w = minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
         val h = minOf(560, (a.height * 0.62).toInt())
@@ -140,7 +141,8 @@ class Panels(private val wm: Layout) {
 
     fun launcherOpened() {
         launcherClosing = false
-        launcherWidget?.let { wm.caulis.desktop.focusWidget(it) }
+        // (Locked meanwhile: the keyboard stays the lock screen's.)
+        if (!wm.lockShown()) launcherWidget?.let { wm.caulis.desktop.focusWidget(it) }
         Thread({
             val found = DesktopApp.installed()
             wm.caulis.post { apps = found }
@@ -185,7 +187,7 @@ class Panels(private val wm: Layout) {
             appearance = { _ ->
                 val p = wm.layoutDown.launcherPerc.toFloat().coerceIn(0f, 1f)
                 val e = 1f - (1f - p) * (1f - p) * (1f - p)
-                if (e >= 1f) dev.caulis.compose.Appearance.SHOWN else dev.caulis.compose.Appearance(alpha = e, scale = 0.94f + 0.06f * e, dy = (1f - e) * -16f)
+                if (e >= 1f) dev.caulis.compose.WidgetLook.SHOWN else dev.caulis.compose.WidgetLook(alpha = e, scale = 0.94f + 0.06f * e, dy = (1f - e) * -16f)
             },
         ) { LauncherPanel(wm, apps, opened, launcherClosing) }
         // A click beside the launcher closes it (and goes no further).

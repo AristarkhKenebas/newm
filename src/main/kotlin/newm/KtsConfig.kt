@@ -63,7 +63,8 @@ object KtsConfig {
                     compilationCache(
                         CompiledScriptJarsCache { source, _ ->
                             Files.createDirectories(cacheFolder())
-                            cacheFolder().resolve(key(source) + ".jar").toFile()
+                            // (One asked for is in use: newest again, so it is not the one cleared away.)
+                            cacheFolder().resolve(key(source) + ".jar").toFile().also { if (it.isFile) it.setLastModified(System.currentTimeMillis()) }
                         },
                     )
                 }
@@ -80,12 +81,33 @@ object KtsConfig {
             return Compiled(null, listOf("$name cannot be read: ${e.message ?: e}"))
         }
         val started = System.nanoTime()
-        val result = host.runInCoroutineContext {
-            host.compiler(code.toScriptSource(name), createJvmCompilationConfigurationFromTemplate<NewmScript>())
+        val result = try {
+            host.runInCoroutineContext {
+                host.compiler(code.toScriptSource(name), createJvmCompilationConfigurationFromTemplate<NewmScript>())
+            }
+        } catch (e: Exception) {
+            // (The compiler itself failed, not the file: said like a mistake in it, never a silent thread.)
+            log.info { "$name could not be compiled: $e" }
+            return Compiled(null, listOf("$name cannot be compiled: ${e.message ?: e}"))
         }
         log.info { "$name compiled in ${(System.nanoTime() - started) / 1_000_000} ms" }
+        clearOldJars()
         return Compiled(result.valueOrNull(), problems(name, result))
     }
+
+    // Every save (and every newm) compiles anew into ~/.cache/newm: only the newest few are kept.
+    private fun clearOldJars() {
+        try {
+            val jars = cacheFolder().toFile().listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty()
+            val old = jars.sortedByDescending { it.lastModified() }.drop(KEPT_JARS)
+            for (jar in old) jar.delete()
+            if (old.isNotEmpty()) log.info { "${old.size} old compiled config.kts cleared from ${cacheFolder()}" }
+        } catch (e: Exception) {
+            log.info { "${cacheFolder()} could not be cleared: $e" }
+        }
+    }
+
+    private const val KEPT_JARS = 5
 
     /** Runs a compiled config.kts: its settings, or its problems. */
     fun run(compiled: Compiled, config: NewmConfig, name: String = "config.kts"): List<String> {

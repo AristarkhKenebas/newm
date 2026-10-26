@@ -27,15 +27,31 @@ object NewmColors {
     }
     private val cacheDir: Path by lazy { Path.of(System.getenv("XDG_CACHE_HOME")?.takeIf { it.startsWith("/") } ?: "$home/.cache", "newm") }
 
+    // The menu's choice as kept: read from the file once, then changed by choose() (the popup asks for it at each drawing).
+    @Volatile
+    private var choice: String? = null
+    @Volatile
+    private var choiceRead = false
+
     /** What the colours menu chose last ("wallpaper:vibrant", "nord", "caulis-palette:#…:tonal"), if anything. */
-    fun chosen(): String? = try {
-        Files.readString(stateFile).trim().ifEmpty { null }
-    } catch (_: Exception) {
-        null
+    fun chosen(): String? {
+        if (!choiceRead) {
+            choice = try {
+                Files.readString(stateFile).trim().ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+            choiceRead = true
+            log.trace { "Colours chosen before: ${choice ?: "none"}" }
+        }
+        return choice
     }
 
     /** Keeps the colours menu's choice. */
     fun choose(choice: String) {
+        this.choice = choice
+        choiceRead = true
+        log.info { "Colours chosen: $choice" }
         try {
             Files.createDirectories(stateFile.parent)
             Files.writeString(stateFile, choice)

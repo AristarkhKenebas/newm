@@ -14,25 +14,30 @@ private val log = Logger("config")
 fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
     for ((key, value) in pywm) {
         if (value == null) continue
+        // A value of the wrong kind (a word where a number goes, ...): left out, and said (a config-area warning is a notice).
+        fun wrong(kind: String) = log.warn("pywm.$key: $kind wanted, ${value::class.simpleName} given ($value): left out")
+        fun text(set: (String) -> Unit) = (value as? String)?.let(set) ?: wrong("a text")
+        fun flag(set: (Boolean) -> Unit) = (value as? Boolean)?.let(set) ?: wrong("true or false")
+        fun number(set: (Int) -> Unit) = (value as? Number)?.let { set(it.toInt()) } ?: wrong("a number")
         when (key) {
-            "xkb_model" -> caulis.keyboardModel = (value as String).ifEmpty { "pc105" }
-            "xkb_layout" -> caulis.keyboardLayouts = (value as String).ifEmpty { "us" }
-            "xkb_variant" -> caulis.keyboardVariants = value as String
-            "xkb_options" -> caulis.keyboardOptions = value as String
-            "enable_xwayland" -> caulis.xwayland = value as Boolean
-            "xcursor_theme" -> caulis.cursorTheme = value as String
-            "xcursor_size" -> caulis.cursorSize = (value as Number).toInt()
-            "tap_to_click" -> caulis.input.touchpads.tap = value as Boolean
-            "natural_scroll" -> {
-                caulis.input.touchpads.naturalScroll = value as Boolean
-                caulis.input.pointers.naturalScroll = value
+            "xkb_model" -> text { caulis.keyboardModel = it.ifEmpty { "pc105" } }
+            "xkb_layout" -> text { caulis.keyboardLayouts = it.ifEmpty { "us" } }
+            "xkb_variant" -> text { caulis.keyboardVariants = it }
+            "xkb_options" -> text { caulis.keyboardOptions = it }
+            "enable_xwayland" -> flag { caulis.xwayland = it }
+            "xcursor_theme" -> text { caulis.cursorTheme = it }
+            "xcursor_size" -> number { caulis.cursorSize = it }
+            "tap_to_click" -> flag { caulis.input.touchpads.tap = it }
+            "natural_scroll" -> flag {
+                caulis.input.touchpads.naturalScroll = it
+                caulis.input.pointers.naturalScroll = it
             }
-            "focus_follows_mouse" -> caulis.focusFollowsMouse = value as Boolean
+            "focus_follows_mouse" -> flag { caulis.focusFollowsMouse = it }
             // newm's own (not pywm's): from keyboard { numLock } and cursor { hideAfter }.
-            "numlock" -> caulis.numLock = value as Boolean
-            "hide_cursor_after" -> caulis.hideCursorAfterSeconds = (value as Number).toInt()
+            "numlock" -> flag { caulis.numLock = it }
+            "hide_cursor_after" -> number { caulis.hideCursorAfterSeconds = it }
             // pywm's: programs draw their own title bars (true), or none are drawn at all.
-            "encourage_csd" -> caulis.titleBars = if (value as Boolean) dev.caulis.core.TitleBars.PROGRAM else dev.caulis.core.TitleBars.NONE
+            "encourage_csd" -> flag { caulis.titleBars = if (it) dev.caulis.core.TitleBars.PROGRAM else dev.caulis.core.TitleBars.NONE }
             else -> log.info { "pywm.$key: pywm's own (Caulis draws here), left out" }
         }
     }

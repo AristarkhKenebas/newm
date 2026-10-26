@@ -92,7 +92,7 @@ internal object LaunchCounts {
         val key = app.id.ifEmpty { app.name }
         counts[key] = (counts[key] ?: 0) + 1
         try {
-            Files.createDirectories(file.parent)
+            privateFolder(file.parent)
             Files.writeString(file, Json.write(counts))
         } catch (e: Exception) {
             log.warn("The launcher's counts cannot be kept: $e")
@@ -204,7 +204,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             }
             Spacer(Modifier.height(10.dp))
             if (shown.isEmpty()) {
-                BasicText(newm.bar.tr(if (apps.isEmpty()) "Looking for programs…" else "Nothing called “$query”"), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
+                BasicText(if (apps.isEmpty()) newm.bar.tr("Looking for programs…") else newm.bar.tr("Nothing called “%s”").replace("%s", query), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
             }
             LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(opened) {
                 awaitPointerEventScope {

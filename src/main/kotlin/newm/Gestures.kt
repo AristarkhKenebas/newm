@@ -119,6 +119,9 @@ class CGestureProvider(
     override fun stop() {
         ticker?.close()
         ticker = null
+        // (A reload during a gesture: it ends here, so what follows it — moving a window — ends too.)
+        if (captured != null) log.info { "Gesture ended: its provider stops" }
+        finish()
     }
 
     private fun start(n: Int): Int {
@@ -192,7 +195,9 @@ class CGestureProvider(
     }
 
     override fun resetGesture() {
-        if (captured == null) log.trace { "Gesture reset" }
+        log.trace { "Gesture reset" }
+        // A gesture still captured ends (else what follows it waited for an end that never came).
+        finish()
     }
 
     private companion object {

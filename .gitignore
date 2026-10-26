@@ -8,3 +8,7 @@ result
 # Kotlin port (Gradle)
 .gradle/
 .kotlin/
+
+# The IDE's own files, and the JVM's heap dumps
+.idea/
+*.hprof

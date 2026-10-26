@@ -80,6 +80,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     // Initial state while waiting for map
     private val initialTime = now()
     private var initialKind = 0 // 0: panel, 1: layer, 2: float, 3: tiled
+
+    /** It opened floating (else tiled, a panel or a layer). */
+    internal val opensFloating: Boolean get() = initialKind == 2
     private var initialState: ViewDown? = null
 
     var panel: String? = null
@@ -190,7 +193,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         if (sizeHint != null) {
             width = sizeHint.first
             height = sizeHint.second
-        } else if (confFloatingMinSize()) {
+        } else if (confFloatingMinSize() && (width <= 0 || height <= 0)) {
+            // (Only for a program that chose no size itself: the size it drew is its own wish —
+            // a dialog squeezed to its smallest came out narrow and askew, as WakaTime's key one.)
             if (up.sizeConstraints[0] > 0 && up.sizeConstraints[2] > 0) {
                 width = up.sizeConstraints[0]
                 height = up.sizeConstraints[2]
@@ -295,7 +300,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
                 cj = pState.j + pState.h / 2.0
             } else {
                 ci = pState.floatPos.first + pState.floatSize.first * referenceWsState.size / ws.width / 2.0
-                cj = pState.floatPos.second + pState.floatSize.second * referenceWsState.size / ws.width / 2.0
+                cj = pState.floatPos.second + pState.floatSize.second * referenceWsState.size / ws.height / 2.0
             }
         }
 
@@ -437,7 +442,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             if (width < minW && minW > 0) width = minW
             if (width > maxW && maxW > 0) width = maxW
             if (height < minH && minH > 0) height = minH
-            if (height > maxH && maxH > 0) width = minW // (as newm has it)
+            if (height > maxH && maxH > 0) height = maxH // (newm set width = minW here: its bug)
 
             val oldAr = if (result.size.first > 0) result.size.second.toDouble() / result.size.first else 1.0
             val newAr = if (width > 0) height.toDouble() / width else 1.0

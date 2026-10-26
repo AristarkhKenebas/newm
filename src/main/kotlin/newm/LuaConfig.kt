@@ -34,7 +34,13 @@ private val log = Logger("config")
  */
 object LuaConfig {
 
-    /** Runs [file]: its settings and what is wrong in it. */
+    /** The file could not be run at all (a Lua error, or it cannot be read): nothing of it counts. */
+    class Failed(message: String) : Exception(message)
+
+    /**
+     * Runs [file]: its settings and what is wrong in them. When Lua itself stops on a mistake
+     * (or the file cannot be read), [Failed]: half a file's settings would leave newm without keys.
+     */
     fun load(file: Path, caulis: Caulis, api: () -> LayoutApi): Pair<Map<String, Any?>, List<String>> {
         val name = file.fileName.toString()
         val globals = JsePlatform.standardGlobals()
@@ -45,9 +51,9 @@ object LuaConfig {
         try {
             globals.load(Files.readString(file), "@$name").call()
         } catch (e: LuaError) {
-            return emptyMap<String, Any?>() to listOf(e.message ?: e.toString())
+            throw Failed(e.message ?: e.toString())
         } catch (e: Exception) {
-            return emptyMap<String, Any?>() to listOf("$name: ${e.message ?: e}")
+            throw Failed("$name: ${e.message ?: e}")
         }
         // What the file set (not Lua's own, not layout and newm): newm's settings.
         val data = LinkedHashMap<String, Any?>()

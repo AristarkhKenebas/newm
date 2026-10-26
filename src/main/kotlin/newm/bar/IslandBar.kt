@@ -224,7 +224,30 @@ class BarModel(val wm: Layout) {
             palette = next
             NewmColors.export(next)
             wm.focusBorders.update()
+            applyNoticeStyle()
         }
+    }
+
+    /**
+     * The compositor's notices (a mistake in the configuration, a program's error) in the bar's
+     * look: its colours (the wallpaper's), light or dark as everything, its soft corners.
+     */
+    fun applyNoticeStyle() {
+        val c = colorsNow()
+        fun of(x: Color, alpha: Float = x.alpha) = dev.caulis.render.Color(x.red, x.green, x.blue, alpha)
+        val dark = wm.caulis.colorSchemeNow == ColorScheme.DARK
+        // (Below the bar, at the right, as a phone's or a desktop's notifications.)
+        val cards = dev.caulis.core.NoticeStyle.cards(width = 380, dark = dark)
+        wm.caulis.noticeStyle = cards.copy(
+            placement = dev.caulis.core.NoticePlacement.Toast(dev.caulis.core.NoticePlacement.Toast.Corner.TOP_RIGHT, width = 380,
+                margin = (wm.topBarReach() + 10).coerceIn(14, 500)),
+            radius = 18,
+            padding = 14,
+            info = dev.caulis.core.NoticeColors(of(c.accent, 1f), of(c.text, 1f)),
+            warning = dev.caulis.core.NoticeColors(of(c.warning, 1f), of(c.text, 1f)),
+            error = dev.caulis.core.NoticeColors(of(c.danger, 1f), of(c.text, 1f)),
+            painter = dev.caulis.core.CardNoticePainter(of(c.island, 0.97f), of(c.text, 1f)),
+        )
     }
 
     // The part of the bar the pointer is on, waiting for its hint.
@@ -245,9 +268,14 @@ class BarModel(val wm: Layout) {
         if (started) return
         started = true
         scheme = wm.caulis.colorSchemeNow
-        wm.caulis.onColorSchemeChanged { scheme = it }
+        wm.caulis.onColorSchemeChanged {
+            scheme = it
+            applyNoticeStyle()
+        }
+        applyNoticeStyle()
         network.onConnection = { connectionChanged(it) }
         network.onPasswordWanted = { askPassword(it) }
+        network.networksShown = { popup?.kind == PopupKind.NETWORK || popup?.kind == PopupKind.QUICK }
         bluetooth.onConnection = { connectionChanged(it) }
         tray.start()
         status.start()
@@ -256,8 +284,12 @@ class BarModel(val wm: Layout) {
             canHibernate = reply.body.firstOrNull() == "yes"
         }
         // The charger plugged in or out, the level changed: read at once (not at the next look, seconds later).
-        wm.caulis.systemBus?.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m ->
-            if (m.path?.startsWith("/org/freedesktop/UPower") == true) status.refreshSoon()
+        // (UPower's own signals only: another program could send the same ones.)
+        wm.caulis.systemBus?.let { bus ->
+            val upower = NameWatch(bus, "org.freedesktop.UPower") { owner -> log.trace { "UPower ${if (owner != null) "is running" else "is not running"}" } }
+            bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m ->
+                if (upower.sent(m) && m.path?.startsWith("/org/freedesktop/UPower") == true) status.refreshSoon()
+            }
         }
         network.start()
         bluetooth.start()
@@ -289,8 +321,13 @@ class BarModel(val wm: Layout) {
     // --- the volume from the bar's wheel and the keys: steps added up, one change at a time ---
 
     private var wheel = 0f
-    @Volatile
-    private var volumeWanted: Int? = null
+
+    // The volume asked for last and when (compositor's thread: quick steps add up before the system says it back).
+    private var volumeWanted = 0
+    private var volumeAt = 0L
+
+    // The value the worker is to set next (-1: none waiting); a step while one waits only changes it.
+    private val volumeNext = java.util.concurrent.atomic.AtomicInteger(-1)
     private val volumeWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "newm-volume").apply { isDaemon = true } }
 
     /** The wheel over the volume: [dy] lines (up: louder), two percent a notch. */
@@ -304,24 +341,23 @@ class BarModel(val wm: Layout) {
 
     /** The volume by [delta] percent: shown at once, set by one command for all the steps that came meanwhile. */
     fun changeVolume(delta: Int) {
-        val now = volumeWanted ?: status.volume?.percent ?: return
-        val next = (now + delta).coerceIn(0, 100)
-        val first = volumeWanted == null
+        val time = System.currentTimeMillis()
+        val now = if (time - volumeAt < 1500) volumeWanted else status.volume?.percent ?: return
+        // Up to the popup's most (sound.max_volume); a step up never makes it quieter (set louder elsewhere).
+        val next = if (delta > 0) maxOf(now, (now + delta).coerceAtMost(maxVolume())) else (now + delta).coerceAtLeast(0)
         volumeWanted = next
+        volumeAt = time
         status.showVolume(next)
         showLevel(Glyph.SPEAKER, "Volume $next %", next / 100.0)
-        if (!first) return
+        // (A change waiting takes the new value; none waiting: the worker gets one.)
+        if (volumeNext.getAndSet(next) != -1) return
         volumeWorker.execute {
-            var applied = -1
-            while (true) {
-                val target = volumeWanted ?: break
-                if (target == applied) break
-                runQuietly("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0")
-                runQuietly("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$target%") || runQuietly("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$target%")
-                applied = target
-                Thread.sleep(40)
-            }
-            wm.caulis.post { if (volumeWanted == applied) volumeWanted = null }
+            val target = volumeNext.getAndSet(-1)
+            if (target == -1) return@execute
+            runQuietly("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0")
+            val done = runQuietly("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$target%") || runQuietly("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$target%")
+            if (done) log.trace { "Volume $target%" } else log.warn("The volume cannot be set (neither wpctl nor pactl answered)")
+            Thread.sleep(40)
             status.refreshSoon()
         }
     }
@@ -615,11 +651,17 @@ private fun WallModule(bar: Bar, model: BarModel, colors: BarColors) {
 private fun WindowModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
     val focused = bar.focused
     var icon by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    // (The icon's name is looked up away from the compositor's thread; a late one of a window no longer focused is dropped.)
+    val shownFor = remember { java.util.concurrent.atomic.AtomicReference("") }
     LaunchedEffect(focused.appId) {
         icon = null
-        if (focused.appId.isNotEmpty()) IconTheme.load(AppIcons.iconName(focused.appId), TRAY_ICON_PIXELS, null, post = { model.wm.caulis.post { it() } }) { icon = it }
+        val appId = focused.appId
+        shownFor.set(appId)
+        if (appId.isNotEmpty()) IconTheme.loadApp(appId, TRAY_ICON_PIXELS, post = { model.wm.caulis.post { it() } }) { picture ->
+            if (shownFor.get() == appId) icon = picture else log.trace { "The icon of $appId came late: not shown" }
+        }
     }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "window") { focused.title.ifEmpty { tr("No window") } } }, onPrimary = { model.wm.toggleOverview() }, onMiddle = { model.wm.closeFocusedView() }) {
+    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "window") { focused.title.takeIf { it.isNotEmpty() }?.let(::verbatim) ?: "No window" } }, onPrimary = { model.wm.toggleOverview() }, onMiddle = { model.wm.closeFocusedView() }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             icon?.let {
                 Image(it, null, Modifier.size(16.dp), filterQuality = FilterQuality.High)
@@ -639,7 +681,7 @@ private fun WindowModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
 @Composable
 private fun ClockModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
     var x by remember { mutableStateOf(0.0) }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "clock") { model.clock("EEEE, d MMMM yyyy") } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.CALENDAR, bar, bar.originX + x) }) {
+    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "clock") { verbatim(model.clock("EEEE, d MMMM yyyy")) } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.CALENDAR, bar, bar.originX + x) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BasicText(model.clock(bar.clockPattern), style = text.copy(fontWeight = FontWeight.SemiBold))
             if (bar.datePattern.isNotEmpty()) {
@@ -669,7 +711,7 @@ private fun TrayModule(bar: Bar, model: BarModel, colors: BarColors) {
             onSecondary = { if (model.tray.hasMenu(item)) showMenu() else model.tray.contextMenu(item, screenX(), screenY()) },
             onMiddle = { model.tray.secondaryActivate(item, screenX(), screenY()) },
             onScroll = { dy -> model.tray.scroll(item, if (dy > 0) 1 else -1) },
-            onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, item) { item.tooltip.ifBlank { item.title } } },
+            onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, item) { verbatim(item.tooltip.ifBlank { item.title }) } },
         ) {
             val picture = item.icon
             if (picture != null) {
@@ -710,23 +752,19 @@ internal fun BarModel.hint(on: Boolean, bar: Bar, x: Double, key: Any, text: () 
     }
 }
 
-// The network's hint: what it is connected to, and the address it has.
+// The network's hint: what it is connected to, and the address it has (English: the hint translates it line by line).
 private fun networkHint(model: BarModel): String {
     val n = model.status.network
-    val ip = model.status.address?.let { "\nAddress $it" } ?: ""
+    val ip = model.status.address?.let { "\nAddress ${verbatim(it)}" } ?: ""
     return when {
         model.network.wired -> "Wired connection$ip"
-        n.kind == Network.Kind.WIFI -> "Wi-Fi: ${n.name.ifEmpty { "connected" }} · ${n.strength}%$ip"
+        n.kind == Network.Kind.WIFI -> "Wi-Fi: ${n.name.takeIf { it.isNotEmpty() }?.let(::verbatim) ?: "connected"} · ${verbatim("${n.strength}%")}$ip"
         else -> "Not connected"
     }
 }
 
-private fun batteryHint(b: Battery): String = "${b.percent}% · " + when {
-    b.full -> "fully charged"
-    b.charging -> b.minutesLeft?.let { "charging, full in ${hoursOf(it)}" } ?: "charging"
-    b.plugged -> "plugged in, held at its charge limit"
-    else -> b.minutesLeft?.let { "${hoursOf(it)} left" } ?: "on battery"
-}
+// The battery's hint, translated here (the percent first, then the words of its popup), kept as it is after.
+private fun batteryHint(b: Battery): String = verbatim("${b.percent}% · " + batteryWords(b))
 
 // The keyboard layout ("EN", "RU"): a click or the wheel switches it.
 @Composable
@@ -734,7 +772,7 @@ private fun LayoutModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
     val name = bar.keyboardLayout
     if (name.isEmpty()) return
     val caulis = model.wm.caulis
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "layout") { "Keyboard: " + caulis.keyboardLayoutNames.joinToString(" · ") + " (a click switches)" } }, onPrimary = { caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + 1); bar.look() },
+    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "layout") { "Keyboard: " + verbatim(caulis.keyboardLayoutNames.joinToString(" · ")) + " (a click switches)" } }, onPrimary = { caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + 1); bar.look() },
         onScroll = { dy -> caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + if (dy > 0) 1 else -1); bar.look() }) {
         BasicText(name, style = text.copy(fontWeight = FontWeight.SemiBold, fontSize = (bar.fontSize - 1).sp))
     }
@@ -746,7 +784,7 @@ private fun BluetoothModule(bar: Bar, model: BarModel, colors: BarColors) {
     if (!bt.available) return
     var x by remember { mutableStateOf(0.0) }
     val connected = bt.devices.any { it.connected }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "bluetooth") { when { !bt.powered -> "Bluetooth is off"; else -> bt.devices.filter { it.connected }.joinToString("\n") { d -> d.name + (d.battery?.let { " · $it%" } ?: "") }.ifEmpty { "Bluetooth is on, nothing connected" } } } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.BLUETOOTH, bar, bar.originX + x) }) {
+    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "bluetooth") { when { !bt.powered -> "Bluetooth is off"; else -> bt.devices.filter { it.connected }.joinToString("\n") { d -> verbatim(d.name + (d.battery?.let { " · $it%" } ?: "")) }.ifEmpty { "Bluetooth is on, nothing connected" } } } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.BLUETOOTH, bar, bar.originX + x) }) {
         GlyphIcon(Glyph.BLUETOOTH, if (connected) colors.accent else if (bt.powered) colors.text else colors.dim, bar.iconSize.dp, slash = !bt.powered)
     }
 }
@@ -770,7 +808,7 @@ private fun VolumeModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
     var x by remember { mutableStateOf(0.0) }
     Chip(
         colors,
-        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "volume") { model.status.volume?.let { v -> if (v.muted) "Sound is off" else "Volume ${v.percent}%" } + (model.sound.outputs.firstOrNull { it.isDefault }?.let { "\n" + it.description } ?: "") } },
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "volume") { model.status.volume?.let { v -> if (v.muted) "Sound is off" else "Volume ${v.percent}%" } + (model.sound.outputs.firstOrNull { it.isDefault }?.let { "\n" + verbatim(it.description) } ?: "") } },
         onX = { x = it },
         onPrimary = { model.toggle(PopupKind.VOLUME, bar, bar.originX + x) },
         onMiddle = { model.wm.caulis.run("volume mute"); model.status.refreshSoon() },

@@ -61,21 +61,36 @@ class Bluetooth(private val caulis: Caulis) {
     private var connectedBefore: Set<String>? = null
 
     private var bus: DBusConnection? = null
+    private var bluez: NameWatch? = null
     private var adapter: String? = null
     private var refreshQueued = false
     private var pairing: String? = null
     private val lastNames = HashMap<String, String>()
     private val lastIcons = HashMap<String, String>()
 
+    // The scan's stop after twenty seconds (a new scan's own stop replaces it).
+    private var scanStop: AutoCloseable? = null
+
     fun start() {
         if (bus != null) return
         val bus = caulis.systemBus ?: return
         this.bus = bus
-        bus.call("org.freedesktop.DBus", ObjectPath("/org/freedesktop/DBus"), "org.freedesktop.DBus", "NameHasOwner", "s", listOf(BLUEZ)) { reply ->
-            if (reply.body.firstOrNull() != true) return@call log.info { "BlueZ is not running: no Bluetooth in the bar" }
-            bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesAdded") { refreshSoon() }
-            bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesRemoved") { refreshSoon() }
-            bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m -> if (m.path?.startsWith("/org/bluez") == true) refreshSoon() }
+        // Only BlueZ's own signals (another program on the bus could send the same ones).
+        bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesAdded") { m -> if (bluez?.sent(m) == true) refreshSoon() }
+        bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesRemoved") { m -> if (bluez?.sent(m) == true) refreshSoon() }
+        bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m -> if (bluez?.sent(m) == true && m.path?.startsWith("/org/bluez") == true) refreshSoon() }
+        // BlueZ may start later than newm, or start again: the bar follows it.
+        bluez = NameWatch(bus, BLUEZ) { owner ->
+            if (owner == null) {
+                log.info { "BlueZ is not running: no Bluetooth in the bar" }
+                adapter = null
+                available = false
+                powered = false
+                scanning = false
+                devices = emptyList()
+                return@NameWatch
+            }
+            log.info { "BlueZ is running: Bluetooth in the bar" }
             registerAgent(bus)
             refresh()
         }
@@ -92,6 +107,7 @@ class Bluetooth(private val caulis: Caulis) {
 
     fun refresh() {
         val bus = bus ?: return
+        if (bluez?.owner == null) return
         bus.call(BLUEZ, ObjectPath("/"), "org.freedesktop.DBus.ObjectManager", "GetManagedObjects") { reply ->
             if (reply.isError) return@call
             val found = ArrayList<BluetoothDevice>()
@@ -134,7 +150,7 @@ class Bluetooth(private val caulis: Caulis) {
         val adapter = adapter ?: return
         problem = null
         bus?.setProperty(BLUEZ, adapter, ADAPTER, "Powered", Variant("b", on)) { error ->
-            if (error != null) problem = if ("Blocked" in error || "rfkill" in error.lowercase()) "Bluetooth is blocked (airplane mode?)" else error
+            if (error != null) problem = if ("Blocked" in error || "rfkill" in error.lowercase()) "Bluetooth is blocked (airplane mode?)" else verbatim(error)
             refreshSoon()
         }
         log.info { "Bluetooth ${if (on) "on" else "off"}" }
@@ -144,7 +160,13 @@ class Bluetooth(private val caulis: Caulis) {
     fun scan(on: Boolean = !scanning) {
         val adapter = adapter ?: return
         bus?.call(BLUEZ, ObjectPath(adapter), ADAPTER, if (on) "StartDiscovery" else "StopDiscovery") { reply -> errorOf(reply)?.let { log.trace { "scan: $it" } } }
-        if (on) caulis.after(20_000) { if (scanning) scan(false) }
+        // (An earlier scan's stop would end this one early.)
+        scanStop?.close()
+        scanStop = if (on) caulis.after(20_000) {
+            scanStop = null
+            if (scanning) scan(false)
+        } else null
+        log.info { if (on) "Bluetooth: looking for devices" else "Bluetooth: no longer looking for devices" }
     }
 
     /** Connects [device] (pairing it first when it is new). */
@@ -155,7 +177,7 @@ class Bluetooth(private val caulis: Caulis) {
         log.info { "Bluetooth: connecting ${device.name}" }
         fun connectNow() = bus.call(BLUEZ, ObjectPath(device.path), DEVICE, "Connect") { reply ->
             busy = null
-            errorOf(reply)?.let { problem = "${device.name}: ${it.substringAfter(": ").ifBlank { it }}" }
+            errorOf(reply)?.let { problem = "${verbatim(device.name)}: ${verbatim(it.substringAfter(": ").ifBlank { it })}" }
             refreshSoon()
         }
         if (device.paired) return connectNow()
@@ -165,7 +187,7 @@ class Bluetooth(private val caulis: Caulis) {
             val error = errorOf(reply)
             if (error != null && "AlreadyExists" !in error) {
                 busy = null
-                problem = "${device.name}: could not pair"
+                problem = "${verbatim(device.name)}: could not pair"
                 log.warn("Bluetooth: pairing ${device.name}: $error")
                 return@call
             }
@@ -191,7 +213,11 @@ class Bluetooth(private val caulis: Caulis) {
     }
 
     // newm's pairing agent: "just works" pairings the bar started; everything else refused.
+    private var agentExported = false
+
     private fun registerAgent(bus: DBusConnection) {
+        if (agentExported) return registerWithBluez(bus)
+        agentExported = true
         fun ours(path: Any?): Boolean = (path as? ObjectPath)?.value == pairing
         val refused = { _: Any? -> throw DBusError("org.bluez.Error.Rejected", "newm confirms only pairings started from its bar") }
         bus.export(AGENT_PATH, "org.bluez.Agent1", mapOf(
@@ -209,6 +235,11 @@ class Bluetooth(private val caulis: Caulis) {
             "DisplayPinCode" to DBusMethod("os", "") { emptyList() },
             "DisplayPasskey" to DBusMethod("ouq", "") { emptyList() },
         ))
+        registerWithBluez(bus)
+    }
+
+    // Tells BlueZ of the agent (again after BlueZ started again: it forgets it).
+    private fun registerWithBluez(bus: DBusConnection) {
         bus.call(BLUEZ, ObjectPath("/org/bluez"), "org.bluez.AgentManager1", "RegisterAgent", "os", listOf(ObjectPath(AGENT_PATH), "NoInputNoOutput")) { reply ->
             if (reply.isError) log.trace { "Bluetooth agent: ${errorOf(reply)}" } else log.info { "Bluetooth pairing agent registered" }
         }

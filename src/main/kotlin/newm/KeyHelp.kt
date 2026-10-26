@@ -48,7 +48,8 @@ internal fun Layout.showKeyHelp(): AutoCloseable {
         // On the monitor with the pointer.
         val d = caulis.desktop
         val target = d.monitors.firstOrNull { it.area.contains(Rect(d.pointerX.toInt(), d.pointerY.toInt(), 1, 1)) } ?: d.monitors.firstOrNull()
-        if (!keyHelpFade.visible || m !== target) {
+        // (Never over the lock screen.)
+        if (!keyHelpFade.visible || m !== target || lockShown()) {
             null
         } else {
             val w = minOf(1060, m.area.width - 80)

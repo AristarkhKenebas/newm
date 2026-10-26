@@ -157,7 +157,7 @@ private fun OsdPill(model: BarModel, show: OsdShow) {
                     drawRoundRect(if (show.off) colors.dim else colors.accent, Offset.Zero, Size(size.width * shown, size.height), r)
                 }
                 Spacer(Modifier.width(12.dp))
-                BasicText(if (show.off) "off" else "${Math.round(level * 100)}", style = TextStyle(color = colors.dim, fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                BasicText(if (show.off) tr("off") else "${Math.round(level * 100)}", style = TextStyle(color = colors.dim, fontSize = 13.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.width(34.dp))
             } else {
                 BasicText(show.title, style = TextStyle(color = colors.text, fontSize = 13.sp))

@@ -9,19 +9,39 @@ private val confLanguage = configuredValue("language", "auto")
 /**
  * newm's words in your language: English as written, Russian from [RU] when the system's
  * language is Russian (LC_ALL, LC_MESSAGES, LANG) or the configuration says language = "ru".
- * Words with "%s" in them stand for any text there ("Connected to %s").
+ * Words with "%s" in them stand for any text there ("Connected to %s"). Words from outside
+ * (a window's title, a network's or a device's name) given through [verbatim] stay as they are.
  */
 fun tr(english: String): String {
-    if (english.isEmpty() || language() != "ru") return english
+    val out = translate(english)
+    return if (KEEP_START in out || KEEP_END in out) out.filterNot { it == KEEP_START || it == KEEP_END } else out
+}
+
+// Around words from outside (Unicode's isolate marks: nothing to see even when left in).
+private const val KEEP_START = '\u2068'
+private const val KEEP_END = '\u2069'
+
+/**
+ * [text] as it is, never translated by [tr]: a window's title, a network's or a device's name,
+ * alone or in the place of a "%s" ("Connected to %s"). [tr] takes the marks out again.
+ */
+fun verbatim(text: String): String = text.lines().joinToString("\n") { "$KEEP_START$it$KEEP_END" }
+
+// Words marked by [verbatim], as a whole (a line of them, or what stands for a "%s").
+private fun isVerbatim(text: String): Boolean =
+    text.length >= 2 && text.first() == KEEP_START && text.last() == KEEP_END && text.indexOf(KEEP_START, 1) < 0
+
+private fun translate(english: String): String {
+    if (english.isEmpty() || language() != "ru" || isVerbatim(english)) return english
     RU[english]?.let { return it }
-    for ((pattern, regex, russian) in templates) {
+    for ((_, regex, russian) in templates) {
         val m = regex.matchEntire(english) ?: continue
         var out = russian
-        for (g in m.groupValues.drop(1)) out = out.replaceFirst("%s", tr(g))
+        for (g in m.groupValues.drop(1)) out = out.replaceFirst("%s", translate(g))
         return out
     }
     // Several lines: each on its own.
-    if ('\n' in english) return english.lines().joinToString("\n") { tr(it) }
+    if ('\n' in english) return english.lines().joinToString("\n") { translate(it) }
     return english
 }
 
@@ -52,7 +72,7 @@ private val RU: Map<String, String> = mapOf(
     "All windows · the wheel goes through them" to "Все окна · колесо листает их",
     "Lock, sleep, log out, restart, shut down" to "Блокировка, сон, выход, перезагрузка, выключение",
     "Wired connection" to "Проводное подключение",
-    "Wired connection%s" to "Проводное подключение%s",
+    "Address %s" to "Адрес %s",
     "Wi-Fi: %s · %s" to "Wi-Fi: %s · %s",
     "connected" to "подключено",
     "Not connected" to "Нет подключения",
@@ -80,6 +100,9 @@ private val RU: Map<String, String> = mapOf(
     "For “%s”" to "Для «%s»",
     "Cancel" to "Отмена",
     "At least 8 characters" to "Не меньше 8 символов",
+    "5 or 13 characters, or 10 or 26 hex digits" to "5 или 13 символов, или 10 или 26 шестнадцатеричных цифр",
+    "Enterprise (802.1X) networks are not supported here" to "Корпоративные сети (802.1X) здесь не поддерживаются",
+    "Wi-Fi cannot be switched: %s" to "Не удалось переключить Wi-Fi: %s",
     "Wrong password" to "Неверный пароль",
     "Could not connect (reason %s)" to "Не удалось подключиться (причина %s)",
     "Connected to %s" to "Подключено: %s",
@@ -91,13 +114,13 @@ private val RU: Map<String, String> = mapOf(
     "Cable disconnected" to "Кабель отключён",
     // Bluetooth
     "Bluetooth" to "Bluetooth",
-    "Find devices" to "Найти устройства",
     "Stop" to "Стоп",
     "Bluetooth is off." to "Bluetooth выключен.",
     "Your devices" to "Ваши устройства",
     "Nearby" to "Рядом",
     "Nearby (looking…)" to "Рядом (поиск…)",
-    "No devices yet: “Find devices” looks for them." to "Устройств пока нет: «Найти устройства» начнёт поиск.",
+    "No devices yet: the refresh button above looks for them." to "Устройств пока нет: кнопка обновления вверху начнёт поиск.",
+    "%s: could not pair" to "%s: не удалось выполнить сопряжение",
     "Disconnecting…" to "Отключение…",
     "Pairing…" to "Сопряжение…",
     "Connected · battery %s" to "Подключено · заряд %s",
@@ -157,6 +180,17 @@ private val RU: Map<String, String> = mapOf(
     "Screenshot…" to "Снимок экрана…",
     "%s? Click again" to "%s? Нажмите ещё раз",
     "Colors" to "Цвета",
+    "Copy code" to "Копировать код",
+    "Tonal" to "Тональная",
+    "Vibrant" to "Яркая",
+    "Expressive" to "Выразительная",
+    "Neutral" to "Нейтральная",
+    "Monochrome" to "Монохромная",
+    "From the wallpaper" to "Из обоев",
+    "The wallpaper is not read yet" to "Обои ещё не прочитаны",
+    "Classic" to "Классическая",
+    "newm's Nord colours" to "Цвета Nord от newm",
+    "Palette copied: %s" to "Палитра скопирована: %s",
     // launcher, clipboard, keys, screenshots
     "Search programs" to "Поиск программ",
     "Looking for programs…" to "Ищу программы…",

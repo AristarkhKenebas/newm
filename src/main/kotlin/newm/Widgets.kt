@@ -304,7 +304,7 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
             val image = if (path.startsWith("resource:")) {
                 Wallpaper::class.java.getResourceAsStream("/newm/templates/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
             } else {
-                val file = java.io.File(path.replaceFirst("~", System.getenv("HOME") ?: System.getProperty("user.home")))
+                val file = java.io.File(expandHome(path))
                 if (file.name.lowercase().endsWith(".svg")) svg(file.readBytes()) else javax.imageio.ImageIO.read(file)
             } ?: error("not a picture")
             log.info { "Wallpaper $path: ${image.width}x${image.height}, read in ${(System.nanoTime() - t0) / 1_000_000} ms" }

@@ -52,7 +52,7 @@ internal class Shots(private val wm: Layout) {
 
     /** The configuration's settings, again after each reload. */
     fun apply() {
-        confFolder()?.takeIf { it.isNotBlank() }?.let { shots.folder = Path.of(it.replaceFirst("~", System.getenv("HOME") ?: System.getProperty("user.home"))) }
+        confFolder()?.takeIf { it.isNotBlank() }?.let { shots.folder = Path.of(expandHome(it)) }
         shots.save = confSave()
         shots.copy = confCopy()
         shots.pointer = confPointer()

@@ -35,3 +35,34 @@ internal fun textOf(bytes: Any?): String = (bytes as? List<*>)?.let { list -> St
 /** A reply's error in words (its name's last part and its message), or null. */
 internal fun errorOf(reply: DBusMessage): String? =
     if (!reply.isError) null else listOfNotNull(reply.errorName?.substringAfterLast('.'), reply.body.firstOrNull() as? String).joinToString(": ")
+
+/**
+ * Follows who has the bus name [name] (a service: NetworkManager, BlueZ): [owner] is its unique
+ * name now (null: not running), so signals can be taken from it alone; [changed] hears the
+ * first answer and then each start, stop or restart (it may come later than newm).
+ */
+internal class NameWatch(bus: DBusConnection, val name: String, private val changed: (String?) -> Unit) {
+    var owner: String? = null
+        private set
+    private var answered = false
+
+    init {
+        bus.onSignal("org.freedesktop.DBus", "NameOwnerChanged", "/org/freedesktop/DBus") { m ->
+            if (m.body.getOrNull(0) == name) set((m.body.getOrNull(2) as? String)?.ifEmpty { null })
+        }
+        bus.call("org.freedesktop.DBus", ObjectPath("/org/freedesktop/DBus"), "org.freedesktop.DBus", "GetNameOwner", "s", listOf(name)) { reply ->
+            // (A start told by the signal meanwhile is newer than this answer.)
+            if (!answered) set(if (reply.isError) null else reply.body.firstOrNull() as? String)
+        }
+    }
+
+    /** [message] comes from the service (not from another program sending the same signal). */
+    fun sent(message: DBusMessage): Boolean = owner != null && message.sender == owner
+
+    private fun set(now: String?) {
+        if (answered && now == owner) return
+        answered = true
+        owner = now
+        changed(now)
+    }
+}

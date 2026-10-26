@@ -14,7 +14,7 @@ private val log = Logger("config")
 /**
  * The user's configuration while newm runs: ~/.config/newm/config.kts, else a config.py of
  * before (run by Python as newm did; a line or two may need changing). With neither, newm
- * writes one there (the folder too) — the system's /etc/newm/config.kts, or its own — and uses it.
+ * writes one there (the folder too) — the system's /etc/newm (config.kts, config.lua or config.json), or its own — and uses it.
  *
  * Saving a file of the folder loads it again — no new session needed. A mistake never leaves
  * a black screen: at the start newm runs with its default configuration, later with the last
@@ -36,17 +36,18 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
 
     private fun locate(): Path {
         val kts = folder.resolve("config.kts")
-        val system = Path.of("/etc/newm/config.kts")
+        // The system's: /etc/newm/config.kts, config.lua or config.json (NixOS's programs.newm.settings writes that one).
+        val system = SYSTEM_NAMES.map { Path.of("/etc/newm", it) }.firstOrNull(Files::isRegularFile)
         // The user's own (config.kts first, then config.lua, config.json — Nix writes that —
         // and a config.py of before), else the system's.
         NAMES.map(folder::resolve).firstOrNull(Files::isRegularFile)?.let { return it }
         // None of the user's own: theirs from the system's (/etc/newm), or newm's own templates,
         // written for them to change (config.kts, examples/, a README).
         try {
-            val from = if (Files.isRegularFile(system)) "/etc/newm" else "newm's templates"
-            if (Files.isRegularFile(system)) Templates.copyFolder(system.parent, folder) else Templates.copyTo(folder)
+            val from = if (system != null) "/etc/newm" else "newm's templates"
+            if (system != null) Templates.copyFolder(system.parent, folder) else Templates.copyTo(folder)
             log.info { "There was no configuration: $folder written from $from" }
-            if (Files.isRegularFile(kts)) return kts
+            NAMES.map(folder::resolve).firstOrNull(Files::isRegularFile)?.let { return it }
         } catch (e: Exception) {
             log.warn("$folder cannot be written ($e)")
         }
@@ -55,11 +56,24 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
 
     private companion object {
         val NAMES = listOf("config.kts", "config.lua", "config.json", "config.py")
+        val SYSTEM_NAMES = listOf("config.kts", "config.lua", "config.json")
     }
+
+    // A config.json (home-manager's settings) beside the config.kts or config.lua in use: it is not read, and that is said.
+    private val unusedJson: String? = folder.resolve("config.json").takeIf { path.parent == folder && path.fileName.toString() != "config.json" && Files.isRegularFile(it) }
+        ?.let { "$it is not used: ${path.fileName} is read first (remove ${path.fileName} for config.json's settings, e.g. home-manager's)" }
+
+    // config.kts compiles one at a time; a compilation for an older save is dropped when a newer one has begun.
+    private val compiler = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "newm-config-compile").apply { isDaemon = true } }
+    private val generation = java.util.concurrent.atomic.AtomicInteger()
 
     private val kind get() = path.fileName.toString().substringAfterLast('.')
 
-    /** The configuration now (config.kts at the start: compiled here, a few seconds the first time). */
+    /**
+     * The configuration now (config.kts at the start: compiled here, a few seconds the first time).
+     * A config.py is run on the compositor's thread, at a reload too: what it calls on `layout`
+     * while it runs has to be answered there, so it cannot move to a thread of its own.
+     */
     fun load(): Map<String, Any?>? = when (kind) {
         "kts" -> runKts(KtsConfig.compile(path))
         "lua", "json" -> loadData()
@@ -146,16 +160,30 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
             load()?.let(apply)
             return
         }
-        Thread({
-            val compiled = KtsConfig.compile(path)
-            caulis.post { runKts(compiled)?.let(apply) }
-        }, "newm-config-compile").apply { isDaemon = true }.start()
+        val mine = generation.incrementAndGet()
+        compiler.execute {
+            // (A newer save is already waiting: this one would only be thrown away.)
+            if (generation.get() != mine) return@execute
+            val compiled = try {
+                KtsConfig.compile(path)
+            } catch (e: Throwable) {
+                KtsConfig.Compiled(null, listOf("${path.fileName} cannot be compiled: ${e.message ?: e}"))
+            }
+            caulis.post {
+                if (generation.get() != mine) return@post log.info { "${path.fileName}: a compilation for an older save dropped" }
+                runKts(compiled)?.let(apply)
+            }
+        }
     }
 
     /** The compositor runs: what Python starts runs inside it; mistakes so far are shown; saves are followed. */
     fun started() {
         running = true
         python?.environment(caulis.programEnvironment())
+        unusedJson?.let { text ->
+            log.info { text }
+            caulis.notify(text, NoticeLevel.WARNING, "newm")
+        }
         pendingError?.let { text ->
             pendingError = null
             show(text, NoticeLevel.ERROR)
@@ -164,6 +192,7 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
     }
 
     fun close() {
+        compiler.shutdownNow()
         python?.close()
     }
 

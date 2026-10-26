@@ -71,6 +71,23 @@ data class ViewState(
         scaleOrigin?.let { w = it.first; h = it.second }
         return doubleArrayOf(i, j, w, h)
     }
+
+    /**
+     * Its place in tiles on a grid [f] times as fine (a finer or coarser grid): a tiled view's
+     * place and size, a floating one's place, and where a move or resize started from.
+     */
+    internal fun scaledBy(f: Double) {
+        if (isTiled) {
+            i *= f
+            j *= f
+            w *= f
+            h *= f
+        } else if (!isLayer) {
+            floatPos = floatPos.first * f to floatPos.second * f
+        }
+        moveOrigin?.let { moveOrigin = it.copy(i = it.i * f, j = it.j * f) }
+        scaleOrigin?.let { scaleOrigin = it.first * f to it.second * f }
+    }
 }
 
 /** state_before_fullscreen: i, j, size before, and i, j, size in fullscreen. */
@@ -122,6 +139,7 @@ class WorkspaceState(
     fun usableHeight(): Double = ws.height - topExcluded - bottomExcluded
 
     fun copy(
+        ws: Workspace = this.ws,
         i: Double = this.i, j: Double = this.j, size: Double = this.size, sizeOrigin: Double? = this.sizeOrigin,
         stateBeforeFullscreen: BeforeFullscreen? = this.stateBeforeFullscreen,
         topBarDy: Double = this.topBarDy, bottomBarDy: Double = this.bottomBarDy,
@@ -145,16 +163,10 @@ class WorkspaceState(
     var unit: Double = 1.0
 
     /**
-     * The size of a new window (and of Super+S's halves) in tiles: one ordinary tile — at least
-     * half the view across (a grid made finer before [unit] was kept still gets windows of a size
-     * that can be seen).
+     * The size of a new window (and of Super+S's halves) in tiles: one ordinary tile (the grid's
+     * [unit], kept over restarts) — however far the view is zoomed out.
      */
-    fun newTile(): Double {
-        val view = sizeOrigin ?: size
-        var fromView = 1.0
-        while (fromView * 2 <= view / 2 + 1e-9) fromView *= 2
-        return maxOf(unit, fromView)
-    }
+    fun newTile(): Double = unit
 
     /**
      * The grid as coarse again as it can be: while every tiled window's place and size are even,
@@ -167,12 +179,7 @@ class WorkspaceState(
             val c = r.copy(i = r.i / 2, j = r.j / 2, size = r.size / 2, sizeOrigin = r.sizeOrigin?.div(2))
             c.intermediateRows.clear()
             c.intermediateCols.clear()
-            for (v in c.viewStates.values) if (v.isTiled) {
-                v.i /= 2
-                v.j /= 2
-                v.w /= 2
-                v.h /= 2
-            }
+            for (v in c.viewStates.values) v.scaledBy(0.5)
             c.unit = r.unit / 2
             r = c
         }
@@ -189,12 +196,7 @@ class WorkspaceState(
         val r = copy(i = i * 2, j = j * 2, size = size * 2, sizeOrigin = sizeOrigin?.times(2))
         r.intermediateRows.clear()
         r.intermediateCols.clear()
-        for (v in r.viewStates.values) if (v.isTiled) {
-            v.i *= 2
-            v.j *= 2
-            v.w *= 2
-            v.h *= 2
-        }
+        for (v in r.viewStates.values) v.scaledBy(2.0)
         r.unit = unit * 2
         return r
     }
@@ -578,7 +580,15 @@ class LayoutState(
     // --- Register / Unregister
 
     fun withWorkspaces(layout: Layout): LayoutState {
-        for (w in layout.workspaces) workspaceStates.getOrPut(w.handle) { WorkspaceState(w) }
+        // A kept state gets the workspace made anew (its size and monitors now), never the old one.
+        for (w in layout.workspaces) {
+            val old = workspaceStates[w.handle]
+            workspaceStates[w.handle] = when {
+                old == null -> WorkspaceState(w)
+                old.ws !== w -> old.copy(ws = w)
+                else -> old
+            }
+        }
 
         val orphans = ArrayList<Pair<Int, ViewState>>()
         val handles = layout.workspaces.map { it.handle }.toSet()

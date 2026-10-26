@@ -24,8 +24,51 @@ data class ConnectionEvent(val kind: Kind, val connected: Boolean, val name: Str
     enum class Kind { WIFI, WIRED, BLUETOOTH }
 }
 
-/** A Wi-Fi network in reach: its name, strength (0..100), whether it asks for a password, whether it is in use or known. */
-data class WifiNetwork(val ssid: String, val strength: Int, val secure: Boolean, val path: String, val active: Boolean, val known: Boolean)
+/**
+ * A Wi-Fi network in reach: its name, strength (0..100), whether it asks for a password, whether
+ * it is in use or known, and how it is protected (from its access point's flags).
+ */
+data class WifiNetwork(
+    val ssid: String, val strength: Int, val secure: Boolean, val path: String, val active: Boolean, val known: Boolean,
+    val security: WifiSecurity = if (secure) WifiSecurity.PSK else WifiSecurity.OPEN,
+)
+
+/** How a Wi-Fi network is protected: open (or OWE: encrypted, no password), WEP, WPA's password, WPA3's SAE, or 802.1X (enterprise). */
+enum class WifiSecurity { OPEN, OWE, WEP, PSK, SAE, ENTERPRISE }
+
+// NetworkManager's access point flags: privacy (WEP, or any WPA), and the key managements of WpaFlags / RsnFlags.
+private const val AP_PRIVACY = 0x1
+private const val KEY_PSK = 0x100
+private const val KEY_8021X = 0x200
+private const val KEY_SAE = 0x400
+private const val KEY_OWE = 0x800
+private const val KEY_OWE_TM = 0x1000
+private const val KEY_EAP_SUITE_B = 0x2000
+
+/** How an access point is protected, from its Flags, WpaFlags and RsnFlags. */
+internal fun securityOf(flags: Int, wpaFlags: Int, rsnFlags: Int): WifiSecurity {
+    val keys = wpaFlags or rsnFlags
+    return when {
+        keys and (KEY_8021X or KEY_EAP_SUITE_B) != 0 -> WifiSecurity.ENTERPRISE
+        // (WPA3 alone; with WPA2 beside it, its password works for both.)
+        keys and KEY_SAE != 0 && keys and KEY_PSK == 0 -> WifiSecurity.SAE
+        keys and KEY_PSK != 0 -> WifiSecurity.PSK
+        keys and (KEY_OWE or KEY_OWE_TM) != 0 -> WifiSecurity.OWE
+        keys == 0 && flags and AP_PRIVACY != 0 -> WifiSecurity.WEP
+        else -> WifiSecurity.OPEN
+    }
+}
+
+/** What is wrong with [password] for a network protected by [security] (English words), or null: it can be tried. */
+fun passwordProblem(security: WifiSecurity, password: String): String? = when (security) {
+    WifiSecurity.WEP -> {
+        val hex = password.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+        if (password.length == 5 || password.length == 13 || (hex && (password.length == 10 || password.length == 26))) null
+        else "5 or 13 characters, or 10 or 26 hex digits"
+    }
+    WifiSecurity.SAE -> if (password.isEmpty()) "Password" else null
+    else -> if (password.length < 8) "At least 8 characters" else null
+}
 
 /**
  * Wi-Fi from the bar, through NetworkManager (its D-Bus interface, the system bus): on and
@@ -55,6 +98,9 @@ class NetworkManager(private val caulis: Caulis) {
     /** Told when a network comes or goes (a card on the screen). */
     var onConnection: (ConnectionEvent) -> Unit = {}
 
+    /** The networks in reach are on screen (a popup): only then do their strengths' changes count. */
+    var networksShown: () -> Boolean = { true }
+
     /** The network asks for a password (none saved, or a wrong one): a window asks for it. */
     var onPasswordWanted: (WifiNetwork) -> Unit = {}
 
@@ -67,6 +113,7 @@ class NetworkManager(private val caulis: Caulis) {
     private var wiredBefore = false
 
     private var bus: DBusConnection? = null
+    private var nm: NameWatch? = null
     private var wifiDevice: String? = null
     private var knownSsids = emptyMap<String, String>()
     private var refreshQueued = false
@@ -78,11 +125,28 @@ class NetworkManager(private val caulis: Caulis) {
         if (bus != null) return
         val bus = caulis.systemBus ?: return log.warn("No system bus: Wi-Fi only as /proc says")
         this.bus = bus
-        bus.call("org.freedesktop.DBus", ObjectPath("/org/freedesktop/DBus"), "org.freedesktop.DBus", "NameHasOwner", "s", listOf(NM)) { reply ->
-            available = reply.body.firstOrNull() == true
-            if (!available) return@call log.info { "NetworkManager is not running: Wi-Fi only as /proc says" }
-            bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m -> if (m.path?.startsWith(NM_PATH) == true) refreshSoon() }
-            bus.onSignal(DEVICE, "StateChanged") { m -> if (m.path == wifiDevice) deviceState(m.body) }
+        // Only NetworkManager's own signals; of its access points' changes (strengths, many a second) only while they are shown.
+        bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m ->
+            if (nm?.sent(m) != true || m.path?.startsWith(NM_PATH) != true) return@onSignal
+            val iface = m.body.getOrNull(0) as? String
+            val names = dictOf(m.body.getOrNull(1)).keys
+            val inReachOnly = iface == AP || (iface == WIRELESS && names.isNotEmpty() && names.all { it == "AccessPoints" || it == "LastScan" })
+            if (inReachOnly && !networksShown()) return@onSignal
+            refreshSoon()
+        }
+        bus.onSignal(DEVICE, "StateChanged") { m -> if (nm?.sent(m) == true && m.path == wifiDevice) deviceState(m.body) }
+        // NetworkManager may start later than newm, or start again: the bar follows it.
+        nm = NameWatch(bus, NM) { owner ->
+            available = owner != null
+            if (owner == null) {
+                log.info { "NetworkManager is not running: Wi-Fi only as /proc says" }
+                wifiDevice = null
+                networks = emptyList()
+                wired = false
+                connecting = null
+                return@NameWatch
+            }
+            log.info { "NetworkManager is running" }
             refresh()
         }
     }
@@ -99,23 +163,32 @@ class NetworkManager(private val caulis: Caulis) {
 
     fun refresh() {
         val bus = bus ?: return
+        if (nm?.owner == null) return
         bus.getAll(NM, NM_PATH, NM) { props -> props?.let { wifiEnabled = it["WirelessEnabled"] == true } }
         bus.call(NM, ObjectPath(NM_PATH), NM, "GetDevices") { reply ->
-            val devices = (reply.body.firstOrNull() as? List<*>).orEmpty().map { (it as ObjectPath).value }
+            if (reply.isError) return@call log.trace { "NetworkManager's devices: ${errorOf(reply)}" }
+            val devices = (reply.body.firstOrNull() as? List<*>).orEmpty().mapNotNull { (it as? ObjectPath)?.value }
             var wiredSeen = false
+            // The Wi-Fi devices and their states (picked again each time: a USB stick comes and goes).
+            val wifis = LinkedHashMap<String, Int>()
+            fun done() {
+                val picked = wifiDevice?.takeIf { it in wifis } ?: wifis.keys.firstOrNull()
+                if (picked != wifiDevice) log.info { "Wi-Fi device: ${picked ?: "none"}" }
+                wifiDevice = picked
+                wifiState = picked?.let { wifis[it] } ?: 0
+                if (lookedOnce && wiredSeen != wiredBefore) onConnection(ConnectionEvent(ConnectionEvent.Kind.WIRED, wiredSeen, null))
+                wiredBefore = wiredSeen
+                wired = wiredSeen
+                readNetworks()
+            }
+            if (devices.isEmpty()) return@call done()
             var pending = devices.size
             for (device in devices) bus.getAll(NM, device, DEVICE) { props ->
                 val type = (props?.get("DeviceType") as? Number)?.toInt()
                 val state = (props?.get("State") as? Number)?.toInt() ?: 0
-                if (type == 2 && wifiDevice == null) wifiDevice = device
-                if (device == wifiDevice) wifiState = state
+                if (type == 2) wifis[device] = state
                 if (type == 1 && state == 100) wiredSeen = true
-                if (--pending == 0) {
-                    if (lookedOnce && wiredSeen != wiredBefore) onConnection(ConnectionEvent(ConnectionEvent.Kind.WIRED, wiredSeen, null))
-                    wiredBefore = wiredSeen
-                    wired = wiredSeen
-                    readNetworks()
-                }
+                if (--pending == 0) done()
             }
         }
         readKnown()
@@ -136,8 +209,9 @@ class NetworkManager(private val caulis: Caulis) {
                 for (ap in aps) bus.getAll(NM, ap, AP) { p ->
                     if (p != null) {
                         val ssid = textOf(p["Ssid"])
-                        val secure = ((p["Flags"] as? Number)?.toInt() ?: 0) != 0 || ((p["WpaFlags"] as? Number)?.toInt() ?: 0) != 0 || ((p["RsnFlags"] as? Number)?.toInt() ?: 0) != 0
-                        if (ssid.isNotBlank()) found += WifiNetwork(ssid, (p["Strength"] as? Number)?.toInt() ?: 0, secure, ap, ap == activeAp, ssid in knownSsids)
+                        val security = securityOf((p["Flags"] as? Number)?.toInt() ?: 0, (p["WpaFlags"] as? Number)?.toInt() ?: 0, (p["RsnFlags"] as? Number)?.toInt() ?: 0)
+                        val secure = security != WifiSecurity.OPEN && security != WifiSecurity.OWE
+                        if (ssid.isNotBlank()) found += WifiNetwork(ssid, (p["Strength"] as? Number)?.toInt() ?: 0, secure, ap, ap == activeAp, ssid in knownSsids, security)
                     }
                     if (--pending == 0) {
                         val active = found.firstOrNull { it.active }?.ssid
@@ -179,7 +253,10 @@ class NetworkManager(private val caulis: Caulis) {
     /** Wi-Fi on or off. */
     fun setWifi(on: Boolean) {
         bus?.setProperty(NM, NM_PATH, NM, "WirelessEnabled", Variant("b", on)) { error ->
-            if (error != null) problem = "Wi-Fi cannot be switched: $error" else wifiEnabled = on
+            if (error != null) {
+                problem = "Wi-Fi cannot be switched: ${verbatim(error)}"
+                log.warn("Wi-Fi cannot be switched: $error")
+            } else wifiEnabled = on
         }
         log.info { "Wi-Fi ${if (on) "on" else "off"}" }
     }
@@ -200,8 +277,8 @@ class NetworkManager(private val caulis: Caulis) {
         }
     }
 
-    /** Whether connecting to [network] needs a password from you (secure and not known). */
-    fun needsPassword(network: WifiNetwork): Boolean = network.secure && !network.known
+    /** Whether connecting to [network] needs a password from you (secure and not known; 802.1X is not asked for here). */
+    fun needsPassword(network: WifiNetwork): Boolean = network.secure && !network.known && network.security != WifiSecurity.ENTERPRISE
 
     /** Connects to [network]: a known one as saved, a new one with [password] (null for an open one). */
     fun connect(network: WifiNetwork, password: String? = null) {
@@ -211,6 +288,13 @@ class NetworkManager(private val caulis: Caulis) {
         connecting = network.ssid
         log.info { "Connecting to Wi-Fi \"${network.ssid}\"" } // (never the password)
         val known = knownSsids[network.ssid]
+        // 802.1X (a user name, certificates) is not set up from the bar; one saved elsewhere (nmcli) connects as saved.
+        if (known == null && network.security == WifiSecurity.ENTERPRISE) {
+            log.info { "Wi-Fi \"${network.ssid}\" uses 802.1X: not set up from the bar" }
+            connecting = null
+            problem = "Enterprise (802.1X) networks are not supported here"
+            return
+        }
         // A password given for a saved network (its saved one was wrong or none): its profile goes, a new one comes.
         if (known != null && password != null) {
             bus.call(NM, ObjectPath(known), "$SETTINGS.Connection", "Delete") { _ ->
@@ -225,12 +309,22 @@ class NetworkManager(private val caulis: Caulis) {
             }
         } else {
             val settings = LinkedHashMap<String, Map<String, Variant>>()
-            if (network.secure && password != null) settings["802-11-wireless-security"] = mapOf("key-mgmt" to Variant("s", "wpa-psk"), "psk" to Variant("s", password))
+            securitySettings(network.security, password)?.let { settings["802-11-wireless-security"] = it }
             bus.call(NM, ObjectPath(NM_PATH), NM, "AddAndActivateConnection", "a{sa{sv}}oo", listOf(settings, ObjectPath(device), ObjectPath(network.path))) { reply ->
                 val error = errorOf(reply)
                 if (error != null) failed(error) else newProfile = (reply.body.firstOrNull() as? ObjectPath)?.value
             }
         }
+    }
+
+    // The security part of a new profile, as the access point's flags ask (the password only here, in the D-Bus call's body).
+    private fun securitySettings(security: WifiSecurity, password: String?): Map<String, Variant>? = when (security) {
+        WifiSecurity.OPEN -> null
+        WifiSecurity.OWE -> mapOf("key-mgmt" to Variant("s", "owe"))
+        WifiSecurity.WEP -> password?.let { mapOf("key-mgmt" to Variant("s", "none"), "wep-key0" to Variant("s", it), "wep-key-type" to Variant("u", 1)) }
+        WifiSecurity.PSK -> password?.let { mapOf("key-mgmt" to Variant("s", "wpa-psk"), "psk" to Variant("s", it)) }
+        WifiSecurity.SAE -> password?.let { mapOf("key-mgmt" to Variant("s", "sae"), "psk" to Variant("s", it)) }
+        WifiSecurity.ENTERPRISE -> null
     }
 
     /** Leaves the Wi-Fi network in use. */
@@ -266,7 +360,7 @@ class NetworkManager(private val caulis: Caulis) {
                 val wanted = connecting?.let { name -> networks.firstOrNull { it.ssid == name } }
                 failed(if (reason == 7 || reason == 8) "Wrong password" else "Could not connect (reason $reason)")
                 // No password, or a wrong one: asked for in a window.
-                if ((reason == 7 || reason == 8) && wanted != null && wanted.secure) onPasswordWanted(wanted)
+                if ((reason == 7 || reason == 8) && wanted != null && wanted.secure && wanted.security != WifiSecurity.ENTERPRISE) onPasswordWanted(wanted)
             }
         }
         refreshSoon()

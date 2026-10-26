@@ -59,7 +59,7 @@ internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
                 val connecting = nm.connecting == n.ssid
                 val open = popup.expanded == n.ssid
                 TileRow(
-                    Glyph.WIFI, n.ssid, colors, text,
+                    Glyph.WIFI, verbatim(n.ssid), colors, text,
                     subtitle = when {
                         connecting -> "Connecting…"
                         n.active -> "Connected"
@@ -116,7 +116,7 @@ internal fun BluetoothPopup(model: BarModel, popup: Popup, colors: BarColors, te
             if (bt.scanning || found.isNotEmpty()) Section(if (bt.scanning) "Nearby (looking…)" else "Nearby", colors, text)
             for (d in found) DeviceRow(model, popup, d, colors, text)
         }
-        if (paired.isEmpty() && found.isEmpty() && !bt.scanning) Note("No devices yet: “Find devices” looks for them.", colors, text)
+        if (paired.isEmpty() && found.isEmpty() && !bt.scanning) Note("No devices yet: the refresh button above looks for them.", colors, text)
     }
 }
 
@@ -126,11 +126,11 @@ private fun DeviceRow(model: BarModel, popup: Popup, d: BluetoothDevice, colors:
     val busy = bt.busy == d.path
     val open = popup.expanded == d.path
     TileRow(
-        glyphOfDevice(d.icon), d.name, colors, text,
+        glyphOfDevice(d.icon), verbatim(d.name), colors, text,
         subtitle = when {
             busy && d.connected -> "Disconnecting…"
             busy -> if (d.paired) "Connecting…" else "Pairing…"
-            d.connected -> d.battery?.let { "Connected · battery $it%" } ?: "Connected"
+            d.connected -> d.battery?.let { "Connected · battery ${verbatim("$it%")}" } ?: "Connected"
             d.paired -> null
             else -> "Click to pair"
         },
@@ -148,6 +148,9 @@ private fun DeviceRow(model: BarModel, popup: Popup, d: BluetoothDevice, colors:
 // sound { maxVolume = 150 }: how loud the volume's slider goes (100..150; past 100 the sound is amplified).
 private val confMaxVolume = newm.configuredValue("sound.max_volume", 150)
 
+/** How loud the output may be set (percent, 100..150): the slider's end, and the wheel's and keys' too. */
+internal fun maxVolume(): Int = confMaxVolume().coerceIn(100, 150)
+
 // --- sound ---------------------------------------------------------------------------------------
 
 /** Sound from the bar: the volume and the device it plays on; the microphone and the device it hears with. */
@@ -159,7 +162,7 @@ internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
         val out = sound.outputs.firstOrNull { it.isDefault } ?: sound.outputs.firstOrNull()
         Header("Sound", colors, text)
         if (out == null) return@Column Note("No sound device", colors, text)
-        LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }, max = confMaxVolume().coerceIn(100, 150)) { sound.setVolume(out, it, true) }
+        LevelRow(Glyph.SPEAKER, out.volume, out.muted, colors, text, onMute = { sound.toggleMute(out, true) }, max = maxVolume()) { sound.setVolume(out, it, true) }
         DevicePicker(out, sound.outputs, { it.description }, { outputGlyph(it.description) }, { it.isDefault }, colors, text) { sound.use(it, true) }
         val mic = sound.inputs.firstOrNull { it.isDefault } ?: sound.inputs.firstOrNull()
         if (mic != null) {
@@ -193,7 +196,7 @@ private fun outputGlyph(name: String): Glyph {
 // A device to choose: its picture, its name, a check on the one in use.
 @Composable
 private fun DeviceChoice(name: String, glyph: Glyph, chosen: Boolean, colors: BarColors, text: TextStyle, onClick: () -> Unit) {
-    ListRow(name, colors, text, selected = chosen, onClick = onClick,
+    ListRow(verbatim(name), colors, text, selected = chosen, onClick = onClick,
         leading = { GlyphIcon(glyph, if (chosen) colors.accent else colors.dim, 16.dp) },
         trailing = { if (chosen) GlyphIcon(Glyph.CHECK, colors.accent, 14.dp) })
 }
@@ -212,7 +215,7 @@ private fun LevelRow(glyph: Glyph, percent: Int, muted: Boolean, colors: BarColo
 // --- battery and power profiles ----------------------------------------------------------------------
 
 @Composable
-internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: TextStyle) {
+internal fun BatteryAndPowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val b = model.status.battery
     val profiles = model.powerProfiles
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -222,20 +225,12 @@ internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: Text
             Spacer(Modifier.width(12.dp))
             Column {
                 BasicText(tr("${b.percent}%"), style = text.copy(fontSize = 19.sp, fontWeight = FontWeight.SemiBold))
-                val minutes = b.minutesLeft
-                BasicText(tr(when {
-                    b.full -> "Fully charged"
-                    b.charging && minutes != null -> "Charging · full in ${hoursOf(minutes)}"
-                    b.charging -> "Charging"
-                    b.plugged -> "Plugged in · held at its charge limit"
-                    minutes != null -> "${hoursOf(minutes)} left"
-                    else -> "On battery"
-                }), style = text.copy(color = colors.dim, fontSize = 12.sp))
+                BasicText(batteryWords(b), style = text.copy(color = colors.dim, fontSize = 12.sp))
             }
         }
         if (b != null) Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             BasicText(tr("Percent at the bar"), style = text, modifier = Modifier.weight(1f))
-            Switch(model.batteryPercent ?: true, colors) { model.showBatteryPercent(it) }
+            Switch(model.batteryPercent ?: popup.bar.showPercent, colors) { model.showBatteryPercent(it) }
         }
         if (profiles.profiles.isNotEmpty()) {
             Section("Power mode", colors, text)
@@ -245,7 +240,7 @@ internal fun BatteryAndPowerPopup(model: BarModel, colors: BarColors, text: Text
                         "power-saver" -> Glyph.LEAF to "Power saver"
                         "balanced" -> Glyph.GAUGE to "Balanced"
                         "performance" -> Glyph.BOLT to "Performance"
-                        else -> Glyph.POWER to p
+                        else -> Glyph.POWER to verbatim(p)
                     }
                     ChoiceTile(glyph, name, p == profiles.active, colors, text, Modifier.weight(1f)) { profiles.use(p) }
                 }
@@ -387,6 +382,19 @@ private fun SmallTile(symbol: String, on: Boolean, colors: BarColors, modifier: 
     }
 }
 
+/** What the battery does, in words (translated): charging and how long, held, how long it lasts. */
+internal fun batteryWords(b: Battery): String {
+    val minutes = b.minutesLeft
+    return when {
+        b.full -> tr("Fully charged")
+        b.charging && minutes != null -> tr("Charging · full in %s").replace("%s", hoursOf(minutes))
+        b.charging -> tr("Charging")
+        b.plugged -> tr("Plugged in · held at its charge limit")
+        minutes != null -> tr("%s left").replace("%s", hoursOf(minutes))
+        else -> tr("On battery")
+    }
+}
+
 internal fun hoursOf(minutes: Int): String = tr(if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min")
 
 // --- colours ---------------------------------------------------------------------------------
@@ -399,7 +407,7 @@ internal fun ColorsPopup(model: BarModel, colors: BarColors, text: TextStyle) {
     val dark = model.scheme == dev.caulis.core.appearance.ColorScheme.DARK
     Column {
         Header("Colors", colors, text) {
-            model.palette?.let { p -> SmallButton("Copy code", colors, text) { model.wm.caulis.desktop.copyText?.invoke(p.code); model.toast("Palette copied: ${p.code}") } }
+            model.palette?.let { p -> SmallButton("Copy code", colors, text) { model.wm.caulis.desktop.copyText?.invoke(p.code); model.toast("Palette copied: ${verbatim(p.code)}") } }
         }
         val styles = listOf(
             dev.caulis.core.appearance.PaletteStyle.TONAL_SPOT to "Tonal",

@@ -77,6 +77,12 @@ class NewmConfig(
     /** The user of greetd's greeter (newm as the login screen). */
     var greeterUser by setting<String>("greeter_user")
 
+    /**
+     * `newm cmd unlock` unlocks without the password (off: any program of yours could do it
+     * over the session bus). For a test setup only.
+     */
+    var enableUnlockCommand by setting<Boolean>("enable_unlock_command")
+
     /** The wallpaper. */
     fun background(configure: BackgroundSection.() -> Unit) = section("background", ::BackgroundSection, configure)
 
@@ -292,7 +298,7 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
     /** Programs may ask to be fullscreen (a video's button). */
     var acceptFullscreen by setting<Boolean>("accept_fullscreen")
 
-    /** Floating windows open at their smallest size. */
+    /** A floating window that chooses no size of its own opens at its smallest (one that does keeps its own). */
     var floatingMinSize by setting<Boolean>("floating_min_size")
 
     /** How far past a workspace's edge a window may be dragged before it moves to the next. */
@@ -524,6 +530,9 @@ class OverviewSection internal constructor(values: MutableMap<String, Any?>) : S
 
     /** A click on a window chooses it: the overview ends there, the window focused (true). */
     var choose by setting<Boolean>("choose")
+
+    /** The window under the pointer is the chosen one there: its border, and Super+drag moves it (true). */
+    var followPointer by setting<Boolean>("follow_pointer")
 }
 
 /** mouse { }: the mouse with Super. */

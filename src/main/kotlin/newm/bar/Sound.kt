@@ -103,15 +103,27 @@ class Sound(private val caulis: Caulis) {
         }, 300, TimeUnit.MILLISECONDS)
     }
 
-    private fun run(vararg command: String): String? = try {
-        val p = ProcessBuilder(*command).redirectErrorStream(true).start()
-        p.outputStream.close()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(3, TimeUnit.SECONDS)) {
-            p.destroyForcibly()
+    // The command's output, or null when it failed or took over three seconds (then it is killed:
+    // a hung pactl must not hold the worker). The output goes to a file meanwhile, so waiting has a real end.
+    private fun run(vararg command: String): String? {
+        val out = try {
+            java.nio.file.Files.createTempFile("newm-sound", ".out")
+        } catch (e: Exception) {
+            log.warn("No room for pactl's answer: $e")
+            return null
+        }
+        return try {
+            val p = ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(out.toFile()).start()
+            p.outputStream.close()
+            if (!p.waitFor(3, TimeUnit.SECONDS)) {
+                p.destroyForcibly()
+                log.warn("${command.first()} took too long and was stopped")
+                null
+            } else java.nio.file.Files.readString(out).takeIf { p.exitValue() == 0 }
+        } catch (_: Exception) {
             null
-        } else out.takeIf { p.exitValue() == 0 }
-    } catch (_: Exception) {
-        null
+        } finally {
+            runCatching { java.nio.file.Files.deleteIfExists(out) }
+        }
     }
 }

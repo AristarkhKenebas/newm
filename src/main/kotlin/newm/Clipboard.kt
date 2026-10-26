@@ -151,6 +151,17 @@ private enum class ClipFilter(val title: String) {
  * clipboard { enabled = false } turns it off; clipboard { size = 100 } keeps more.
  */
 class ClipboardHistory(private val wm: Layout) {
+    private companion object {
+        // A picture bigger than this is not decoded at all (20000×20000 would be gigabytes).
+        const val MAX_PIXELS = 40_000_000L
+
+        // What is shown of a picture: at most this wide and high.
+        const val THUMBNAIL = 640
+
+        // Every picture kept, in all (their PNGs).
+        const val MAX_PICTURE_BYTES = 256L shl 20
+    }
+
     val entries = mutableStateListOf<ClipEntry>()
     var shown by mutableStateOf(false)
         private set
@@ -172,7 +183,8 @@ class ClipboardHistory(private val wm: Layout) {
         Thread({ apps = DesktopApp.installed() }, "newm-clipboard-apps").apply { isDaemon = true }.start()
         caulis.clipboard.onClipboardChanged { data -> if (data != null && data !== ours && confEnabled()) take(data) }
         val w = ComposeWidget(caulis.desktop, { task -> caulis.post { task.run() } }, place = { m ->
-            if (!fade.visible) null else {
+            // (Never over the lock screen.)
+            if (!fade.visible || wm.lockShown()) null else {
                 val d = caulis.desktop
                 val target = d.monitors.firstOrNull { it.area.contains(Rect(d.pointerX.toInt(), d.pointerY.toInt(), 1, 1)) } ?: d.monitors.firstOrNull()
                 if (m !== target) null else {
@@ -219,16 +231,63 @@ class ClipboardHistory(private val wm: Layout) {
         readClipboard(data, mime, limit) { bytes ->
             if (bytes == null || bytes.isEmpty()) return@readClipboard
             val entry = if (mime == picture) {
-                val image = runCatching { org.jetbrains.skia.Image.makeFromEncoded(bytes) }.getOrNull() ?: return@readClipboard
-                // (Kept as PNG: what is copied back is a PNG.)
-                val png = if (mime == "image/png") bytes else image.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)?.bytes ?: return@readClipboard
-                ClipEntry(null, png, image.toComposeImageBitmap(), image.width, image.height, source, sourceApp)
+                pictureEntry(bytes, mime, source, sourceApp) ?: return@readClipboard
             } else {
                 val s = String(bytes, Charsets.UTF_8).trimEnd('\u0000')
                 if (s.isBlank()) return@readClipboard
                 ClipEntry(s, null, null, 0, 0, source, sourceApp)
             }
             wm.caulis.post { add(entry) }
+        }
+    }
+
+    // A copied picture: its size read first (one too big is not decoded at all), kept as PNG
+    // (what is copied back) with a small picture of it to show — never the whole one decoded.
+    private fun pictureEntry(bytes: ByteArray, mime: String, source: String?, sourceApp: String?): ClipEntry? = runCatching {
+        val (width, height) = pictureSize(bytes) ?: return null.also { log.trace { "Not kept: an unreadable picture ($mime)" } }
+        if (width <= 0 || height <= 0 || width.toLong() * height > MAX_PIXELS) return null.also { log.info { "Not kept: a picture of ${width}x$height is too big" } }
+        val image = org.jetbrains.skia.Image.makeFromEncoded(bytes)
+        try {
+            // (Kept as PNG: what is copied back is a PNG.)
+            val png = if (mime == "image/png") bytes else image.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)?.bytes ?: return null
+            ClipEntry(null, png, thumbnail(image).toComposeImageBitmap(), width, height, source, sourceApp)
+        } finally {
+            image.close()
+        }
+    }.getOrElse { e ->
+        log.info { "Not kept: the picture could not be read ($e)" }
+        null
+    }
+
+    // The picture's width and height from its header (PNG, JPEG, ...: skia's codec reads only that).
+    private fun pictureSize(bytes: ByteArray): Pair<Int, Int>? {
+        val data = org.jetbrains.skia.Data.makeFromBytes(bytes)
+        return try {
+            val codec = runCatching { org.jetbrains.skia.Codec.makeFromData(data) }.getOrNull() ?: return null
+            try {
+                codec.width to codec.height
+            } finally {
+                codec.close()
+            }
+        } finally {
+            data.close()
+        }
+    }
+
+    // [image] at most THUMBNAIL px wide and high (as it is, when smaller).
+    private fun thumbnail(image: org.jetbrains.skia.Image): org.jetbrains.skia.Image {
+        val scale = minOf(1.0, THUMBNAIL.toDouble() / maxOf(image.width, image.height))
+        val w = (image.width * scale).toInt().coerceAtLeast(1)
+        val h = (image.height * scale).toInt().coerceAtLeast(1)
+        val surface = org.jetbrains.skia.Surface.makeRasterN32Premul(w, h)
+        try {
+            surface.canvas.drawImageRect(
+                image, org.jetbrains.skia.Rect.makeWH(image.width.toFloat(), image.height.toFloat()), org.jetbrains.skia.Rect.makeWH(w.toFloat(), h.toFloat()),
+                org.jetbrains.skia.SamplingMode.LINEAR, null, true,
+            )
+            return surface.makeImageSnapshot()
+        } finally {
+            surface.close()
         }
     }
 
@@ -256,7 +315,14 @@ class ClipboardHistory(private val wm: Layout) {
             if (last < 0) break
             entries.removeAt(last)
         }
-        log.trace { "Kept: ${entry.text?.take(20) ?: "a picture ${entry.width}x${entry.height}"}" }
+        // Pictures in all: at most MAX_PICTURE_BYTES (the oldest unpinned ones go).
+        while (entries.sumOf { it.png?.size?.toLong() ?: 0L } > MAX_PICTURE_BYTES) {
+            val last = entries.indexOfLast { !it.pinned && it.png != null }
+            if (last < 0) break
+            entries.removeAt(last)
+        }
+        // (Never what was copied: only what kind of thing.)
+        log.trace { "Kept: ${when (entry.kind) { ClipKind.TEXT -> "a text"; ClipKind.FILES -> "${entry.files?.size} files"; ClipKind.PICTURES -> "a picture ${entry.width}x${entry.height}" }}" }
     }
 
     /** Copies [entry] again (and closes). */
@@ -306,8 +372,9 @@ class ClipboardHistory(private val wm: Layout) {
     private fun savePins() {
         if (!confKeepPins()) return
         try {
-            java.nio.file.Files.createDirectories(pinsFile.parent)
-            java.nio.file.Files.writeString(pinsFile, Json.write(entries.filter { it.pinned && it.text != null }.map { it.text }))
+            // (Only its user may read it: a pinned text may be a secret.)
+            privateFolder(pinsFile.parent)
+            writePrivately(pinsFile, Json.write(entries.filter { it.pinned && it.text != null }.map { it.text }))
         } catch (e: Exception) {
             log.warn("The pinned clipboard entries cannot be kept: $e")
         }
@@ -326,6 +393,8 @@ class ClipboardHistory(private val wm: Layout) {
     fun toggle() = if (shown) close() else open()
 
     fun open() {
+        // (Not over the lock screen: the keyboard stays its own.)
+        if (wm.lockShown()) return log.trace { "Not opened: locked" }
         if (!confEnabled()) return run { wm.caulis.notify(newm.bar.tr("The clipboard's history is off (clipboard { enabled = true } turns it on)."), title = "newm") }
         opened++
         if (!hintsLoaded) {
@@ -349,7 +418,7 @@ class ClipboardHistory(private val wm: Layout) {
     private fun hintsDone(never: Boolean) {
         hintsSeen = true
         if (never) runCatching {
-            java.nio.file.Files.createDirectories(hintsFile.parent)
+            privateFolder(hintsFile.parent)
             java.nio.file.Files.writeString(hintsFile, "")
         }
     }

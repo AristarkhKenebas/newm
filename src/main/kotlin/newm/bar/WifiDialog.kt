@@ -90,7 +90,8 @@ class WifiPasswordDialog(private val model: BarModel) {
     }
 
     private fun connect(target: WifiNetwork, password: String) {
-        if (password.length < 8) return
+        // (Not one NetworkManager would refuse: WEP 5/13 characters or 10/26 hex digits, WPA 8 or more.)
+        if (passwordProblem(target.security, password) != null) return
         model.network.connect(target, password)
         cancel()
     }
@@ -115,7 +116,7 @@ class WifiPasswordDialog(private val model: BarModel) {
                 }
                 Spacer(Modifier.height(2.dp))
                 PasswordField(password, colors, text, onChange = { password = it }, onSubmit = { connect(target, password) }, onCancel = ::cancel)
-                BasicText(if (password.isNotEmpty() && password.length < 8) tr("At least 8 characters") else " ", style = text.copy(color = colors.dim, fontSize = 11.sp))
+                BasicText(passwordProblem(target.security, password)?.takeIf { password.isNotEmpty() }?.let(::tr) ?: " ", style = text.copy(color = colors.dim, fontSize = 11.sp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                     PillButton("Cancel", colors, text) { cancel() }
                     PillButton("Connect", colors, text, PillKind.PRIMARY) { connect(target, password) }

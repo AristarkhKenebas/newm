@@ -251,8 +251,9 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
  */
 class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout) {
     private var workspace = layout.workspaces[0]
-    private var wsState = layout.state.workspaceState(workspace)
     private var part: MoveResizePart? = null
+    // The workspace the view glides on (its state read anew each time: a gesture replaces it).
+    private var panWorkspace = workspace
 
     // Gliding after a gesture: (from i or w, from j or h, to i or w, to j or h, start, end).
     private var targetViewPos: DoubleArray? = null
@@ -266,7 +267,6 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
     init {
         val found = layout.state.findViewOrNull(view)
         if (found != null) {
-            wsState = found.second
             workspace = layout.workspaces.first { it.handle == found.third }
         } else {
             log.warn("Unexpected: Could not access view $view state")
@@ -309,7 +309,11 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         if (tl != null) {
             inProgress = true
             val (ii, ij, fi, fj, it0, ft) = tl
-            if (t > ft) {
+            // (The workspace's state now: the one taken at the start is replaced by the gesture.)
+            val wsState = runCatching { layout.state.workspaceState(panWorkspace) }.getOrNull()
+            if (wsState == null) {
+                targetLayoutPos = null
+            } else if (t > ft) {
                 wsState.i = fi
                 wsState.j = fj
                 targetLayoutPos = null
@@ -320,11 +324,12 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
             }
             layout.damage()
         } else if (part != null) {
-            // The view kept in sight while it moves.
-            val vs = layout.state.findViewOrNull(view)?.first
-            if (vs == null) {
+            // The view kept in sight while it moves (on the workspace it is on now).
+            val found = layout.state.findViewOrNull(view)
+            if (found == null) {
                 log.warn("Unexpected: Could not access view $view state")
             } else {
+                val (vs, wsState, wsHandle) = found
                 val i = pyRound(vs.i)
                 val j = pyRound(vs.j)
                 val w = pyRound(vs.w)
@@ -337,6 +342,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
                 if (j < fj) fj = j.toDouble()
                 if (fi != wsState.i || fj != wsState.j) {
                     log.trace { "MoveResizeOverlay: Adjusting viewpoint (${wsState.i} ${wsState.j}) -> ($fi $fj)" }
+                    layout.workspaces.firstOrNull { it.handle == wsHandle }?.let { panWorkspace = it }
                     targetLayoutPos = doubleArrayOf(wsState.i, wsState.j, fi, fj, t, t + confAnimT())
                 }
             }

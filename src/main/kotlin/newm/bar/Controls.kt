@@ -541,7 +541,7 @@ internal fun <T> DevicePicker(
         if (open) Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp)) {
             for (d in devices) {
                 val on = chosen(d)
-                ListRow(name(d), colors, text, selected = on, onClick = { onChoose(d); open = false },
+                ListRow(verbatim(name(d)), colors, text, selected = on, onClick = { onChoose(d); open = false },
                     leading = { GlyphIcon(glyph(d), if (on) colors.accent else colors.dim, 16.dp) },
                     trailing = { if (on) GlyphIcon(Glyph.CHECK, colors.accent, 14.dp) })
             }

@@ -1,6 +1,6 @@
 package newm.bar
 
-import dev.caulis.compose.Appearance
+import dev.caulis.compose.WidgetLook
 
 /**
  * Something appearing and going away by the clock (not drawn anew for it: the compositor shows
@@ -59,10 +59,10 @@ class Fade(private val inMillis: Long = 200, private val outMillis: Long = 150) 
     val visible: Boolean get() = to > 0f || moving
 
     /** How it looks now: see-through, a little smaller and moved by [rise] while it comes and goes. */
-    fun appearance(rise: Float = -8f, smallest: Float = 0.96f, unfold: Boolean = false): Appearance {
+    fun appearance(rise: Float = -8f, smallest: Float = 0.96f, unfold: Boolean = false): WidgetLook {
         started()
         val v = value()
-        if (v >= 1f) return Appearance.SHOWN
-        return Appearance(alpha = v, scale = smallest + (1f - smallest) * v, dy = (1f - v) * rise, reveal = if (unfold) 0.55f + 0.45f * v else 1f)
+        if (v >= 1f) return WidgetLook.SHOWN
+        return WidgetLook(alpha = v, scale = smallest + (1f - smallest) * v, dy = (1f - v) * rise, reveal = if (unfold) 0.55f + 0.45f * v else 1f)
     }
 }

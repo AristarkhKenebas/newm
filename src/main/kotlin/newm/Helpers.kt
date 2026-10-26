@@ -145,3 +145,36 @@ class PaCtl(private val sink: Int = 0, private val barDisplay: BarDisplay? = nul
         matcher.find(vol)?.let { display.display(it.groupValues[1].toDouble() / 100.0) }
     }
 }
+
+/** [path] with a leading "~" or "~/" as the home folder ("a~b" and "~user" stay as they are). */
+internal fun expandHome(path: String): String {
+    val home = System.getenv("HOME") ?: System.getProperty("user.home")
+    return when {
+        path == "~" -> home
+        path.startsWith("~/") -> home + path.substring(1)
+        else -> path
+    }
+}
+
+/**
+ * The lock screen shows (or is coming, or going), or a locker of one's own (ext-session-lock)
+ * locked the session: what is newm's own on top (the launcher, the clipboard's history) is not
+ * drawn then, nor clickable.
+ */
+internal fun Layout.lockShown(): Boolean = layoutDown.lockPerc > 0.0 || state.lockPerc > 0.0 || caulis.desktop.locked
+
+/** [dir] made if needed (with its parents) and kept for its user only (0700: clipboard pins, logs). */
+internal fun privateFolder(dir: java.nio.file.Path): java.nio.file.Path {
+    val owner = java.nio.file.attribute.PosixFilePermissions.fromString("rwx------")
+    java.nio.file.Files.createDirectories(dir, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(owner))
+    runCatching { java.nio.file.Files.setPosixFilePermissions(dir, owner) }
+    return dir
+}
+
+/** Writes [text] to [file], readable by its user only (0600): what may hold secrets. */
+internal fun writePrivately(file: java.nio.file.Path, text: String) {
+    val owner = java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
+    if (!java.nio.file.Files.exists(file)) java.nio.file.Files.createFile(file, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(owner))
+    java.nio.file.Files.setPosixFilePermissions(file, owner)
+    java.nio.file.Files.writeString(file, text)
+}

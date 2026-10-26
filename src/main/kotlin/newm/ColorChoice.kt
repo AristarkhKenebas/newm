@@ -43,7 +43,7 @@ internal object ColorChoice {
         caulis.colorScheme = scheme
         log.info { "Colours chosen: ${scheme.name.lowercase()}" }
         try {
-            Files.createDirectories(file.parent)
+            privateFolder(file.parent)
             Files.writeString(file, scheme.name.lowercase())
         } catch (e: Exception) {
             log.warn("The colour scheme cannot be kept: $e")

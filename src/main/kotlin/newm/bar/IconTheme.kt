@@ -128,6 +128,18 @@ object IconTheme {
         }
     }
 
+    /**
+     * The icon of the program with [appId] (its .desktop file's Icon=) at [size] pixels: the
+     * name is looked up on the icons' thread too (the first time all .desktop files are read),
+     * [done] gets the picture on the compositor's thread ([post]).
+     */
+    fun loadApp(appId: String, size: Int, post: (() -> Unit) -> Unit, done: (ImageBitmap?) -> Unit) {
+        worker.execute {
+            val name = AppIcons.iconName(appId)
+            load(name, size, null, post, done)
+        }
+    }
+
     /** [file] (PNG or SVG) drawn as a square of [size] pixels. */
     fun render(file: Path, size: Int): ImageBitmap? {
         val bytes = Files.readAllBytes(file)
@@ -183,7 +195,10 @@ object IconTheme {
 
 /** Programs' icons by their app id, from their .desktop files (Icon=). */
 object AppIcons {
-    private val byId: Map<String, String> by lazy { readDesktopFiles() }
+    private val byId: Map<String, String> by lazy {
+        val started = System.nanoTime()
+        readDesktopFiles().also { log.trace { "Programs' icons: ${it.size} names from .desktop files in ${(System.nanoTime() - started) / 1_000_000} ms" } }
+    }
 
     /** The icon name of the program with [appId] ("firefox", "org.gnome.Nautilus"), or [appId] itself. */
     fun iconName(appId: String): String {

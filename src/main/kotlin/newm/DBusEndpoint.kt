@@ -38,6 +38,8 @@ class DBusEndpoint(private val layout: Layout) {
     private val exported = ArrayList<AutoCloseable>()
     private var latest = ""
     private var nextRequest = 1
+    // The request on offer now: its objects (closed once it is answered, or a newer one replaces it).
+    private var request: List<AutoCloseable> = emptyList()
     private var nextGesture = 1
 
     fun start() {
@@ -59,6 +61,7 @@ class DBusEndpoint(private val layout: Layout) {
     }
 
     fun stop() {
+        closeRequest()
         exported.forEach(AutoCloseable::close)
         exported.clear()
     }
@@ -83,23 +86,37 @@ class DBusEndpoint(private val layout: Layout) {
     fun publishAuthRequest(req: AuthRequest) {
         val bus = bus ?: return
         val path = "/org/newm/Auth/Request/${nextRequest++}"
-        exported += bus.export(
+        // (The one before is not answered any more: its objects go.)
+        closeRequest()
+        val objects = ArrayList<AutoCloseable>()
+        objects += bus.export(
             path, "org.newm.Auth.Request",
             mapOf(
                 "Reply" to DBusMethod("s", "") { call ->
                     if (!req.replied) {
                         req.replied = true
                         req.callback(Json.parseObject(call.body[0] as String))
+                        // Answered: its objects go, after this reply has been sent.
+                        layout.caulis.post { if (request === objects) closeRequest() }
                     }
                     emptyList()
                 },
             ),
         )
-        exported += bus.export(path, PROPERTIES, properties("org.newm.Auth.Request") {
+        objects += bus.export(path, PROPERTIES, properties("org.newm.Auth.Request") {
             mapOf("Data" to Variant("s", Json.write(req.data)), "Replied" to Variant("b", req.replied))
         })
+        request = objects
         latest = path
         bus.emitSignal("/org/newm/Auth", "org.newm.Auth", "Request", "s", listOf(path))
+    }
+
+    private fun closeRequest() {
+        if (request.isEmpty()) return
+        request.forEach { runCatching { it.close() } }
+        request = emptyList()
+        latest = ""
+        log.trace { "The lock screen's request closed" }
     }
 
     private fun newGesture(kind: String): String {
@@ -159,11 +176,11 @@ fun newmCmd(args: List<String>) {
         }
     }
     when (command) {
-        "inhibit-idle" -> try {
+        "inhibit-idle" -> {
             send(mapOf("cmd" to "inhibit-idle"))
+            // Ctrl+C (or kill) ends us without running a finally: a shutdown hook says it is over.
+            Runtime.getRuntime().addShutdownHook(Thread({ runCatching { send(mapOf("cmd" to "finish-inhibit-idle")) } }, "newm-cmd-finish"))
             while (true) Thread.sleep(10_000)
-        } finally {
-            send(mapOf("cmd" to "finish-inhibit-idle"))
         }
         "launcher" -> send(mapOf("cmd" to "launcher", "app" to args.drop(1).joinToString(" ")))
         else -> send(mapOf("cmd" to command, "arg" to args.drop(1).joinToString(" ")))?.get("msg")?.let(::println)

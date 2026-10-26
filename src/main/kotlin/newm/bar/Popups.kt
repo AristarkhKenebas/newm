@@ -76,7 +76,7 @@ fun BarModel.showPopups(): AutoCloseable {
             sceneSize = { _ -> POPUP_WIDEST + 2 * POPUP_SHADOW to POPUP_TALLEST + 2 * POPUP_SHADOW },
             // (Not shown until its height is measured: else its top came first, the rest after.)
             appearance = { _ ->
-                if (shownPopup?.measured == 0) dev.caulis.compose.Appearance(alpha = 0f)
+                if (shownPopup?.measured == 0) dev.caulis.compose.WidgetLook(alpha = 0f)
                 else popupFade.appearance(rise = if (shownPopup?.bar?.top != false) -8f else 8f, smallest = 0.97f, unfold = shownPopup?.bar?.top != false)
             },
             moving = { popupFade.moving },
@@ -120,7 +120,7 @@ internal fun PopupContent(model: BarModel, popup: Popup) {
             PopupKind.VOLUME -> SoundPopup(model, colors, text)
             PopupKind.NETWORK -> WifiPopup(model, popup, colors, text)
             PopupKind.BLUETOOTH -> BluetoothPopup(model, popup, colors, text)
-            PopupKind.BATTERY -> BatteryAndPowerPopup(model, colors, text)
+            PopupKind.BATTERY -> BatteryAndPowerPopup(model, popup, colors, text)
             PopupKind.POWER -> PowerPopup(model, popup, colors, text)
             PopupKind.QUICK -> QuickPopup(model, popup, colors, text)
             PopupKind.COLORS -> ColorsPopup(model, colors, text)
@@ -272,17 +272,32 @@ private fun setVolume(model: BarModel, level: Float) {
     }, "newm-volume").apply { isDaemon = true }.start()
 }
 
+// One thread for brightnessctl: changes in order, and of many waiting only the last one (as the sound's volume).
+private val brightnessWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "newm-brightness").apply { isDaemon = true } }
+private val brightnessWanted = java.util.concurrent.atomic.AtomicInteger(-1)
+
 internal fun setBrightness(model: BarModel, level: Float) {
-    val percent = (level * 100).toInt().coerceAtLeast(1)
-    Thread({
-        if (!runQuietly("brightnessctl", "-q", "set", "$percent%")) log.warn("brightnessctl is not installed: the brightness cannot be set")
+    val percent = (level * 100).toInt().coerceIn(1, 100)
+    // (A worker already waiting takes the new value; none waiting: one is started.)
+    if (brightnessWanted.getAndSet(percent) != -1) return
+    brightnessWorker.execute {
+        val target = brightnessWanted.getAndSet(-1)
+        if (target == -1) return@execute
+        if (!runQuietly("brightnessctl", "-q", "set", "$target%")) log.warn("brightnessctl is not installed or did not answer: the brightness cannot be set")
+        else log.trace { "Brightness $target%" }
         model.status.refreshSoon()
-    }, "newm-brightness").apply { isDaemon = true }.start()
+    }
 }
 
+/** Runs [command], its output thrown away; false when it failed or took over three seconds (then it is killed). */
 internal fun runQuietly(vararg command: String): Boolean = try {
     val p = ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
-    p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0
+    p.outputStream.close()
+    if (!p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+        p.destroyForcibly()
+        log.warn("${command.first()} took too long and was stopped")
+        false
+    } else p.exitValue() == 0
 } catch (_: Exception) {
     false
 }

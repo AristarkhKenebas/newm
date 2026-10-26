@@ -65,14 +65,17 @@ class PyConfig private constructor(private val process: Process, private val han
         out.flush()
     }
 
-    // Sends a request and waits for its answer, doing what Python asks meanwhile.
-    private fun request(message: Map<String, Any?>): Any? {
+    // Sends a request and waits for its answer, doing what Python asks meanwhile — [seconds] in
+    // all (what Python asks in between does not give it more time: newm's screen waits meanwhile).
+    private fun request(message: Map<String, Any?>, seconds: Long = TIMEOUT_SECONDS): Any? {
         if (broken) throw IllegalStateException("config.py's Python is not running")
         val id = ++nextId
         send(message + ("id" to id))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds)
         while (true) {
-            val msg = lines.poll(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                ?: throw IllegalStateException("config.py did not answer in $TIMEOUT_SECONDS s (is it waiting for something?)")
+            val left = deadline - System.nanoTime()
+            val msg = (if (left > 0) lines.poll(left, TimeUnit.NANOSECONDS) else null)
+                ?: throw IllegalStateException("config.py did not answer in $seconds s (is it waiting for something?)")
             if (msg["eof"] == true) {
                 broken = true
                 throw IllegalStateException("config.py's Python ended")
@@ -144,7 +147,7 @@ class PyConfig private constructor(private val process: Process, private val han
 
     /** Runs config.py at [path] (again): its values, its functions callable. */
     @Suppress("UNCHECKED_CAST")
-    fun load(path: Path): Map<String, Any?> = request(mapOf("op" to "load", "path" to path.toString())) as Map<String, Any?>
+    fun load(path: Path): Map<String, Any?> = request(mapOf("op" to "load", "path" to path.toString()), LOAD_SECONDS) as Map<String, Any?>
 
     /** What Python's os.environ gets (programs config.py starts are then inside the compositor). */
     fun environment(env: Map<String, String>) {
@@ -163,6 +166,9 @@ class PyConfig private constructor(private val process: Process, private val han
 
     companion object {
         private const val TIMEOUT_SECONDS = 5L
+
+        // Running the whole config.py (its imports too) may take a little longer than a function.
+        private const val LOAD_SECONDS = 15L
 
         /**
          * The config.py newm would load: ~/.config/newm/config.py, else /etc/newm/config.py,
@@ -187,7 +193,8 @@ class PyConfig private constructor(private val process: Process, private val han
                     .start()
                 PyConfig(process, handler)
             } catch (e: java.io.IOException) {
-                log.error("python3 cannot be started ($e): config.py is not used")
+                // (Info: ConfigLoader shows it, once.)
+                log.info { "python3 cannot be started ($e): config.py is not used" }
                 null
             }
         }
@@ -201,7 +208,8 @@ class PyConfig private constructor(private val process: Process, private val han
         // The Python modules, from newm's resources into a folder of their own.
         private fun unpackModules(): Path {
             val folder = Files.createTempDirectory("newm-python")
-            folder.toFile().deleteOnExit()
+            // (Removed with what is in it when newm ends: deleteOnExit leaves a folder that is not empty.)
+            Runtime.getRuntime().addShutdownHook(Thread({ runCatching { folder.toFile().deleteRecursively() } }, "newm-python-cleanup"))
             for (name in MODULES) {
                 val target = folder.resolve(name)
                 Files.createDirectories(target.parent)
