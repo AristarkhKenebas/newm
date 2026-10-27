@@ -2,238 +2,90 @@
 
 **English** · [Русский](../ru/install.md)
 
-- [NixOS](#nixos) (and [home-manager](#home-manager))
-- [Arch and other distributions](#arch-and-other-distributions)
+newm runs on any Linux with a GPU driver, glibc and Java 27. Pick your system for exact
+commands; this page has what is the same everywhere.
+
+| Your system | Page |
+|---|---|
+| NixOS (flake, home-manager, without flakes) | [NixOS](install/nixos.md) |
+| Arch, EndeavourOS, Manjaro, CachyOS | [Arch](install/arch.md) |
+| Debian 13+, Ubuntu 24.04+, Linux Mint, Pop!_OS | [Debian and Ubuntu](install/debian-ubuntu.md) |
+| Fedora, Nobara | [Fedora](install/fedora.md) |
+| openSUSE Tumbleweed | [openSUSE](install/opensuse.md) |
+| Void Linux | [Void](install/void.md) |
+| Gentoo (OpenRC or systemd) | [Gentoo](install/gentoo.md) |
+| Alpine Linux (musl: untested) | [Alpine](install/alpine.md) |
+| Anything else | [Other systems](install/other.md) |
+
+On this page:
+
+- [What you need](#what-you-need)
+- [Java 27](#java-27)
+- [Build and install](#build-and-install)
 - [From source, by hand](#from-source-by-hand)
 - [Start it](#start-it) and [the first time](#the-first-time)
 
-## NixOS
+## What you need
 
-newm's flake has a package, a NixOS module and a home-manager module.
-
-### Add it to your system
-
-In your `flake.nix`:
-
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    newm.url = "github:AristarkhKenebas/newm";
-  };
-
-  outputs = { nixpkgs, newm, ... }: {
-    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        ./configuration.nix
-        newm.nixosModules.default
-        { programs.newm.enable = true; }
-      ];
-    };
-  };
-}
-```
-
-Or, if your `configuration.nix` gets the flake's inputs:
-
-```nix
-{ newm, ... }:
-{
-  imports = [ newm.nixosModules.default ];
-  programs.newm.enable = true;
-}
-```
-
-Then `sudo nixos-rebuild switch`. The first build takes a few minutes: newm is built with
-Gradle.
-
-You do not need to set `programs.newm.package`: the module takes newm from the flake by
-itself.
-
-### What the module does
-
-- installs the `newm` command;
-- adds "newm" to your login screen's sessions (SDDM, GDM, ly, greetd's tuigreet, ...);
-- turns on Xwayland (for X11 programs), polkit, and the desktop portals (`xdg-desktop-portal`
-  with its gtk and wlr parts: file pickers, screen sharing);
-- with `programs.newm.settings`, writes `/etc/newm/config.json` (see [below](#settings-for-everyone)).
-
-The lock screen checks your password with PAM's `login` service, which NixOS always has.
-
-### Good to add
-
-newm's bar uses a few programs and services. Without them newm still runs, but that part
-of the bar is empty or does nothing:
-
-```nix
-{ pkgs, ... }:
-{
-  environment.systemPackages = with pkgs; [
-    foot            # a terminal (or alacritty, kitty, ...: newm opens the first it finds)
-    pulseaudio      # only for its `pactl`: the volume popup and its list of speakers
-    brightnessctl   # the brightness slider
-    playerctl       # the play / next / previous keys
-  ];
-  hardware.graphics.enable = true;               # the GPU's drivers (on by default with most desktops)
-  services.pipewire = { enable = true; pulse.enable = true; wireplumber.enable = true; };  # sound; the volume keys use wpctl
-  networking.networkmanager.enable = true;       # the Wi-Fi popup
-  hardware.bluetooth.enable = true;              # the Bluetooth popup
-  services.power-profiles-daemon.enable = true;  # power modes in the battery popup
-}
-```
-
-A login screen is optional. Without one, log in on a text console and type `newm`. With
-one, choose "newm" in its list of sessions (for example
-`services.displayManager.sddm = { enable = true; wayland.enable = true; };`).
-
-**Screen sharing** (browsers, OBS, video calls) goes through the wlr portal. The module
-makes gtk the default portal; add this so that screen sharing uses wlr:
-
-```nix
-xdg.portal.config.newm = {
-  default = [ "gtk" ];
-  "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
-  "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
-};
-```
-
-**Keyboard layouts**: newm does not read `services.xserver.xkb`. Without a layout in newm's
-configuration it uses your language's layout next to English (with `LANG=ru_RU.UTF-8`:
-"us,ru", Alt+Shift switches). To choose, set it in `~/.config/newm/config.kts`:
-
-```kotlin
-keyboard { layouts = "us,de"; options = "grp:win_space_toggle" }
-```
-
-### Settings for everyone
-
-```nix
-programs.newm = {
-  enable = true;
-  settings = {
-    view = { corner_radius = 24; padding = 8; };
-    keyboard = { layouts = "us,ru"; options = "grp:alt_shift_toggle"; };
-  };
-};
-```
-
-`settings` becomes `/etc/newm/config.json`. Two things to know:
-
-- **It is the whole configuration, not a change to newm's own.** A `config.json` with only
-  the two lines above has no keys and no bar. Start from the full example
-  (`~/.config/newm/examples/config.json`, written at newm's first start) and change it. Or
-  leave `settings` out: then every user gets `config.kts`, with a note on every setting.
-- **It is copied once.** A user who has no `~/.config/newm` gets a copy of `/etc/newm` at
-  their first start. After that their own copy counts, and later changes to `settings` do
-  not reach them. To start from the system's again, remove `~/.config/newm`.
-
-For the names of the settings in JSON, see [Lua, JSON, Nix](other-formats.md) and
-[Every setting](settings.md).
-
-### Try it without installing
-
-On NixOS, from a text console (Ctrl+Alt+F3, log in):
-
-```sh
-nix run github:AristarkhKenebas/newm
-```
-
-(If flakes are not turned on: `nix --extra-experimental-features 'nix-command flakes' run github:AristarkhKenebas/newm`.)
-
-The package brings its own Java and the libraries newm opens. It does not bring Xwayland, a
-terminal, or the bar's helpers above: use what your system has. Logo+Shift+Escape ends it.
-
-On another distribution with Nix, `nix run` usually cannot find your GPU's drivers (they
-are not in Nix's paths). Use [install.sh](#arch-and-other-distributions) there.
-
-### How the Nix package is built
-
-The package builds newm from this repository with Gradle, offline, from the dependencies
-listed in `nix/deps.json`. Caulis, the compositor library under newm, comes from Maven
-Central, in the version written in `gradle/libs.versions.toml`. (`install.sh` uses Caulis's
-sources instead when they lie next to newm, in `../caulis`; the Nix package never does.) If
-the Nix build stops with "Unresolved reference" in `dev.caulis...`, this newm needs a Caulis
-that is not released yet: please open an issue.
-
-If the build stops with "nix/deps.json (the list of Gradle's downloads) is not there yet",
-the list was not made for this version of newm yet. Make it in newm's folder (with network,
-once the Caulis version in `gradle/libs.versions.toml` is on Maven Central):
-
-```sh
-nix build .#default.mitmCache.updateScript && ./result
-```
-
-It writes `nix/deps.json`; `nix build` works from then on (with a flake, `git add nix/deps.json`
-first: a flake sees only files git knows).
-
-### home-manager
-
-For your own configuration, written in Nix:
-
-```nix
-{ newm, ... }:
-{
-  imports = [ newm.homeManagerModules.default ];
-
-  programs.newm = {
-    enable = true;
-    # Kotlin, as newm writes it (recommended: keeps every note):
-    configKts = builtins.readFile ./newm/config.kts;
-    # or Lua:     configLua = builtins.readFile ./newm/config.lua;
-    # or JSON:    settings = { ... };   (the whole configuration, as above)
-  };
-}
-```
-
-- Set only one of `configKts`, `configLua` and `settings`.
-- `package`: leave it out when the NixOS module installs newm. Without the NixOS module,
-  set `package = newm.packages.${pkgs.stdenv.hostPlatform.system}.default;`. (The session in
-  the login screen comes only from the NixOS module.)
-- newm takes the new file on as soon as home-manager writes it.
-
-## Arch and other distributions
-
-### What you need
-
-- **Java 27** to run newm (26 works too). On Arch: `sudo pacman -S jdk-openjdk`. newm's
-  `newm` command finds a new enough Java by itself: `JAVA_HOME`, the `java` on your PATH, or
-  the newest under `/usr/lib/jvm`.
-- **A GPU driver** with OpenGL ES 3: Mesa (AMD, Intel) or NVIDIA 545 or newer.
-- **The libraries newm opens while it runs.** On Arch:
-
-  ```sh
-  sudo pacman -S --needed mesa libglvnd libdrm libinput libxkbcommon seatd \
-      xorg-xwayland libxcb pam fontconfig freetype2 libpng
-  ```
-
-  On Debian and Ubuntu (names differ a little between releases):
-
-  ```sh
-  sudo apt install libegl1 libgles2 libgbm1 libdrm2 libinput10 libudev1 libseat1 \
-      libxkbcommon0 xwayland libxcb1 libxcb-composite0 libxcb-xfixes0 libxcb-render0 \
-      libpam0g libfontconfig1 libfreetype6 libpng16-16
-  ```
-
+- **Java 27.** Building needs JDK 27; running needs Java 26 or newer. See [below](#java-27).
+- **A GPU driver** with OpenGL ES 3 and GBM: Mesa (AMD, Intel, and others) or NVIDIA 545
+  or newer.
+- **A seat.** newm opens the screen and the input devices through libseat, without root.
+  libseat talks to systemd-logind, elogind or seatd. On a distribution with systemd there is
+  nothing to set up.
+- **The libraries newm opens while it runs.** newm does not link them when it is built; it
+  looks for them by name when it starts. Each distribution page has the exact package names;
+  [Other systems](install/other.md#the-libraries) has the full list of files.
+- **glibc.** newm's own windows (the bar, the launcher, the lock screen) are drawn with
+  Skiko, which is built for glibc only. On musl (Alpine, Void musl) newm is untested.
+- **Fonts.** Any fonts your system has; newm uses them through fontconfig.
 - **A terminal.** newm opens `$TERMINAL`, or else the first it finds of alacritty, foot,
   kitty, wezterm, ghostty, gnome-terminal, konsole, xfce4-terminal and xterm.
 - **For the bar and the laptop's keys** (each is optional; without it, that part does
   nothing):
 
-  | What | Arch | Debian / Ubuntu |
-  |---|---|---|
-  | volume keys (`wpctl`) | `wireplumber` | `wireplumber` |
-  | the volume popup (`pactl`) | `libpulse` | `pulseaudio-utils` |
-  | brightness slider and keys | `brightnessctl` | `brightnessctl` |
-  | play / next / previous keys | `playerctl` | `playerctl` |
-  | Wi-Fi popup | `networkmanager` (running) | `network-manager` |
-  | Bluetooth popup | `bluez` (running) | `bluez` |
-  | power modes | `power-profiles-daemon` | `power-profiles-daemon` |
-  | file pickers, screen sharing | `xdg-desktop-portal-gtk`, `xdg-desktop-portal-wlr` | the same |
+  | What | Program |
+  |---|---|
+  | volume keys | `wpctl` (WirePlumber) |
+  | the volume popup, the list of speakers | `pactl` (PulseAudio's tools; works with PipeWire) |
+  | brightness slider and keys | `brightnessctl` |
+  | play / next / previous keys | `playerctl` |
+  | Wi-Fi popup | NetworkManager, running |
+  | Bluetooth popup | BlueZ, running |
+  | power modes | power-profiles-daemon (or something with its D-Bus name, such as tuned-ppd) |
+  | file pickers, screen sharing | `xdg-desktop-portal` with `xdg-desktop-portal-gtk` and `xdg-desktop-portal-wlr` |
 
 Screenshots and the clipboard's history are newm's own: no grim or clipboard manager needed.
 
-### Build and install
+## Java 27
+
+First, look at your distribution's page: many have JDK 27 (or 26) as a package.
+
+When yours has none, take Eclipse Temurin's build. Put it in `/usr/lib/jvm`: the `newm`
+command looks there by itself, also when a login screen starts it.
+
+```sh
+sudo mkdir -p /usr/lib/jvm/temurin-27
+curl -L https://api.adoptium.net/v3/binary/latest/27/ga/linux/x64/jdk/hotspot/normal/eclipse \
+  | sudo tar -xz -C /usr/lib/jvm/temurin-27 --strip-components=1
+/usr/lib/jvm/temurin-27/bin/java -version
+```
+
+On ARM (aarch64), write `aarch64` instead of `x64`. To update it later, remove the folder and
+run the same commands again.
+
+[SDKMAN](https://sdkman.io) works too (`sdk list java`, then `sdk install java` with a
+`27...-tem` version). It puts Java in your home folder, so a login screen may not find it.
+Then set `JAVA_HOME` where your session reads it, or use the tarball above.
+
+How the `newm` command picks a Java: `JAVA_HOME` if it is 26 or newer; else the `java` on
+your PATH if it is new enough; else the newest one in `/usr/lib/jvm`. With none, it says
+"newm needs Java 26 or newer".
+
+For building, Gradle runs on any JDK from 17 to 27 and compiles with JDK 27. It finds one
+in `JAVA_HOME` or `/usr/lib/jvm`, or downloads one by itself.
+
+## Build and install
 
 ```sh
 git clone https://github.com/AristarkhKenebas/newm
@@ -242,9 +94,12 @@ cd newm
 ./install.sh --user     # or just for you: ~/.local
 ```
 
-This:
+If `java` is not on your PATH, tell the build where Java is first, for example
+`export JAVA_HOME=/usr/lib/jvm/temurin-27`.
 
-- builds newm (Gradle downloads what it needs the first time, a few minutes);
+`install.sh`:
+
+- builds newm (Gradle downloads what it needs the first time: a few minutes);
 - puts the `newm` command on your PATH (`/usr/local/bin/newm`, or `~/.local/bin/newm`);
 - runs `newm install-session`: adds newm to the login screen's sessions
   (`/usr/share/wayland-sessions/newm.desktop`) and puts the starting configuration into
@@ -271,6 +126,9 @@ org.freedesktop.impl.portal.ScreenCast=wlr
 org.freedesktop.impl.portal.Screenshot=wlr
 ```
 
+newm sets `XDG_CURRENT_DESKTOP=newm`, so the portal reads this file, and newm passes its
+environment to the portals by itself.
+
 ## From source, by hand
 
 ```sh
@@ -280,9 +138,6 @@ build/install/newm/bin/newm                 # run it (see "Start it")
 build/install/newm/bin/newm install-session # optional: the login screen's entry
 ```
 
-Gradle downloads a JDK 27 for the build if you have none. Running needs Java 26 or newer
-installed (see above).
-
 ## Start it
 
 - **From a text console** (Ctrl+Alt+F3, log in): type `newm`. This is the best way to try it
@@ -291,6 +146,9 @@ installed (see above).
 - **Inside your current desktop, to try it**: run `newm` in a terminal there. It opens as a
   window, and nothing of your desktop changes. (Keys like Logo may be taken by your desktop
   first.)
+
+On a system without systemd, start it as `dbus-run-session newm` unless your login already
+gives you a session bus (see the [Void](install/void.md#start-it) page).
 
 To leave: **Logo+Shift+Escape**, or "Log out" in the bar's power menu.
 

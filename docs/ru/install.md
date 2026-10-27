@@ -2,238 +2,90 @@
 
 [English](../en/install.md) · **Русский**
 
-- [NixOS](#nixos) (и [home-manager](#home-manager))
-- [Arch и другие дистрибутивы](#arch-и-другие-дистрибутивы)
+newm работает в любом Linux с драйвером видеокарты, glibc и Java 27. Выберите свою систему —
+там точные команды; на этой странице то, что везде одинаково.
+
+| Ваша система | Страница |
+|---|---|
+| NixOS (flake, home-manager, без flakes) | [NixOS](install/nixos.md) |
+| Arch, EndeavourOS, Manjaro, CachyOS | [Arch](install/arch.md) |
+| Debian 13+, Ubuntu 24.04+, Linux Mint, Pop!_OS | [Debian и Ubuntu](install/debian-ubuntu.md) |
+| Fedora, Nobara | [Fedora](install/fedora.md) |
+| openSUSE Tumbleweed | [openSUSE](install/opensuse.md) |
+| Void Linux | [Void](install/void.md) |
+| Gentoo (OpenRC или systemd) | [Gentoo](install/gentoo.md) |
+| Alpine Linux (musl: не проверено) | [Alpine](install/alpine.md) |
+| Что-то другое | [Другие системы](install/other.md) |
+
+На этой странице:
+
+- [Что нужно](#что-нужно)
+- [Java 27](#java-27)
+- [Сборка и установка](#сборка-и-установка)
 - [Из исходников, вручную](#из-исходников-вручную)
 - [Запуск](#запуск) и [первый раз](#первый-раз)
 
-## NixOS
+## Что нужно
 
-У flake newm есть пакет, модуль NixOS и модуль home-manager.
-
-### Добавить в систему
-
-В вашем `flake.nix`:
-
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    newm.url = "github:AristarkhKenebas/newm";
-  };
-
-  outputs = { nixpkgs, newm, ... }: {
-    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        ./configuration.nix
-        newm.nixosModules.default
-        { programs.newm.enable = true; }
-      ];
-    };
-  };
-}
-```
-
-Или, если ваш `configuration.nix` получает входы flake:
-
-```nix
-{ newm, ... }:
-{
-  imports = [ newm.nixosModules.default ];
-  programs.newm.enable = true;
-}
-```
-
-Затем `sudo nixos-rebuild switch`. Первая сборка занимает несколько минут: newm собирается
-Gradle.
-
-Задавать `programs.newm.package` не нужно: модуль сам берёт newm из flake.
-
-### Что делает модуль
-
-- устанавливает команду `newm`;
-- добавляет «newm» в список сеансов экрана входа (SDDM, GDM, ly, tuigreet у greetd, ...);
-- включает Xwayland (для программ X11), polkit и порталы рабочего стола (`xdg-desktop-portal`
-  с частями gtk и wlr: окна выбора файлов, демонстрация экрана);
-- с `programs.newm.settings` пишет `/etc/newm/config.json` (см. [ниже](#настройки-для-всех)).
-
-Экран блокировки проверяет пароль через службу PAM `login`, которая в NixOS есть всегда.
-
-### Что стоит добавить
-
-Панель newm пользуется несколькими программами и службами. Без них newm работает, но эта
-часть панели пуста или ничего не делает:
-
-```nix
-{ pkgs, ... }:
-{
-  environment.systemPackages = with pkgs; [
-    foot            # терминал (или alacritty, kitty, ...: newm откроет первый найденный)
-    pulseaudio      # только ради `pactl`: окно громкости и выбор динамиков
-    brightnessctl   # ползунок яркости
-    playerctl       # клавиши «играть / дальше / назад»
-  ];
-  hardware.graphics.enable = true;               # драйверы видеокарты (с большинством окружений и так включено)
-  services.pipewire = { enable = true; pulse.enable = true; wireplumber.enable = true; };  # звук; клавиши громкости используют wpctl
-  networking.networkmanager.enable = true;       # окно Wi-Fi
-  hardware.bluetooth.enable = true;              # окно Bluetooth
-  services.power-profiles-daemon.enable = true;  # режимы питания в окне батареи
-}
-```
-
-Экран входа не обязателен. Без него войдите в текстовой консоли и наберите `newm`. С ним
-выберите «newm» в списке сеансов (например,
-`services.displayManager.sddm = { enable = true; wayland.enable = true; };`).
-
-**Демонстрация экрана** (браузеры, OBS, видеозвонки) идёт через портал wlr. Модуль делает
-портал gtk основным; добавьте это, чтобы демонстрация экрана шла через wlr:
-
-```nix
-xdg.portal.config.newm = {
-  default = [ "gtk" ];
-  "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
-  "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
-};
-```
-
-**Раскладки клавиатуры**: newm не читает `services.xserver.xkb`. Если в конфигурации newm
-раскладки нет, он берёт раскладку вашего языка рядом с английской (с `LANG=ru_RU.UTF-8`:
-«us,ru», переключение Alt+Shift). Чтобы выбрать свои, задайте их в `~/.config/newm/config.kts`:
-
-```kotlin
-keyboard { layouts = "us,ru"; options = "grp:win_space_toggle" }
-```
-
-### Настройки для всех
-
-```nix
-programs.newm = {
-  enable = true;
-  settings = {
-    view = { corner_radius = 24; padding = 8; };
-    keyboard = { layouts = "us,ru"; options = "grp:alt_shift_toggle"; };
-  };
-};
-```
-
-`settings` становится файлом `/etc/newm/config.json`. Важно знать две вещи:
-
-- **Это вся конфигурация, а не поправка к стандартной.** В `config.json` только с двумя
-  строками выше нет ни клавиш, ни панели. Начните с полного примера
-  (`~/.config/newm/examples/config.json`, его пишет первый запуск newm) и меняйте его. Или не
-  задавайте `settings` вовсе: тогда каждый пользователь получит `config.kts` с пояснением к
-  каждой настройке.
-- **Он копируется один раз.** Пользователь без `~/.config/newm` при первом запуске получает
-  копию `/etc/newm`. Дальше действует его копия, и последующие изменения `settings` до него не
-  доходят. Чтобы снова начать с системной, удалите `~/.config/newm`.
-
-Имена настроек в JSON: [Lua, JSON, Nix](other-formats.md) и [Все настройки](settings.md).
-
-### Попробовать без установки
-
-В NixOS, из текстовой консоли (Ctrl+Alt+F3, войдите):
-
-```sh
-nix run github:AristarkhKenebas/newm
-```
-
-(Если flakes не включены: `nix --extra-experimental-features 'nix-command flakes' run github:AristarkhKenebas/newm`.)
-
-Пакет приносит свою Java и библиотеки, которые открывает newm. Xwayland, терминал и
-помощников панели (см. выше) он не приносит: используется то, что есть в системе.
-Logo+Shift+Escape завершает его.
-
-В другом дистрибутиве с Nix `nix run` обычно не находит драйверы видеокарты (их нет в путях
-Nix). Там используйте [install.sh](#arch-и-другие-дистрибутивы).
-
-### Как собирается пакет Nix
-
-Пакет собирает newm из этого репозитория с помощью Gradle, без сети, из зависимостей,
-перечисленных в `nix/deps.json`. Caulis, библиотека композитора под newm, берётся из Maven
-Central, той версии, что записана в `gradle/libs.versions.toml`. (`install.sh` вместо этого
-использует исходники Caulis, если они лежат рядом с newm, в `../caulis`; пакет Nix — никогда.)
-Если сборка Nix останавливается на «Unresolved reference» в `dev.caulis...`, значит, этому
-newm нужна ещё не выпущенная версия Caulis: пожалуйста, создайте issue.
-
-Если сборка останавливается со словами «nix/deps.json (the list of Gradle's downloads) is not
-there yet», список для этой версии newm ещё не сделан. Сделайте его в папке newm (нужна сеть
-и версия Caulis из `gradle/libs.versions.toml` уже в Maven Central):
-
-```sh
-nix build .#default.mitmCache.updateScript && ./result
-```
-
-Он запишет `nix/deps.json`; дальше `nix build` работает (с флейком сначала `git add
-nix/deps.json`: флейк видит только файлы, которые знает git).
-
-### home-manager
-
-Ваша собственная конфигурация, записанная в Nix:
-
-```nix
-{ newm, ... }:
-{
-  imports = [ newm.homeManagerModules.default ];
-
-  programs.newm = {
-    enable = true;
-    # Kotlin, как его пишет newm (лучший вариант: все пояснения сохраняются):
-    configKts = builtins.readFile ./newm/config.kts;
-    # или Lua:   configLua = builtins.readFile ./newm/config.lua;
-    # или JSON:  settings = { ... };   (вся конфигурация, как выше)
-  };
-}
-```
-
-- Задавайте только что-то одно из `configKts`, `configLua` и `settings`.
-- `package`: не указывайте, если newm ставит модуль NixOS. Без модуля NixOS задайте
-  `package = newm.packages.${pkgs.stdenv.hostPlatform.system}.default;`. (Сеанс на экране
-  входа добавляет только модуль NixOS.)
-- newm подхватывает новый файл, как только home-manager его запишет.
-
-## Arch и другие дистрибутивы
-
-### Что нужно
-
-- **Java 27** для запуска newm (подойдёт и 26). В Arch: `sudo pacman -S jdk-openjdk`. Команда
-  `newm` сама находит подходящую Java: `JAVA_HOME`, `java` из PATH или самую новую в
-  `/usr/lib/jvm`.
-- **Драйвер видеокарты** с OpenGL ES 3: Mesa (AMD, Intel) или NVIDIA 545 и новее.
-- **Библиотеки, которые newm открывает во время работы.** В Arch:
-
-  ```sh
-  sudo pacman -S --needed mesa libglvnd libdrm libinput libxkbcommon seatd \
-      xorg-xwayland libxcb pam fontconfig freetype2 libpng
-  ```
-
-  В Debian и Ubuntu (названия немного различаются между выпусками):
-
-  ```sh
-  sudo apt install libegl1 libgles2 libgbm1 libdrm2 libinput10 libudev1 libseat1 \
-      libxkbcommon0 xwayland libxcb1 libxcb-composite0 libxcb-xfixes0 libxcb-render0 \
-      libpam0g libfontconfig1 libfreetype6 libpng16-16
-  ```
-
+- **Java 27.** Для сборки нужен JDK 27; для запуска — Java 26 или новее. См. [ниже](#java-27).
+- **Драйвер видеокарты** с OpenGL ES 3 и GBM: Mesa (AMD, Intel и другие) или NVIDIA 545
+  и новее.
+- **Место (seat).** newm открывает экран и устройства ввода через libseat, без root. libseat
+  обращается к systemd-logind, elogind или seatd. В дистрибутиве с systemd настраивать
+  ничего не нужно.
+- **Библиотеки, которые newm открывает во время работы.** При сборке newm их не связывает;
+  он ищет их по имени при запуске. Точные имена пакетов — на странице каждого
+  дистрибутива; полный список файлов — в [Других системах](install/other.md#библиотеки).
+- **glibc.** Собственные окна newm (панель, лаунчер, экран блокировки) рисует Skiko, а он
+  собран только под glibc. На musl (Alpine, Void musl) newm не проверялся.
+- **Шрифты.** Любые, что есть в системе; newm берёт их через fontconfig.
 - **Терминал.** newm открывает `$TERMINAL`, а если его нет — первый найденный из alacritty,
   foot, kitty, wezterm, ghostty, gnome-terminal, konsole, xfce4-terminal и xterm.
 - **Для панели и клавиш ноутбука** (всё необязательно; без программы эта часть ничего не
   делает):
 
-  | Что | Arch | Debian / Ubuntu |
-  |---|---|---|
-  | клавиши громкости (`wpctl`) | `wireplumber` | `wireplumber` |
-  | окно громкости (`pactl`) | `libpulse` | `pulseaudio-utils` |
-  | ползунок и клавиши яркости | `brightnessctl` | `brightnessctl` |
-  | клавиши «играть / дальше / назад» | `playerctl` | `playerctl` |
-  | окно Wi-Fi | `networkmanager` (запущенный) | `network-manager` |
-  | окно Bluetooth | `bluez` (запущенный) | `bluez` |
-  | режимы питания | `power-profiles-daemon` | `power-profiles-daemon` |
-  | выбор файлов, демонстрация экрана | `xdg-desktop-portal-gtk`, `xdg-desktop-portal-wlr` | то же |
+  | Что | Программа |
+  |---|---|
+  | клавиши громкости | `wpctl` (WirePlumber) |
+  | окно громкости, список динамиков | `pactl` (утилиты PulseAudio; работают и с PipeWire) |
+  | ползунок и клавиши яркости | `brightnessctl` |
+  | клавиши «играть / дальше / назад» | `playerctl` |
+  | окно Wi-Fi | NetworkManager, запущенный |
+  | окно Bluetooth | BlueZ, запущенный |
+  | режимы питания | power-profiles-daemon (или то, что занимает его имя в D-Bus, например tuned-ppd) |
+  | выбор файлов, демонстрация экрана | `xdg-desktop-portal` с `xdg-desktop-portal-gtk` и `xdg-desktop-portal-wlr` |
 
 Снимки экрана и история буфера обмена у newm свои: grim и менеджер буфера не нужны.
 
-### Сборка и установка
+## Java 27
+
+Сначала загляните на страницу своего дистрибутива: во многих JDK 27 (или 26) есть пакетом.
+
+Если в вашем нет, возьмите сборку Eclipse Temurin. Положите её в `/usr/lib/jvm`: команда
+`newm` ищет там сама, в том числе когда её запускает экран входа.
+
+```sh
+sudo mkdir -p /usr/lib/jvm/temurin-27
+curl -L https://api.adoptium.net/v3/binary/latest/27/ga/linux/x64/jdk/hotspot/normal/eclipse \
+  | sudo tar -xz -C /usr/lib/jvm/temurin-27 --strip-components=1
+/usr/lib/jvm/temurin-27/bin/java -version
+```
+
+На ARM (aarch64) напишите `aarch64` вместо `x64`. Чтобы потом обновить, удалите папку и
+выполните те же команды снова.
+
+[SDKMAN](https://sdkman.io) тоже подойдёт (`sdk list java`, затем `sdk install java` с
+версией `27...-tem`). Он кладёт Java в домашнюю папку, и экран входа может её не найти.
+Тогда задайте `JAVA_HOME` там, где его прочитает ваш сеанс, или используйте архив выше.
+
+Как команда `newm` выбирает Java: `JAVA_HOME`, если там 26 или новее; иначе `java` из PATH,
+если она достаточно новая; иначе самую новую в `/usr/lib/jvm`. Если нет ни одной, она
+пишет «newm needs Java 26 or newer».
+
+Для сборки Gradle работает на любом JDK от 17 до 27, а компилирует JDK 27. Он находит его в
+`JAVA_HOME` или `/usr/lib/jvm` или скачивает сам.
+
+## Сборка и установка
 
 ```sh
 git clone https://github.com/AristarkhKenebas/newm
@@ -242,7 +94,10 @@ cd newm
 ./install.sh --user     # или только для вас: ~/.local
 ```
 
-Скрипт:
+Если `java` нет в PATH, сначала скажите сборке, где Java, например
+`export JAVA_HOME=/usr/lib/jvm/temurin-27`.
+
+`install.sh`:
 
 - собирает newm (в первый раз Gradle скачивает нужное, несколько минут);
 - кладёт команду `newm` в PATH (`/usr/local/bin/newm` или `~/.local/bin/newm`);
@@ -271,6 +126,9 @@ org.freedesktop.impl.portal.ScreenCast=wlr
 org.freedesktop.impl.portal.Screenshot=wlr
 ```
 
+newm ставит `XDG_CURRENT_DESKTOP=newm`, поэтому портал читает именно этот файл, а своё
+окружение порталам newm передаёт сам.
+
 ## Из исходников, вручную
 
 ```sh
@@ -280,9 +138,6 @@ build/install/newm/bin/newm                 # запустить (см. «Зап
 build/install/newm/bin/newm install-session # по желанию: пункт на экране входа
 ```
 
-Для сборки Gradle сам скачает JDK 27, если его нет. Для запуска нужна установленная Java 26
-или новее (см. выше).
-
 ## Запуск
 
 - **Из текстовой консоли** (Ctrl+Alt+F3, войдите): наберите `newm`. В первый раз это лучший
@@ -291,6 +146,9 @@ build/install/newm/bin/newm install-session # по желанию: пункт н
 - **Внутри вашего рабочего стола, чтобы попробовать**: запустите `newm` в терминале. Он
   откроется окном, и в вашем рабочем столе ничего не изменится. (Клавиши вроде Logo может
   перехватывать ваш рабочий стол.)
+
+В системе без systemd запускайте `dbus-run-session newm`, если ваш вход в систему ещё не
+даёт сеансовую шину D-Bus (см. страницу [Void](install/void.md#запуск)).
 
 Выйти: **Logo+Shift+Escape** или «Выйти» в меню питания на панели.
 

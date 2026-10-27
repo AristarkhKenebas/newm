@@ -2,119 +2,118 @@
 
 # newm
 
-**A Wayland compositor for laptops and touchpads: your windows on an endless wall.**
+**An endless wall of windows, made for touchpads.**
 
 **English** · [Русский](README.ru.md)
 
-[![newm](docs/assets/screenshot.png)](https://youtu.be/4I_IHbP-iNQ)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+![newm's desktop](docs/assets/desktop.png)
 
 </div>
 
-Most window managers fit your windows into the screen. newm lays them out on an endless
-wall of tiles, and the screen is a window onto that wall. Three fingers move over it, four
-fingers zoom in and out. When you zoom out, the windows get their new size, so they stay
-usable at any zoom.
+newm is a Wayland compositor. Most window managers squeeze your windows into the screen.
+newm lays them out on an endless wall of tiles, and the screen is a window onto that wall.
+Three fingers on the touchpad move over it, four fingers zoom in and out. Zoomed out, every
+window gets its new size, so it stays usable. Tap Logo alone to see all of them at once.
 
-## What you get
+| The overview | The launcher |
+|---|---|
+| ![Every window at once](docs/assets/overview.png) | ![The launcher](docs/assets/launcher.png) |
 
-- **Made for the touchpad.** Moving, zooming, the overview and the launcher are all gestures,
-  following the fingers; animations are off by default, newm's smooth ones are one line away
-  (`animations { preset = "newm" }`, or each by name as in Hyprland). Logo + drag moves and
-  resizes windows with the mouse.
-- **The overview.** Tap Logo: every window at once. Point at one, click, and you are there.
-- **It looks good from the start.** Rounded windows with smooth edges, blur behind
-  see-through windows, colours made from your wallpaper, light or dark for newm and your
-  programs together.
-- **A bar of its own.** Islands floating at the top: the window, the clock with a calendar,
-  the tray with its menus, Wi-Fi, Bluetooth, sound, battery, power, and quick settings as on
-  a phone (brightness, caffeine, light or dark, ...).
-- **Built in, no extra programs:** a lock screen, a launcher, a screenshot tool (an area, a
-  window, the screen, or several whole windows from the overview), a clipboard history
-  (Logo+V), and the keys' help (Logo+/).
-- **Programs that will not get small** (Spotify) are drawn in their tile's shape, not cut off.
-- **Change it while it runs.** Save your configuration and newm applies it at once. A
-  mistake shows as a card with its line, and newm keeps the settings that worked. A broken
-  configuration never gives you a black screen.
-- **Your configuration in your language.** Kotlin (`config.kts`, newm's own), Lua, JSON,
-  or Nix. A `config.py` of the old newm still works.
-- **Works with what you have.** waybar or any other bar (or none), mako, swaybg, X11
-  programs, screen sharing through the portals.
+## What it has
+
+- **Touchpad gestures** that follow your fingers: move, zoom, the overview, the launcher.
+  Logo + mouse drag moves and resizes windows.
+- **The overview**: every window at once; point, click, and you are there.
+- **Its own bar**: the clock and calendar, the tray, notifications, Wi-Fi, Bluetooth, sound,
+  battery, and quick settings like on a phone. waybar or any other bar works too.
+- **Built in**: a lock screen (your password, checked with PAM), a launcher, a clipboard
+  history (Logo+V), screenshots (an area, a window, a screen), the keys' help (Logo+/).
+- **Your configuration in `config.kts`**, with a note on every setting. Save it and newm
+  applies it at once; a mistake shows as a card, and newm keeps what worked. JSON, Lua and
+  the old newm's `config.py` work too.
+- **Looks**: rounded corners, blur, colours from your wallpaper, light or dark for newm and
+  your programs, border gradients and your own border shaders.
+- **Animations** in Hyprland's style, each by name. They are off by default;
+  `animations { preset = "newm" }` turns on newm's own set.
+- **A special workspace** above the wall, and drop-down scratchpads.
+- **Autostart and a smooth start**: a black screen until newm is ready, then a fade-in, then
+  your programs one after another.
+- **X11 programs** through Xwayland, **screen sharing** through the portals.
+- **Nix**: a flake with a package, a NixOS module and a home-manager module.
 
 ## Quick start
 
 ### NixOS
 
-In your flake:
-
 ```nix
+# flake.nix
 inputs.newm.url = "github:AristarkhKenebas/newm";
-```
 
-and in your system's configuration:
-
-```nix
+# your NixOS configuration
 imports = [ newm.nixosModules.default ];
 programs.newm.enable = true;
 ```
 
-`sudo nixos-rebuild switch`, then choose "newm" in your login screen, or type `newm` on a text
-console. To try it first without installing: `nix run github:AristarkhKenebas/newm` from a
-text console. More in [Install](docs/en/install.md#nixos).
+`sudo nixos-rebuild switch`, then choose "newm" in your login screen, or type `newm` on a
+text console. More: [NixOS](docs/en/install/nixos.md).
 
-### Arch and others
+### Any other Linux
 
-You need Java 27, a GPU driver (Mesa, or NVIDIA 545+), and a terminal.
+1. **Install Java 27** and the libraries newm opens (Mesa, libinput, libseat, ...). Your
+   distribution's page below has the exact command. No Java 27 package? Take
+   [Temurin's](docs/en/install.md#java-27) and put it in `/usr/lib/jvm`.
+2. **Build and install:**
 
-```sh
-git clone https://github.com/AristarkhKenebas/newm
-cd newm
-./install.sh
-```
+   ```sh
+   git clone https://github.com/AristarkhKenebas/newm
+   cd newm
+   ./install.sh
+   ```
 
-Then type `newm` on a text console, or choose "newm" in your login screen. The libraries and
-helpers it uses are listed in [Install](docs/en/install.md#arch-and-other-distributions).
+   (Or `./gradlew installDist` and run `build/install/newm/bin/newm`.)
+3. **Start it**: log in on a text console (Ctrl+Alt+F3) and type `newm`, or choose "newm"
+   in your login screen.
 
-### The first keys
+The first start writes your configuration to `~/.config/newm/config.kts`. Press **Logo+/**
+for every key, **Logo+Return** for a terminal, **Logo+D** for the launcher, and
+**Logo+Shift+Escape** to log out.
 
-The first start writes your configuration to `~/.config/newm/config.kts`, with a note on every
-setting.
+## Install on your system
 
-- **Logo+/**: every key, with what it does;
-- **Logo+Return**: a terminal;
-- **Logo+D**: the launcher;
-- **Logo** alone: every window at once;
-- **Logo+H/J/K/L**: move around; **Logo+S**: two windows side by side;
-- **Logo+Shift+Escape**: log out.
+| System | Page |
+|---|---|
+| NixOS | [NixOS](docs/en/install/nixos.md) |
+| Arch, EndeavourOS, Manjaro, CachyOS | [Arch](docs/en/install/arch.md) |
+| Debian 13+, Ubuntu 24.04+, Mint, Pop!_OS | [Debian and Ubuntu](docs/en/install/debian-ubuntu.md) |
+| Fedora, Nobara | [Fedora](docs/en/install/fedora.md) |
+| openSUSE Tumbleweed | [openSUSE](docs/en/install/opensuse.md) |
+| Void Linux | [Void](docs/en/install/void.md) |
+| Gentoo | [Gentoo](docs/en/install/gentoo.md) |
+| Alpine (musl, untested) | [Alpine](docs/en/install/alpine.md) |
+| Something else | [Other systems](docs/en/install/other.md) |
 
 ## Documentation
 
-- [Install](docs/en/install.md): NixOS, Arch and others, from source
-- [Everyday use: keys, gestures, the overview, screenshots, clipboard](docs/en/using.md)
+- [Install](docs/en/install.md): what newm needs, and every system
+- [Everyday use](docs/en/using.md): keys, gestures, the overview, screenshots, the clipboard
 - [Your configuration](docs/en/configuration.md)
 - [Every setting](docs/en/settings.md), and `newm cmd`
-- [Bars](docs/en/bars.md)
-- [Lua, JSON, Nix and the old config.py](docs/en/other-formats.md)
 - [When something goes wrong](docs/en/troubleshooting.md)
-- [Testing newm, and reporting problems](docs/en/testing.md)
-- [Working on newm](docs/en/development.md)
+- [All of the documentation](docs/en/README.md)
 
-Found a problem? Please open an issue: https://github.com/AristarkhKenebas/newm/issues
+Found a problem? Please [open an issue](https://github.com/AristarkhKenebas/newm/issues)
 ([what to put in it](docs/en/testing.md#reporting-a-problem)).
 
-## About this newm
+## Credits
 
-newm was written in Python on pywm by Jonas Bucher ([jbuchermn/newm](https://github.com/jbuchermn/newm)),
-and is no longer maintained there. This is newm carried on:
-
-- ported to Kotlin, one to one in how it behaves;
-- built on the [Caulis](https://github.com/AristarkhKenebas/caulis) compositor library
-  instead of pywm and wlroots;
-- with fixes to the old newm's problems, and new parts: the bar and quick settings, the lock
-  screen, the launcher, screenshots, the clipboard's history, configuration that reloads on
-  save, the other configuration languages, the documentation.
-
-The original Python code is kept in [`legacy/`](legacy) for reference.
+newm was written in Python by Jonas Bucher ([jbuchermn/newm](https://github.com/jbuchermn/newm)),
+on pywm and wlroots, and is no longer maintained there. This newm carries it on: ported to
+Kotlin, one to one in how it behaves, and built on the
+[Caulis](https://github.com/AristarkhKenebas/caulis) compositor library. The original Python
+code is kept in [`legacy/`](legacy) for reference.
 
 ## License
 
-MIT, as newm. See [LICENSE](LICENSE).
+MIT, as the original newm. See [LICENSE](LICENSE).

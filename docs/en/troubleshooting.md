@@ -134,7 +134,7 @@ does nothing (the rest works):
 - **Screen sharing or the file picker does not work**: install `xdg-desktop-portal`,
   `xdg-desktop-portal-gtk` and `xdg-desktop-portal-wlr`, and tell the portal to use wlr for
   screen sharing (see [Install](install.md#build-and-install), or for NixOS
-  [here](install.md#good-to-add)). newm gives the portals its environment by itself.
+  [here](install/nixos.md#good-to-add)). newm gives the portals its environment by itself.
 - **A game or a video in fullscreen stutters or tears**: say so in an issue with
   `newm cmd debug` and the log; try `newm cmd full-redraw on` to see whether it changes.
 

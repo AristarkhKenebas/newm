@@ -107,7 +107,7 @@ startup = { "mako" }
 ## Nix
 
 У flake newm есть пакет, модуль NixOS и модуль home-manager. Как их подключить — в
-[Установке](install.md#nixos); здесь — что они пишут.
+[Установке](install/nixos.md); здесь — что они пишут.
 
 **NixOS**: `programs.newm.settings` становится `/etc/newm/config.json`. Пользователь без
 `~/.config/newm` при первом запуске получает его копию; дальше действует его копия.

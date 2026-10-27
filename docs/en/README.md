@@ -8,8 +8,9 @@ fingers and zoom with four.
 
 Start here:
 
-1. [Install](install.md): NixOS, Arch and other distributions, or from source; then start
-   newm from a text console or your login screen.
+1. [Install](install.md): what newm needs, a page for each distribution (NixOS, Arch,
+   Debian and Ubuntu, Fedora, openSUSE, Void, Gentoo, Alpine, others), and how to start newm
+   from a text console or your login screen.
 2. [Everyday use](using.md): the keys and gestures, the overview, the bar, screenshots, the
    clipboard's history, the lock screen.
 3. [Your configuration](configuration.md): change how newm looks and works. Saving the file

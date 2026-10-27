@@ -13,6 +13,9 @@
   pam,
   fontconfig,
   freetype,
+  # The bar's Skiko (libskiko-linux-x64.so) is linked against libGL (libglvnd, among Caulis'
+  # libraries), libX11, libfontconfig and libstdc++: without them the bar cannot load.
+  libx11,
 }:
 
 let
@@ -70,12 +73,13 @@ stdenv.mkDerivation (finalAttrs: {
     runHook preInstall
     mkdir -p $out/share/newm $out/bin
     cp -r build/install/newm/. $out/share/newm/
-    # Its Java, and the libraries it opens by name (EGL, GBM, DRM, libinput, PAM, ...).
+    # Its Java, and the libraries it opens by name (EGL, GBM, DRM, libinput, PAM, ...) or
+    # Skiko's library needs (libGL, libX11, libfontconfig, libstdc++).
     # (The start script's AOT cache lives in ~/.cache/newm/aot, not in the store; its key
     # holds this store path, so each build has its own though every file's time here is 1.)
     makeWrapper $out/share/newm/bin/newm $out/bin/newm \
       --set JAVA_HOME ${jdk} \
-      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath (libraries ++ [ pam fontconfig freetype ])}
+      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath (libraries ++ [ pam fontconfig freetype libx11 stdenv.cc.cc.lib ])}
     runHook postInstall
   '';
 

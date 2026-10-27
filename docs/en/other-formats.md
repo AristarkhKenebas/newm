@@ -108,7 +108,7 @@ names of newm, on the right, keep working):
 ## Nix
 
 newm's flake has a package, a NixOS module and a home-manager module. How to add them is in
-[Install](install.md#nixos); here is what they write.
+[Install](install/nixos.md); here is what they write.
 
 **NixOS**: `programs.newm.settings` becomes `/etc/newm/config.json`. A user without a
 `~/.config/newm` gets a copy of it at their first start; after that their copy counts.
