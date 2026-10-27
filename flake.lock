@@ -1,0 +1,48 @@
+{
+  "nodes": {
+    "caulis": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793095581,
+        "narHash": "sha256-HYa7nJ5+VJEtxj+WezqXx7Khe6Me4VCGYIa7UiJ8a8I=",
+        "owner": "AristarkhKenebas",
+        "repo": "caulis",
+        "rev": "dcc0684a00d4105f1338eeb9a8cef939b5bdefd2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "AristarkhKenebas",
+        "repo": "caulis",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792773339,
+        "narHash": "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "caulis": "caulis",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

@@ -58,6 +58,9 @@ stdenv.mkDerivation (finalAttrs: {
     "-Dorg.gradle.java.installations.auto-download=false"
     "-Dorg.gradle.java.installations.auto-detect=false"
     "-Dfile.encoding=utf-8"
+    # gradle.properties turns the configuration cache on for everyday builds; Nix's
+    # dependency fetcher (an init script) does not work with it.
+    "-Dorg.gradle.configuration-cache=false"
   ];
   gradleBuildTask = "installDist";
   # (The tests start a compositor: not in the sandbox.)
