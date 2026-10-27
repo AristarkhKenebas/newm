@@ -53,7 +53,8 @@ class WobRunner(private val command: String = "wob", private val spawn: (List<St
 open class BacklightManager(
     private val args: String = "",
     private val dimFactors: Pair<Double, Double> = 0.5 to 0.33,
-    private val animTime: Double = 0.3,
+    // Its glide's time in seconds (null: the animation "brightness", anim_time usually; off: at once).
+    private val animTime: Double? = null,
     private val barDisplay: BarDisplay? = null,
 ) {
     private var current = 0
@@ -76,11 +77,13 @@ open class BacklightManager(
         next = current
     }
 
+    private fun glideSeconds(): Double = (animTime?.let { NewmAnimations.resolveSeconds("brightness", it) } ?: NewmAnimations["brightness"]).seconds
+
     fun update() {
         if (!enabled || animTs.first < 0.0) return
         val t = now()
         if (t - animTs.third > 1.0 / 30.0) animTs = Triple(animTs.first, animTs.second, t) else return
-        if (t > animTs.second) {
+        if (t >= animTs.second) {
             current = next
             animTs = Triple(-1.0, -1.0, -1.0)
         } else {
@@ -106,7 +109,7 @@ open class BacklightManager(
         }
         if (kotlin.math.abs(n - next) > 0.5 && animTs.first < 0) {
             val t = now()
-            animTs = Triple(t, t + animTime, 0.0)
+            animTs = Triple(t, t + glideSeconds(), 0.0)
             barDisplay?.display(n.toDouble() / max)
         }
         next = n
@@ -117,7 +120,7 @@ open class BacklightManager(
     fun set(value: Double) {
         predim = maxOf(0, minOf(max, (max * value).toInt()))
         next = predim
-        animTs = Triple(now(), now() + animTime, 0.0)
+        animTs = Triple(now(), now() + glideSeconds(), 0.0)
         barDisplay?.display(next.toDouble() / max)
     }
 
@@ -171,10 +174,23 @@ internal fun privateFolder(dir: java.nio.file.Path): java.nio.file.Path {
     return dir
 }
 
-/** Writes [text] to [file], readable by its user only (0600): what may hold secrets. */
+/**
+ * Writes [text] to [file], readable by its user only (0600): what may hold secrets. Whole or not
+ * at all: written to a new file beside it (made 0600 at once), which then takes its place — newm
+ * ending halfway leaves the old one as it was.
+ */
 internal fun writePrivately(file: java.nio.file.Path, text: String) {
     val owner = java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
-    if (!java.nio.file.Files.exists(file)) java.nio.file.Files.createFile(file, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(owner))
-    java.nio.file.Files.setPosixFilePermissions(file, owner)
-    java.nio.file.Files.writeString(file, text)
+    val dir = file.toAbsolutePath().parent
+    val temp = java.nio.file.Files.createTempFile(dir, ".${file.fileName}.", ".new", java.nio.file.attribute.PosixFilePermissions.asFileAttribute(owner))
+    try {
+        java.nio.file.Files.writeString(temp, text)
+        try {
+            java.nio.file.Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+            java.nio.file.Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+    } finally {
+        java.nio.file.Files.deleteIfExists(temp)
+    }
 }

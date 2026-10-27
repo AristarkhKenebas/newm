@@ -28,6 +28,7 @@ enum class Glyph {
     BRIGHTNESS, BLUETOOTH, CHECK, MIC, LEAF, BOLT, BALANCE, COFFEE, MENU,
     HEADPHONES, PHONE, MOUSE, KEYBOARD, COMPUTER, MONITOR, GAMEPAD, WATCH, SPEAKER_DEVICE, PRINTER, CAMERA, TABLET,
     CLOSE, COPY, TRASH, SEARCH, SETTINGS, PALETTE, REFRESH, UNPLUGGED, PIN, UNPIN, PICTURE, FILE, CHEVRON_DOWN, GRID, GAUGE, CLIPBOARD, THEME, HIBERNATE,
+    BELL, BELL_OFF,
 }
 
 /** The Lucide icon of [glyph] at [level] (0..1), crossed out with [slash]. */
@@ -93,6 +94,8 @@ private fun iconName(glyph: Glyph, level: Float, slash: Boolean): String = when 
     Glyph.CLIPBOARD -> "clipboard-list"
     Glyph.THEME -> "sun-moon"
     Glyph.HIBERNATE -> "snowflake"
+    Glyph.BELL -> "bell"
+    Glyph.BELL_OFF -> "bell-off"
 }
 
 /** The picture for a Bluetooth device's kind (BlueZ's Icon: "audio-headphones", "input-mouse", ...). */
@@ -201,5 +204,20 @@ fun SymbolIcon(name: String, color: Color, size: Dp = 20.dp) {
     Canvas(Modifier.size(size)) {
         val px = this.size.minDimension.toInt().coerceAtLeast(1)
         Icons.get("material/$name", argb, px)?.let { drawImage(it, dstOffset = IntOffset.Zero, dstSize = IntSize(px, px)) }
+    }
+}
+
+/** newm carries icon [name] ("material/wifi", "bell"). */
+internal fun carriesIcon(name: String): Boolean = carried.getOrPut(name) { Icons::class.java.getResource("/newm/icons/$name.svg") != null }
+
+private val carried = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+/** One of newm's own icons by its name ("bell", "coffee"), at [size] in [color]. */
+@Composable
+internal fun OwnIcon(name: String, color: Color, size: Dp = 16.dp) {
+    val argb = color.toArgb()
+    Canvas(Modifier.size(size)) {
+        val px = this.size.minDimension.toInt().coerceAtLeast(1)
+        Icons.get(name, argb, px)?.let { drawImage(it, dstOffset = IntOffset.Zero, dstSize = IntSize(px, px)) }
     }
 }

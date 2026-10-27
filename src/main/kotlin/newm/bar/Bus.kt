@@ -1,6 +1,6 @@
 package newm.bar
 
-import dev.caulis.core.dbus.DBusConnection
+import dev.caulis.core.dbus.DBusScope
 import dev.caulis.core.dbus.DBusMessage
 import dev.caulis.core.dbus.ObjectPath
 import dev.caulis.core.dbus.Variant
@@ -8,14 +8,14 @@ import dev.caulis.core.dbus.Variant
 internal const val PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 
 /** All of [iface]'s properties of [path] at [service], unwrapped; [done] gets null on an error. */
-internal fun DBusConnection.getAll(service: String, path: String, iface: String, done: (Map<String, Any?>?) -> Unit) {
+internal fun DBusScope.getAll(service: String, path: String, iface: String, done: (Map<String, Any?>?) -> Unit) {
     call(service, ObjectPath(path), PROPERTIES_IFACE, "GetAll", "s", listOf(iface)) { reply ->
         done(if (reply.isError) null else dictOf(reply.body.firstOrNull()))
     }
 }
 
 /** Sets [iface]'s property [name] of [path] at [service]; [done] gets the error's text, or null. */
-internal fun DBusConnection.setProperty(service: String, path: String, iface: String, name: String, value: Variant, done: (String?) -> Unit = {}) {
+internal fun DBusScope.setProperty(service: String, path: String, iface: String, name: String, value: Variant, done: (String?) -> Unit = {}) {
     call(service, ObjectPath(path), PROPERTIES_IFACE, "Set", "ssv", listOf(iface, name, value)) { reply -> done(errorOf(reply)) }
 }
 
@@ -41,13 +41,13 @@ internal fun errorOf(reply: DBusMessage): String? =
  * name now (null: not running), so signals can be taken from it alone; [changed] hears the
  * first answer and then each start, stop or restart (it may come later than newm).
  */
-internal class NameWatch(bus: DBusConnection, val name: String, private val changed: (String?) -> Unit) {
+internal class NameWatch(bus: DBusScope, val name: String, private val changed: (String?) -> Unit) {
     var owner: String? = null
         private set
     private var answered = false
 
     init {
-        bus.onSignal("org.freedesktop.DBus", "NameOwnerChanged", "/org/freedesktop/DBus") { m ->
+        bus.onSignal("org.freedesktop.DBus", "NameOwnerChanged", "/org/freedesktop/DBus", sender = "org.freedesktop.DBus") { m ->
             if (m.body.getOrNull(0) == name) set((m.body.getOrNull(2) as? String)?.ifEmpty { null })
         }
         bus.call("org.freedesktop.DBus", ObjectPath("/org/freedesktop/DBus"), "org.freedesktop.DBus", "GetNameOwner", "s", listOf(name)) { reply ->

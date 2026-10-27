@@ -23,7 +23,7 @@ class DataConfigTest {
         val bindings = (settings["key_bindings"] as (Layout) -> List<Pair<String, () -> Unit>>)(Layout(Caulis()))
         assertTrue(bindings.size > 30 && bindings.any { it.first == "L-Return" }, "${bindings.size}")
         val native = ((settings["panels"] as Map<String, Any?>)["top_bar"] as Map<String, Any?>)["native"] as Map<String, Any?>
-        assertEquals(listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power"), native["right"])
+        assertEquals(listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power"), native["right"])
     }
 
     @Test

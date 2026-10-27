@@ -8,7 +8,7 @@ newm написан на Kotlin, на основе библиотеки для �
 ```
 src/main/kotlin/newm/   сам newm: раскладка, жесты, оверлеи, панель, экран блокировки, лаунчер
 templates/              что newm кладёт в ~/.config/newm (config.kts, examples, bars)
-nix/                    модули NixOS и home-manager
+nix/                    пакет (package.nix, deps.json), модули NixOS и home-manager
 docs/                   эта документация (en, ru)
 dev/newm-dev            newm из исходников, для работы над newm внутри newm
 legacy/                 оригинальный newm на Python, для справки
@@ -26,6 +26,10 @@ legacy/                 оригинальный newm на Python, для спр
 
 Чтобы попробовать newm, не покидая свой рабочий стол, запустите `build/install/newm/bin/newm`
 в терминале. newm откроется как обычное окно.
+
+Пакет Nix собирается без сети из зависимостей, перечисленных в `nix/deps.json`. После
+изменения зависимостей (новая версия Caulis в `gradle/libs.versions.toml`) создайте его
+заново: `nix build .#default.mitmCache.updateScript && ./result`.
 
 ## Работа над newm внутри newm
 
@@ -60,4 +64,9 @@ dev/newm-dev install-session     # один раз: «newm (dev)» на экра
 Сборки хранятся в `~/.cache/newm-dev`: `good` — та, что работает сейчас, `good.prev` — предыдущая.
 Собственный журнал скрипта — `~/.cache/newm-dev/newm-dev.log`.
 
-Перезапуск закрывает открытые программы, как и выход из сеанса. Горячая замена их сохраняет.
+Перезапуск закрывает открытые программы, как и выход из сеанса; `newm cmd restart keep`
+потом открывает их снова, каждую на своём месте. Горячая замена их сохраняет.
+
+Чтобы увидеть изменение newm в работе, `newm cmd debug` выводит раскладку окон, а
+`newm cmd log <область> 3` делает одну область журнала подробной прямо во время работы (см.
+[Тестирование newm](testing.md#подробнее-в-журнале)).

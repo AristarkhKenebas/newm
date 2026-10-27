@@ -159,15 +159,15 @@ class ViewDownInterpolation(layout: Layout, state0: ViewDown, state1: ViewDown) 
     }
 }
 
-/** newm's animate.py: something that animates between two layout states. */
+/** newm's animate.py: something that animates between two layout states ([dt] seconds, along [curve]). */
 interface Animatable {
     fun flushAnimation()
-    fun animate(oldState: LayoutState, newState: LayoutState, dt: Double)
+    fun animate(oldState: LayoutState, newState: LayoutState, dt: Double, curve: dev.caulis.core.Curve = dev.caulis.core.Curve.LINEAR)
 }
 
-/** newm's Animate: runs an [Interpolation] for its duration, frame by frame. */
+/** newm's Animate: runs an [Interpolation] for its duration, frame by frame, along its curve. */
 abstract class Animate<T> {
-    private class Running<T>(val interpolation: Interpolation<T>, var start: Double, val duration: Double, var frame: Int)
+    private class Running<T>(val interpolation: Interpolation<T>, var start: Double, val duration: Double, var frame: Int, val curve: dev.caulis.core.Curve)
 
     @Volatile
     private var animation: Running<T>? = null
@@ -176,7 +176,13 @@ abstract class Animate<T> {
         val a = animation ?: return defaultState
         a.frame += 1
         if (a.frame == 1) a.start = now() - 1.0 / 120.0
-        val perc = minOf((now() - a.start) / a.duration, 1.0)
+        // (No time: the end at once, not a frame in between.)
+        val time = if (a.duration <= 0.0) 1.0 else minOf((now() - a.start) / a.duration, 1.0)
+        val perc = if (time >= 1.0) 1.0 else try {
+            a.curve.at(time)
+        } catch (e: Exception) {
+            time
+        }
         animDamage()
         return a.interpolation.get(perc)
     }
@@ -185,8 +191,8 @@ abstract class Animate<T> {
         animation = null
     }
 
-    protected fun startAnimation(interpolation: Interpolation<T>, dt: Double) {
-        animation = Running(interpolation, -1.0, dt, 0)
+    protected fun startAnimation(interpolation: Interpolation<T>, dt: Double, curve: dev.caulis.core.Curve = dev.caulis.core.Curve.LINEAR) {
+        animation = Running(interpolation, -1.0, dt.coerceAtLeast(0.0), 0, curve)
         animDamage()
     }
 

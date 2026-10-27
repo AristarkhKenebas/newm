@@ -38,9 +38,13 @@ fun main(args: Array<String>) {
             noticeStyle = dev.caulis.core.NoticeStyle.cards(dark = scheme == dev.caulis.core.appearance.ColorScheme.DARK)
             applySettings()
         }
-        // Only for newm itself (dev/newm-dev's debugger port, its notice): not for programs started inside.
+        // The start: dark until newm is warm, then it fades in, with a sound (Caulis has both off).
+        startupDefaults()
+        // Only for newm itself (dev/newm-dev's debugger port, its notice, that it restarts newm): not for
+        // programs started inside (a newm started in a terminal here restarts on its own).
         environment["NEWM_OPTS"] = null
         environment["NEWM_NOTICE"] = null
+        environment["NEWM_SUPERVISED"] = null
         // The keys are newm's: of Caulis's usual ones (Super+1..9 workspaces, Super+Q, window
         // dragging, ... which would fight newm's wall) only a laptop's keys and the consoles stay.
         val laptopKeys = listOf("volumeUp", "volumeDown", "volumeMute", "micMute", "brightnessUp", "brightnessDown", "touchpad", "displays", "mediaPlay", "mediaNext", "mediaPrevious")
@@ -59,7 +63,7 @@ fun main(args: Array<String>) {
         onStart {
             val flag = logPathDir()?.resolve("welcomed")
             if (flag != null && !java.nio.file.Files.exists(flag)) {
-                notify("Super+/ shows every key. Super+D starts a program, Super+S puts two windows side by side. On a touchpad: three fingers move, four zoom.", title = "Welcome to newm")
+                notify(newm.bar.tr("Super+/ shows every key. Super+D starts a program, Super+S puts two windows side by side. On a touchpad: three fingers move, four zoom."), title = newm.bar.tr("Welcome to newm"))
                 runCatching { java.nio.file.Files.writeString(flag, "") }
             }
         }
@@ -125,6 +129,8 @@ private fun dev.caulis.wm.Caulis.applyHostSettingsNow(settings: Map<String, Any?
     if (pywm?.get("focus_follows_mouse") == null) focusFollowsMouse = true
     pywm?.let { applyPywmSettings(this, it) }
     (settings["outputs"] as? List<Map<String, Any?>>)?.let { applyOutputs(this, it) }
+    // autostart { }, reveal { }, startupSound { } (see Startup.kt).
+    applyStartupSettings(this, settings, greeter = Users.isGreeter())
     // Light or dark: always one of them (never "the programs' own", which left newm light).
     ColorChoice.apply(this)
 }

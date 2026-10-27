@@ -7,12 +7,20 @@ import dev.caulis.render.Paint
 private val confViewCornerRadius = configuredValue("view.corner_radius", 12.0)
 private val confFocusD = configuredValue("focus.distance", 4.0)
 private val confFocusW = configuredValue("focus.width", 2.0)
+// The border's own glide (the animation "border"): its usual time.
 private val confAnimTime = configuredValue("focus.anim_time", 0.3)
-private val confAnimT = configuredValue("anim_time", 0.3)
 private val confAnimateOnChange = configuredValue("focus.animate_on_change", false)
 private val confEnabled = configuredValue("focus.enabled", true)
 // "auto": the colours' accent (the palette's, else newm's light blue).
 private val confColor = configuredValue("focus.color", "auto")
+// A window wanting attention: its border while it has not the focus ("": none; the focus takes the wish away).
+private val confUrgentColor = configuredValue("focus.urgent_color", "")
+// A GLSL file of one's own (vec4 paint(vec2 at), read again when saved); "": the colour.
+private val confShader = configuredValue("focus.shader", "")
+// False: a shader's own time (and a turning gradient) stands still.
+private val confAnimate = configuredValue("focus.animate", true)
+
+private val log = dev.caulis.log.Logger("focus")
 
 /**
  * newm's widget/focus_border.py: the line around the focused view, a little outside it, gliding
@@ -31,7 +39,10 @@ class FocusBorders(private val wm: Layout) : Animatable {
 
     private val border = object : Animate<WidgetDown>() {
         fun at(default: WidgetDown) = process(default)
-        fun start(from: WidgetDown, to: WidgetDown, dt: Double) = startAnimation(WidgetDownInterpolation(from, to), dt)
+        fun start(from: WidgetDown, to: WidgetDown, dt: Double, curve: dev.caulis.core.Curve) = startAnimation(WidgetDownInterpolation(from, to), dt, curve)
+
+        // Its own glide, as the animation "border" says.
+        fun glide(from: WidgetDown, to: WidgetDown) = NewmAnimations.resolveSeconds("border", confAnimTime()).let { start(from, to, it.seconds, it.curve) }
         override fun animDamage() = wm.damage()
     }
 
@@ -81,7 +92,11 @@ class FocusBorders(private val wm: Layout) : Animatable {
         setBoxAndRadius(presentStates?.second)
         // From nothing (the first window): it appears in place, not flying in from the corner.
         if (old.box.w <= 0.0 || old.box.h <= 0.0) old = current.copy(alpha = 0.0)
-        if (animate) border.start(reducer(old, 1.0), reducer(current, 1.0), if (presentStates != null) confAnimT() else confAnimTime()) else damage()
+        // (With the layout's animation the window is part of — a window opening, one closing —
+        // as long and along the same curve; else its own glide.)
+        if (!animate) damage()
+        else if (presentStates != null) wm.runningAnimation.let { (dt, curve) -> border.start(reducer(old, 1.0), reducer(current, 1.0), dt, curve) }
+        else border.glide(reducer(old, 1.0), reducer(current, 1.0))
     }
 
     fun unfocus() {
@@ -89,10 +104,10 @@ class FocusBorders(private val wm: Layout) : Animatable {
         val old = current
         currentView = null
         setBoxAndRadius()
-        border.start(reducer(old, 1.0), reducer(current, 1.0), confAnimTime())
+        border.glide(reducer(old, 1.0), reducer(current, 1.0))
     }
 
-    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double, curve: dev.caulis.core.Curve) {
         val view = currentView
         val up = view?.upState
         fun of(state: LayoutState): Current {
@@ -111,7 +126,7 @@ class FocusBorders(private val wm: Layout) : Animatable {
         val new = of(newState)
         if (old.box.w <= 0.0 || old.box.h <= 0.0) old = new.copy(alpha = 0.0)
         current = new
-        border.start(reducer(old, oldState.backgroundOpacity), reducer(new, newState.backgroundOpacity), dt)
+        border.start(reducer(old, oldState.backgroundOpacity), reducer(new, newState.backgroundOpacity), dt, curve)
     }
 
     override fun flushAnimation() = border.flushAnimationOwn()
@@ -137,13 +152,69 @@ class FocusBorders(private val wm: Layout) : Animatable {
         if (down.opacity <= 0.0 || down.box.w <= 0.0 || down.box.h <= 0.0) return
         val b = down.box
         val rect = Rect(Math.round(b.x).toInt(), Math.round(b.y).toInt(), Math.round(b.w).toInt(), Math.round(b.h).toInt())
-        canvas.border(rect, confFocusW().toFloat(), Paint.solid(borderColor()), cornerRadius.toFloat(), down.opacity.toFloat())
+        val urgent = currentView?.window?.urgent == true
+        canvas.border(rect, confFocusW().toFloat(), borderPaint(urgent), cornerRadius.toFloat(), down.opacity.toFloat(), dev.caulis.render.PaintState(focused = true, urgent = urgent), confAnimate())
+    }
+
+    /**
+     * Draws the border of a window wanting attention that has not the focus (as Hyprland does:
+     * the focus takes a window's wish for attention away, so the focused one never shows it)
+     * around [place], where the window is drawn now — when focus { urgentColor } is set.
+     */
+    fun drawUrgent(place: dev.caulis.core.WindowPlace, canvas: OverlayCanvas) {
+        if (!confEnabled() || confUrgentColor().isBlank() || place.alpha <= 0f) return
+        val d = confFocusD()
+        val rect = Rect(Math.round(place.x - d).toInt(), Math.round(place.y - d).toInt(), Math.round(place.width + 2 * d).toInt(), Math.round(place.height + 2 * d).toInt())
+        if (rect.width <= 0 || rect.height <= 0) return
+        val radius = (place.cornerRadius?.toDouble() ?: confViewCornerRadius()) + d
+        canvas.border(rect, confFocusW().toFloat(), borderPaint(true), radius.toFloat(), place.alpha, dev.caulis.render.PaintState(focused = false, urgent = true), confAnimate())
+    }
+
+    // The shader of focus.shader, made once per file (it reads the file again when it is saved).
+    private var shader: Pair<String, Paint.Shader>? = null
+
+    // What the border is filled with: the shader (handed the colour and the urgent one), the
+    // urgent colour, or the colour — each a colour, a gradient or Hyprland's text
+    // ("rgba(33ccffee) rgba(00ff99ee) 45deg").
+    private fun borderPaint(urgent: Boolean): Paint {
+        val usual = paintOf(confColor()) ?: Paint.solid(borderColor())
+        val urgentPaint = confUrgentColor().takeIf { it.isNotBlank() }?.let(::paintOf)
+        val file = confShader().trim()
+        if (file.isNotEmpty()) {
+            val made = shader?.takeIf { it.first == file }?.second ?: (dev.caulis.core.Paints.file(wm.caulis.file(file)) as Paint.Shader).also { shader = file to it }
+            return made.withColors(usual.firstColor(), (urgentPaint ?: usual).firstColor())
+        }
+        return if (urgent && urgentPaint != null) urgentPaint else usual
+    }
+
+    // A colour or gradient as configured (null for "auto" or a mistake, which is logged once).
+    // (Read once per text, not each frame.)
+    private var badColor: String? = null
+    private val paints = HashMap<String, Paint?>()
+    private fun paintOf(text: String): Paint? {
+        if (text == "auto") return null
+        if (text in paints) return paints[text]
+        if (paints.size > 16) paints.clear()
+        return readPaint(text).also { paints[text] = it }
+    }
+
+    private fun readPaint(text: String): Paint? {
+        runCatching { color(text) }.getOrNull()?.let { return Paint.solid(it) }
+        return try {
+            Paint.parse(text)
+        } catch (e: IllegalArgumentException) {
+            if (badColor != text) {
+                badColor = text
+                log.warn("focus: \"$text\" is no colour: ${e.message}")
+            }
+            null
+        }
     }
 
     // The configured colour, or for "auto" the palette's accent (a little see-through).
     private fun borderColor(): dev.caulis.render.Color {
         val configured = confColor()
-        if (configured != "auto") return runCatching { color(configured) }.getOrElse { color("#88C0D0B0") }
+        if (configured != "auto") return runCatching { color(configured) }.getOrElse { runCatching { Paint.parse(configured).firstColor() }.getOrElse { color("#88C0D0B0") } }
         val dark = wm.caulis.colorSchemeNow == dev.caulis.core.appearance.ColorScheme.DARK
         val accent = wm.barModel.palette?.scheme(dark)?.primary ?: return color("#88C0D0B0")
         return accent.withAlpha(0.8f)

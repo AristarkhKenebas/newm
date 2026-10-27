@@ -177,6 +177,7 @@ class WorkspaceState(
         var r = this
         while (r.unit >= 2.0 && r.viewStates.values.filter { it.isTiled }.all { even(it.i) && even(it.j) && even(it.w) && even(it.h) }) {
             val c = r.copy(i = r.i / 2, j = r.j / 2, size = r.size / 2, sizeOrigin = r.sizeOrigin?.div(2))
+            c.scaleRemembered(0.5)
             c.intermediateRows.clear()
             c.intermediateCols.clear()
             for (v in c.viewStates.values) v.scaledBy(0.5)
@@ -194,11 +195,19 @@ class WorkspaceState(
      */
     fun refined(): WorkspaceState {
         val r = copy(i = i * 2, j = j * 2, size = size * 2, sizeOrigin = sizeOrigin?.times(2))
+        r.scaleRemembered(2.0)
         r.intermediateRows.clear()
         r.intermediateCols.clear()
         for (v in r.viewStates.values) v.scaledBy(2.0)
         r.unit = unit * 2
         return r
+    }
+
+    // Where the view was before the overview and before fullscreen, on a grid [f] times as fine
+    // (they are in tiles too: left as they were, leaving the overview zoomed twice too far).
+    private fun scaleRemembered(f: Double) {
+        stateBeforeOverview = stateBeforeOverview?.let { it.copy(i = it.i * f, j = it.j * f, size = it.size * f, sizeOrigin = it.sizeOrigin?.times(f)) }
+        stateBeforeFullscreen = stateBeforeFullscreen?.let { BeforeFullscreen(it.i * f, it.j * f, it.size * f, it.fi * f, it.fj * f, it.fsize * f) }
     }
 
     fun replacingViewState(view: View, change: ViewState.() -> Unit): WorkspaceState {
@@ -449,7 +458,11 @@ class WorkspaceState(
     }
 
     fun focusingView(view: View): WorkspaceState {
-        val state = viewStates[view.handle] ?: return this
+        // A floating window (a dialog) has no tiles: its window's are brought into view instead
+        // — its own 0, 0 took the view to the wall's corner (IDEA's WakaTime dialog sent one back
+        // to the window there). None tiled: the view stays.
+        val tiled = generateSequence(view) { it.parent }.firstOrNull { viewStates[it.handle]?.isTiled == true } ?: return this
+        val state = viewStates[tiled.handle] ?: return this
         var targetSize = max(max(size, state.w), state.h)
         var targetI = min(i, state.i)
         var targetJ = min(j, state.j)
@@ -592,13 +605,16 @@ class LayoutState(
 
         val orphans = ArrayList<Pair<Int, ViewState>>()
         val handles = layout.workspaces.map { it.handle }.toSet()
+        val orphanWs = workspaceStates.getValue(layout.workspaces[0].handle)
         for (k in workspaceStates.keys.toList()) {
             if (k !in handles) {
-                workspaceStates.getValue(k).viewStates.forEach { (l, s) -> orphans += l to s.copy() }
+                // (In the tiles of the workspace they go to: its grid may be finer or coarser.)
+                val gone = workspaceStates.getValue(k)
+                val f = orphanWs.unit / gone.unit
+                gone.viewStates.forEach { (l, s) -> orphans += l to s.copy().also { if (f != 1.0) it.scaledBy(f) } }
                 workspaceStates.remove(k)
             }
         }
-        val orphanWs = workspaceStates.getValue(layout.workspaces[0].handle)
         for ((k, o) in orphans) orphanWs.viewStates[k] = o
 
         validateStackIndices()
@@ -650,7 +666,7 @@ class LayoutState(
 
     fun validateBars() = workspaceStates.values.forEach { it.validateBars(wm, this) }
 
-    fun validateStackIndices(@Suppress("UNUSED_PARAMETER") movedView: View? = null) = workspaceStates.values.forEach { it.validateStackIndices() }
+    fun validateStackIndices(movedView: View? = null) = workspaceStates.values.forEach { it.validateStackIndices(movedView) }
 
     fun constrain(): LayoutState {
         workspaceStates.values.forEach { it.constrain() }

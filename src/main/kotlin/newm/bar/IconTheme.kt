@@ -112,6 +112,13 @@ object IconTheme {
      * The icon [name] at [size] pixels, as a picture: [done] gets it on the compositor's thread
      * ([post]) — at once when it was loaded before; null when there is none.
      */
+    /** The biggest picture file read (bytes) and picture drawn (pixels): what programs send is not trusted. */
+    const val MAX_FILE_BYTES = 16_000_000L
+    const val MAX_PIXELS = 4096L * 4096
+
+    // The most pictures (and names without one) kept in memory; more, and they are read again.
+    private const val MAX_KEPT = 512
+
     fun load(name: String, size: Int, extraDir: String? = null, post: (() -> Unit) -> Unit, done: (ImageBitmap?) -> Unit) {
         val key = "$name@$size@${extraDir.orEmpty()}"
         pictures[key]?.let { return done(it) }
@@ -123,7 +130,26 @@ object IconTheme {
                 log.trace { "The icon $name cannot be drawn: $e" }
                 null
             }
+            // (Kept for the next time — not without end: each notification's image-path is a new name.)
+            if (pictures.size >= MAX_KEPT) pictures.clear()
+            if (missing.size >= MAX_KEPT) missing.clear()
             if (picture != null) pictures[key] = picture else missing += key
+            post { done(picture) }
+        }
+    }
+
+    /**
+     * A picture [make] makes (from what a program sent: it may take a while), made on the icons'
+     * thread; [done] gets it on the compositor's thread ([post]), null when none was made.
+     */
+    fun make(post: (() -> Unit) -> Unit, make: () -> ImageBitmap?, done: (ImageBitmap?) -> Unit) {
+        worker.execute {
+            val picture = try {
+                make()
+            } catch (e: Exception) {
+                log.trace { "A picture cannot be made: $e" }
+                null
+            }
             post { done(picture) }
         }
     }
@@ -136,12 +162,15 @@ object IconTheme {
     fun loadApp(appId: String, size: Int, post: (() -> Unit) -> Unit, done: (ImageBitmap?) -> Unit) {
         worker.execute {
             val name = AppIcons.iconName(appId)
-            load(name, size, null, post, done)
+            // (On the icons' thread here: a picture loaded before must still reach [done] on the compositor's.)
+            load(name, size, null, post) { picture -> post { done(picture) } }
         }
     }
 
-    /** [file] (PNG or SVG) drawn as a square of [size] pixels. */
+    /** [file] (PNG or SVG) drawn as a square of [size] pixels (null: not a picture newm takes). */
     fun render(file: Path, size: Int): ImageBitmap? {
+        // (A program may name any file — a device, a pipe, a huge one: only ordinary files of a sensible size.)
+        if (!Files.isRegularFile(file) || Files.size(file) > MAX_FILE_BYTES) return null.also { log.trace { "Not drawn (not a picture file of at most ${MAX_FILE_BYTES / 1_000_000} MB): $file" } }
         val bytes = Files.readAllBytes(file)
         val surface = Surface.makeRasterN32Premul(size, size)
         val canvas = surface.canvas
@@ -161,6 +190,8 @@ object IconTheme {
         } else {
             // Made smaller smoothly (through smaller copies of it: a 256 px icon at 40 px came out jagged).
             val image = Image.makeFromEncoded(bytes)
+            // (Its size is read from the header: a picture that unpacks into gigabytes is not drawn.)
+            if (image.width.toLong() * image.height > MAX_PIXELS) return null.also { log.trace { "Not drawn (${image.width}x${image.height}): $file" } }
             canvas.drawImageRect(image, Rect.makeWH(image.width.toFloat(), image.height.toFloat()), Rect.makeWH(size.toFloat(), size.toFloat()),
                 org.jetbrains.skia.FilterMipmap(org.jetbrains.skia.FilterMode.LINEAR, org.jetbrains.skia.MipmapMode.LINEAR), Paint(), true)
         }
@@ -172,7 +203,7 @@ object IconTheme {
      * a square of [size] pixels.
      */
     fun fromArgb(width: Int, height: Int, argb: ByteArray, size: Int): ImageBitmap? {
-        if (width <= 0 || height <= 0 || argb.size < width * height * 4) return null
+        if (width <= 0 || height <= 0 || width.toLong() * height > MAX_PIXELS || argb.size < width * height * 4) return null
         // Skia's N32 here is BGRA (little-endian), premultiplied.
         val pixels = ByteArray(width * height * 4)
         for (p in 0 until width * height) {
@@ -191,6 +222,37 @@ object IconTheme {
         surface.canvas.drawImageRect(image, Rect.makeWH(width.toFloat(), height.toFloat()), Rect.makeWH(size.toFloat(), size.toFloat()), SamplingMode.LINEAR, Paint(), true)
         return surface.makeImageSnapshot().toComposeImageBitmap()
     }
+}
+
+/**
+ * A picture from RGB or RGBA rows ([channels] 3 or 4, [stride] bytes a row: a notification's
+ * image-data), drawn as a square of [size] pixels.
+ */
+fun IconTheme.fromRgba(width: Int, height: Int, stride: Int, channels: Int, rgba: ByteArray, size: Int): ImageBitmap? {
+    // (Counted in Long: a program's numbers may overflow an Int and pass a check they should fail.)
+    if (width <= 0 || height <= 0 || width.toLong() * height > IconTheme.MAX_PIXELS || channels !in 3..4 || stride.toLong() < width.toLong() * channels ||
+        rgba.size.toLong() < stride.toLong() * (height - 1) + width.toLong() * channels) return null
+    // Skia's N32 here is BGRA (little-endian), premultiplied.
+    val pixels = ByteArray(width * height * 4)
+    for (y in 0 until height) for (x in 0 until width) {
+        val at = y * stride + x * channels
+        val r = rgba[at].toInt() and 0xff
+        val g = rgba[at + 1].toInt() and 0xff
+        val b = rgba[at + 2].toInt() and 0xff
+        val a = if (channels == 4) rgba[at + 3].toInt() and 0xff else 255
+        val p = 4 * (y * width + x)
+        pixels[p] = (b * a / 255).toByte()
+        pixels[p + 1] = (g * a / 255).toByte()
+        pixels[p + 2] = (r * a / 255).toByte()
+        pixels[p + 3] = a.toByte()
+    }
+    val image = Image.makeRaster(org.jetbrains.skia.ImageInfo.makeN32Premul(width, height), pixels, width * 4)
+    val surface = Surface.makeRasterN32Premul(size, size)
+    // (Cut to a square from its middle: an avatar is round in its card anyway.)
+    val side = minOf(width, height).toFloat()
+    val src = Rect.makeXYWH((width - side) / 2f, (height - side) / 2f, side, side)
+    surface.canvas.drawImageRect(image, src, Rect.makeWH(size.toFloat(), size.toFloat()), SamplingMode.LINEAR, Paint(), true)
+    return surface.makeImageSnapshot().toComposeImageBitmap()
 }
 
 /** Programs' icons by their app id, from their .desktop files (Icon=). */

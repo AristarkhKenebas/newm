@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val nm = model.network
-    LaunchedEffect(Unit) { nm.refresh(); if (nm.wifiEnabled) nm.scan() }
+    LaunchedEffect(Unit) { nm.refresh(); if (nm.wifiEnabled && confScanOnOpen()) nm.scan() }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Header("Wi-Fi", colors, text) {
             if (nm.wifiEnabled) IconButton(Glyph.REFRESH, colors, spinning = nm.scanning) { nm.scan() }
@@ -221,7 +221,7 @@ internal fun BatteryAndPowerPopup(model: BarModel, popup: Popup, colors: BarColo
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (b != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
             GlyphIcon(Glyph.BATTERY, colors.text, 38.dp, level = b.percent / 100f, bolt = b.plugged,
-                accent = if (b.charging || b.full) colors.accent else if (b.percent <= 20) colors.warning else colors.text)
+                accent = if (b.charging || b.full) colors.accent else if (b.percent <= confBatteryLow()) colors.warning else colors.text)
             Spacer(Modifier.width(12.dp))
             Column {
                 BasicText(tr("${b.percent}%"), style = text.copy(fontSize = 19.sp, fontWeight = FontWeight.SemiBold))
@@ -254,7 +254,10 @@ internal fun BatteryAndPowerPopup(model: BarModel, popup: Popup, colors: BarColo
 /**
  * Quick settings, as Android 16 has them: the brightness, tall, on top; wide tiles (Wi-Fi,
  * Bluetooth, caffeine: the icon switches it, the words open more) and small round ones (dark
- * look, a screenshot, the clipboard, colours, keys, power saving). On: filled with the accent.
+ * look, a screenshot, the clipboard, colours, keys, do not disturb, power saving). On: filled with the accent.
+ * Which tiles, in which order, and tiles of one's own: quickSettings { tiles; tile(...) { } }.
+ * Two wide ones make a row; a wide one alone shares its row with up to two small ones; other
+ * small ones go five to a row.
  */
 @Composable
 internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
@@ -279,7 +282,51 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
         // (A moment later: not the menu in a screenshot, nor its keys.)
         wm.caulis.after(220) { action() }
     }
-    Column(Modifier.animateContentSize(androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
+    // Tiles of one's own: whether each is on (a command's answer comes later), asked again after a click.
+    val custom = confQuickCustom()
+    var asked by remember { mutableStateOf(0) }
+    val commandSays = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(asked) {
+        for ((name, spec) in custom) {
+            val check = (spec as? Map<*, *>)?.get("is_on") as? String ?: continue
+            inBackground { val on = commandSucceeds(check); wm.caulis.post { commandSays[name] = on } }
+        }
+    }
+    fun customOn(name: String): Boolean {
+        @Suppress("UNUSED_VARIABLE") val again = asked
+        return when (val check = (custom[name] as? Map<*, *>)?.get("is_on")) {
+            null -> false
+            is String -> commandSays[name] == true
+            else -> runHook(check, null, { null }, "quick_settings.$name.is_on") == true
+        }
+    }
+    fun customClick(name: String) {
+        runAction((custom[name] as? Map<*, *>)?.get("on_click"), wm, "quick_settings.$name.on_click")
+        asked++
+        // (A command takes a moment: asked again a little later too.)
+        wm.caulis.after(600) { asked++ }
+    }
+    val tiles = confQuickTiles().filter { name ->
+        when (name) {
+            "power_saver" -> "power-saver" in profiles.profiles
+            in QUICK_TILES -> true
+            else -> name in custom
+        }
+    }
+    fun wide(name: String) = name in setOf("wifi", "bluetooth", "caffeine") || (name !in QUICK_TILES && (custom[name] as? Map<*, *>)?.get("wide") == true)
+    // The rows: two wide tiles; a wide one and up to two small ones; up to five small ones.
+    val rows = ArrayList<List<String>>()
+    var i = 0
+    while (i < tiles.size) {
+        val row = ArrayList<String>()
+        if (wide(tiles[i])) {
+            row += tiles[i++]
+            if (i < tiles.size && wide(tiles[i])) row += tiles[i++]
+            else while (i < tiles.size && !wide(tiles[i]) && row.size < 3) row += tiles[i++]
+        } else while (i < tiles.size && !wide(tiles[i]) && row.size < 5) row += tiles[i++]
+        rows += row
+    }
+    Column(Modifier.animateContentSize(newm.NewmAnimations.spec("popupsResize", 260, newm.NewmAnimations.FAST_OUT_SLOW_IN)),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The screen's brightness (here, not with the battery: a computer without one has it too).
         model.status.brightness?.let { level ->
@@ -287,55 +334,87 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
             LevelSlider(Glyph.BRIGHTNESS, level / 100f, colors, text, "$level%", Modifier.padding(vertical = 2.dp)) { setBrightness(model, it) }
             Spacer(Modifier.height(2.dp))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val ssid = nm.networks.firstOrNull { it.active }?.ssid
-            WideTile(if (nm.wifiEnabled) "wifi" else "wifi_off", "Wi-Fi", when {
-                nm.wired -> tr("Wired connection")
-                !nm.wifiEnabled -> tr("Off")
-                ssid != null -> ssid
-                else -> tr("Not connected")
-            }, nm.wifiEnabled, colors, text, Modifier.weight(1f), onOpen = { model.toggle(PopupKind.NETWORK, popup.bar, popup.anchorX) }) { nm.setWifi(!nm.wifiEnabled) }
-            val device = bt.devices.firstOrNull { it.connected }?.name
-            WideTile(if (bt.powered) "bluetooth" else "bluetooth_disabled", "Bluetooth", when {
-                !bt.powered -> tr("Off")
-                device != null -> device
-                else -> tr("On")
-            }, bt.powered, colors, text, Modifier.weight(1f), onOpen = { model.toggle(PopupKind.BLUETOOTH, popup.bar, popup.anchorX) }) { bt.switchPower(!bt.powered) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            WideTile("coffee", "Caffeine", when {
-                !caffeine -> tr("Off")
-                until == Long.MAX_VALUE -> tr("On")
-                else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
-            }, caffeine, colors, text, Modifier.weight(1f), onOpen = { popup.expanded = if (popup.expanded == "caffeine") null else "caffeine" }) { wm.caffeine(if (caffeine) null else 0) }
-            SmallTile(if (dark) "dark_mode" else "light_mode", dark, colors, Modifier.weight(0.5f), height = 56.dp) {
-                newm.ColorChoice.choose(wm.caulis, if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK)
-                wm.caulis.applySettings()
+        for (row in rows) {
+            val withWide = row.any(::wide)
+            // (Beside a wide tile small ones are half as wide and as tall as it.)
+            val smallWeight = if (withWide) 0.5f else 1f
+            val smallHeight = if (withWide) 56.dp else 48.dp
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (name in row) when (name) {
+                    "wifi" -> {
+                        val ssid = nm.networks.firstOrNull { it.active }?.ssid
+                        WideTile(model, if (nm.wifiEnabled) "wifi" else "wifi_off", "Wi-Fi", when {
+                            nm.wired -> tr("Wired connection")
+                            !nm.wifiEnabled -> tr("Off")
+                            ssid != null -> ssid
+                            else -> tr("Not connected")
+                        }, nm.wifiEnabled, colors, text, Modifier.weight(1f), onOpen = { model.toggle(PopupKind.NETWORK, popup.bar, popup.anchorX) }) { nm.setWifi(!nm.wifiEnabled) }
+                    }
+                    "bluetooth" -> {
+                        val device = bt.devices.firstOrNull { it.connected }?.name
+                        WideTile(model, if (bt.powered) "bluetooth" else "bluetooth_disabled", "Bluetooth", when {
+                            !bt.powered -> tr("Off")
+                            device != null -> device
+                            else -> tr("On")
+                        }, bt.powered, colors, text, Modifier.weight(1f), onOpen = { model.toggle(PopupKind.BLUETOOTH, popup.bar, popup.anchorX) }) { bt.switchPower(!bt.powered) }
+                    }
+                    "caffeine" -> WideTile(model, "coffee", "Caffeine", when {
+                        !caffeine -> tr("Off")
+                        until == Long.MAX_VALUE -> tr("On")
+                        else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))
+                    }, caffeine, colors, text, Modifier.weight(1f), onOpen = { popup.expanded = if (popup.expanded == "caffeine") null else "caffeine" }) { wm.caffeine(if (caffeine) null else 0) }
+                    "dark" -> SmallTile(model, if (dark) "dark_mode" else "light_mode", dark, colors, Modifier.weight(smallWeight), height = smallHeight) {
+                        newm.ColorChoice.choose(wm.caulis, if (dark) dev.caulis.core.appearance.ColorScheme.LIGHT else dev.caulis.core.appearance.ColorScheme.DARK)
+                        wm.caulis.applySettings()
+                    }
+                    "screenshot" -> SmallTile(model, "screenshot_region", false, colors, Modifier.weight(smallWeight), height = smallHeight) { closeThen { wm.screenshot() } }
+                    "clipboard" -> SmallTile(model, "content_paste", false, colors, Modifier.weight(smallWeight), height = smallHeight) { closeThen { wm.toggleClipboard() } }
+                    "colors" -> SmallTile(model, "palette", false, colors, Modifier.weight(smallWeight), height = smallHeight) { model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX) }
+                    "keys" -> SmallTile(model, "keyboard", false, colors, Modifier.weight(smallWeight), height = smallHeight) { closeThen { wm.toggleKeyHelp() } }
+                    // Do not disturb: no notifications' cards (the history behind the bell keeps them).
+                    "dnd" -> SmallTile(model, "do_not_disturb_on", model.notifications.doNotDisturb, colors, Modifier.weight(smallWeight), height = smallHeight) {
+                        model.notifications.setDoNotDisturb(!model.notifications.doNotDisturb)
+                    }
+                    // Power saving, and back to the profile it came from.
+                    "power_saver" -> {
+                        val saving = profiles.active == "power-saver"
+                        SmallTile(model, "energy_savings_leaf", saving, colors, Modifier.weight(smallWeight), height = smallHeight) { profiles.toggleSaver() }
+                    }
+                    else -> (custom[name] as? Map<*, *>)?.let { spec ->
+                        val icon = spec["icon"] as? String ?: "settings"
+                        val on = customOn(name)
+                        if (wide(name)) WideTile(model, icon, (spec["label"] as? String) ?: name, tr(if (on) "On" else "Off"), on, colors, text, Modifier.weight(1f)) { customClick(name) }
+                        else SmallTile(model, icon, on, colors, Modifier.weight(smallWeight), height = smallHeight) { customClick(name) }
+                    }
+                }
             }
-            SmallTile("screenshot_region", false, colors, Modifier.weight(0.5f), height = 56.dp) { closeThen { wm.screenshot() } }
-        }
-        if (popup.expanded == "caffeine") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val left = if (caffeine && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
-            for ((minutes, label) in listOf(30 to "30 min", 60 to "1 h", 120 to "2 h", 0 to "∞")) {
-                val chosen = caffeine && if (minutes == 0) until == Long.MAX_VALUE else left in (minutes / 2 + 1)..minutes && (minutes != 30 || left <= 30)
-                ChoiceChip(label, chosen, colors, text, Modifier.weight(1f)) { wm.caffeine(if (chosen) null else minutes) }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SmallTile("content_paste", false, colors, Modifier.weight(1f)) { closeThen { wm.toggleClipboard() } }
-            SmallTile("palette", false, colors, Modifier.weight(1f)) { model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX) }
-            SmallTile("keyboard", false, colors, Modifier.weight(1f)) { closeThen { wm.toggleKeyHelp() } }
-            if ("power-saver" in profiles.profiles) {
-                val saving = profiles.active == "power-saver"
-                SmallTile("energy_savings_leaf", saving, colors, Modifier.weight(1f)) { profiles.use(if (saving) "balanced" else "power-saver") }
+            // The caffeine's times, below its row.
+            if ("caffeine" in row && popup.expanded == "caffeine") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val left = if (caffeine && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
+                // caffeine { choices }: minutes, 0 for until turned off; the one chosen is the shortest that still covers what is left.
+                val choices = confCaffeineChoices().filter { it >= 0 }.distinct()
+                val timed = choices.filter { it > 0 }.sorted()
+                for (minutes in choices) {
+                    val shorter = timed.lastOrNull { it < minutes } ?: 0
+                    val chosen = caffeine && if (minutes == 0) until == Long.MAX_VALUE else left in (shorter + 1)..minutes
+                    ChoiceChip(caffeineLabel(minutes), chosen, colors, text, Modifier.weight(1f)) { wm.caffeine(if (chosen) null else minutes) }
+                }
             }
         }
     }
 }
 
+// A caffeine time's words: "30 min", "1 h", "∞" (until turned off).
+private fun caffeineLabel(minutes: Int): String = when {
+    minutes <= 0 -> "∞"
+    minutes % 60 == 0 -> "${minutes / 60} h"
+    minutes > 60 -> "${minutes / 60} h ${minutes % 60} min"
+    else -> "$minutes min"
+}
+
 // A wide tile: its icon in a rounded square (the switch), its name and state (more, on a click).
 @Composable
-private fun WideTile(symbol: String, title: String, state: String, on: Boolean, colors: BarColors, text: TextStyle, modifier: Modifier,
+private fun WideTile(model: BarModel, symbol: String, title: String, state: String, on: Boolean, colors: BarColors, text: TextStyle, modifier: Modifier,
                      onOpen: (() -> Unit)? = null, onToggle: () -> Unit) {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
@@ -344,15 +423,15 @@ private fun WideTile(symbol: String, title: String, state: String, on: Boolean, 
             on -> colors.accent.copy(alpha = if (hovered) 0.26f else 0.18f)
             hovered -> colors.text.copy(alpha = 0.11f)
             else -> colors.text.copy(alpha = 0.07f)
-        }, androidx.compose.animation.core.tween(160),
+        }, newm.NewmAnimations.spec("toggles", 160),
     )
-    val square by androidx.compose.animation.animateColorAsState(if (on) colors.accent else colors.text.copy(alpha = 0.10f), androidx.compose.animation.core.tween(160))
+    val square by androidx.compose.animation.animateColorAsState(if (on) colors.accent else colors.text.copy(alpha = 0.10f), newm.NewmAnimations.spec("toggles", 160))
     // (Square-ish with soft corners, as a phone's quick settings.)
     Row(modifier.height(56.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(bg).hoverable(source)
         .onClick(onClick = onOpen ?: onToggle).padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.foundation.layout.Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(square)
             .onClick(onClick = onToggle), contentAlignment = Alignment.Center) {
-            SymbolIcon(symbol, if (on) onAccent(colors) else colors.text, 20.dp)
+            NamedIcon(symbol, if (on) onAccent(colors) else colors.text, 20.dp, model)
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
@@ -366,7 +445,7 @@ private fun WideTile(symbol: String, title: String, state: String, on: Boolean, 
 
 // A small tile: a square with soft corners and its icon alone, filled with the accent when on.
 @Composable
-private fun SmallTile(symbol: String, on: Boolean, colors: BarColors, modifier: Modifier, height: androidx.compose.ui.unit.Dp = 48.dp, onClick: () -> Unit) {
+private fun SmallTile(model: BarModel, symbol: String, on: Boolean, colors: BarColors, modifier: Modifier, height: androidx.compose.ui.unit.Dp = 48.dp, onClick: () -> Unit) {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     val bg by androidx.compose.animation.animateColorAsState(
@@ -374,11 +453,11 @@ private fun SmallTile(symbol: String, on: Boolean, colors: BarColors, modifier: 
             on -> if (hovered) colors.accent.copy(alpha = 0.88f) else colors.accent
             hovered -> colors.text.copy(alpha = 0.11f)
             else -> colors.text.copy(alpha = 0.07f)
-        }, androidx.compose.animation.core.tween(160),
+        }, newm.NewmAnimations.spec("toggles", 160),
     )
     androidx.compose.foundation.layout.Box(modifier.height(height).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).background(bg)
         .hoverable(source).onClick(onClick = onClick), contentAlignment = Alignment.Center) {
-        SymbolIcon(symbol, if (on) onAccent(colors) else colors.text, 22.dp)
+        NamedIcon(symbol, if (on) onAccent(colors) else colors.text, 22.dp, model)
     }
 }
 

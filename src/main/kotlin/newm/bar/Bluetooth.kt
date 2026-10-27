@@ -3,7 +3,7 @@ package newm.bar
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import dev.caulis.core.dbus.DBusConnection
+import dev.caulis.core.dbus.DBusScope
 import dev.caulis.core.dbus.DBusError
 import dev.caulis.core.dbus.DBusMethod
 import dev.caulis.core.dbus.ObjectPath
@@ -60,7 +60,7 @@ class Bluetooth(private val caulis: Caulis) {
     // The devices connected at the last look (null: not looked yet, nothing to tell).
     private var connectedBefore: Set<String>? = null
 
-    private var bus: DBusConnection? = null
+    private var bus: DBusScope? = null
     private var bluez: NameWatch? = null
     private var adapter: String? = null
     private var refreshQueued = false
@@ -76,9 +76,9 @@ class Bluetooth(private val caulis: Caulis) {
         val bus = caulis.systemBus ?: return
         this.bus = bus
         // Only BlueZ's own signals (another program on the bus could send the same ones).
-        bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesAdded") { m -> if (bluez?.sent(m) == true) refreshSoon() }
-        bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesRemoved") { m -> if (bluez?.sent(m) == true) refreshSoon() }
-        bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m -> if (bluez?.sent(m) == true && m.path?.startsWith("/org/bluez") == true) refreshSoon() }
+        bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesAdded", sender = "org.bluez") { m -> if (bluez?.sent(m) == true) refreshSoon() }
+        bus.onSignal("org.freedesktop.DBus.ObjectManager", "InterfacesRemoved", sender = "org.bluez") { m -> if (bluez?.sent(m) == true) refreshSoon() }
+        bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged", sender = "org.bluez") { m -> if (bluez?.sent(m) == true && m.path?.startsWith("/org/bluez") == true) refreshSoon() }
         // BlueZ may start later than newm, or start again: the bar follows it.
         bluez = NameWatch(bus, BLUEZ) { owner ->
             if (owner == null) {
@@ -215,7 +215,7 @@ class Bluetooth(private val caulis: Caulis) {
     // newm's pairing agent: "just works" pairings the bar started; everything else refused.
     private var agentExported = false
 
-    private fun registerAgent(bus: DBusConnection) {
+    private fun registerAgent(bus: DBusScope) {
         if (agentExported) return registerWithBluez(bus)
         agentExported = true
         fun ours(path: Any?): Boolean = (path as? ObjectPath)?.value == pairing
@@ -239,7 +239,7 @@ class Bluetooth(private val caulis: Caulis) {
     }
 
     // Tells BlueZ of the agent (again after BlueZ started again: it forgets it).
-    private fun registerWithBluez(bus: DBusConnection) {
+    private fun registerWithBluez(bus: DBusScope) {
         bus.call(BLUEZ, ObjectPath("/org/bluez"), "org.bluez.AgentManager1", "RegisterAgent", "os", listOf(ObjectPath(AGENT_PATH), "NoInputNoOutput")) { reply ->
             if (reply.isError) log.trace { "Bluetooth agent: ${errorOf(reply)}" } else log.info { "Bluetooth pairing agent registered" }
         }

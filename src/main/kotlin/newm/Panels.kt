@@ -46,6 +46,7 @@ import dev.caulis.core.DrawingLevel
 import dev.caulis.core.Monitor
 import dev.caulis.geometry.Rect
 import dev.caulis.log.Logger
+import newm.bar.tr
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -57,15 +58,49 @@ private val log = Logger("panels")
 private val confLockH = configuredValue("panels.lock.h", 0.6)
 private val confLockW = configuredValue("panels.lock.w", 0.7)
 private val confLockCornerRadius = configuredValue("panels.lock.corner_radius", 50.0)
-private val confLauncherH = configuredValue("panels.launcher.h", 0.8)
-private val confLauncherW = configuredValue("panels.launcher.w", 0.8)
-private val confLauncherCornerRadius = configuredValue("panels.launcher.corner_radius", 0.0)
+// (panels.launcher.w, h, corner_radius: a launcher program's, see View.kt.) newm's own launcher:
+// launcher { width = 720; height = 560; top = 0.16 } — pixels at most, and its top as a part of the screen.
+private val confLauncherWidth = configuredValue("panels.launcher.width", 720)
+private val confLauncherHeight = configuredValue("panels.launcher.height", 560)
+private val confLauncherTop = configuredValue("panels.launcher.top", 0.16)
 
-private val panelBackground = Color(0x2E, 0x34, 0x40, 0xEE)
-private val panelText = Color(0xEC, 0xEF, 0xF4)
-private val panelDim = Color(0xD8, 0xDE, 0xE9, 0x99)
-private val panelAccent = Color(0x88, 0xC0, 0xD0)
-private val fieldBackground = Color(0x3B, 0x42, 0x52)
+// lock { background; text; accent } ("#RRGGBB[AA]"; unset: the bar's colours) and its clock { clock; date }.
+private val confLockBackground = configuredValue("panels.lock.background", "")
+private val confLockText = configuredValue("panels.lock.text", "")
+private val confLockAccent = configuredValue("panels.lock.accent", "")
+private val confLockClock = configuredValue<String?>("panels.lock.clock", null)
+private val confLockDate = configuredValue("panels.lock.date", "EEEE, d MMMM")
+// The top-level timeFormat (time_format), the lock screen's clock unless lock { clock } says otherwise.
+private val confTimeFormat = configuredValue("time_format", "HH:mm")
+// lock { showOnLock = listOf("clock", "battery") }: what the lock screen shows besides the password.
+private val confShowOnLock = configuredValue("panels.lock.show_on_lock", listOf("clock", "battery"))
+
+// A colour of the configuration ("#RRGGBB" or "#RRGGBBAA"), or null (unset, or not a colour: told once).
+private val badColours = HashSet<String>()
+
+private fun colourOf(text: String): Color? {
+    if (text.isBlank()) return null
+    val hex = text.trim().removePrefix("#")
+    val v = hex.toLongOrNull(16)
+    if (v == null || hex.length != 6 && hex.length != 8) {
+        if (badColours.add(text)) log.warn("\"$text\" is not a colour (\"#RRGGBB\" or \"#RRGGBBAA\"): the bar's is used")
+        return null
+    }
+    return if (hex.length == 6) Color(0xFF000000 or v) else Color(((v and 0xFF) shl 24) or (v ushr 8))
+}
+
+// A date pattern of the configuration, or (a mistake in it) null: told once.
+private val badPatterns = HashSet<String>()
+
+private fun formatted(now: LocalDateTime, pattern: String): String = try {
+    if (pattern.isEmpty()) "" else now.format(DateTimeFormatter.ofPattern(pattern))
+} catch (e: IllegalArgumentException) {
+    if (badPatterns.add(pattern)) log.warn("\"$pattern\" is not a date pattern of java.time: ${e.message}")
+    ""
+}
+
+/** The lock screen's colours: its own (lock { }), else the bar's, light or dark as everything. */
+private data class LockColors(val background: Color, val text: Color, val dim: Color, val accent: Color, val field: Color)
 
 /**
  * newm's own lock screen and launcher (newm-panel-basic was a program of its own, in a
@@ -94,9 +129,22 @@ class Panels(private val wm: Layout) {
         // (Never over the lock screen: neither drawn nor clickable there.)
         if (wm.layoutDown.launcherPerc <= 0.0 || m !== monitorShown() || wm.lockShown()) return null
         val a = m.area
-        val w = minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
-        val h = minOf(560, (a.height * 0.62).toInt())
-        return Rect(a.x + (a.width - w) / 2, a.y + (a.height * 0.16).toInt(), w, h)
+        val (w, h) = launcherSize(m)
+        val top = confLauncherTop().coerceIn(0.0, 1.0)
+        // (Never past the screen's bottom.)
+        val y = minOf(a.y + (a.height * top).toInt(), a.y + a.height - h).coerceAtLeast(a.y)
+        return Rect(a.x + (a.width - w) / 2, y, w, h)
+    }
+
+    // The launcher's size on [m]: 720 x 560, smaller on a small screen (60 % and 62 % of it at
+    // most); launcher { width, height } as given (within the screen).
+    private fun launcherSize(m: Monitor): Pair<Int, Int> {
+        val a = m.area
+        val w = if (Config.lookup("panels.launcher.width") != null) confLauncherWidth().coerceIn(200, a.width)
+        else minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
+        val h = if (Config.lookup("panels.launcher.height") != null) confLauncherHeight().coerceIn(120, a.height)
+        else minOf(560, (a.height * 0.62).toInt())
+        return w to h
     }
 
     // --- the lock screen
@@ -113,19 +161,30 @@ class Panels(private val wm: Layout) {
         val kind = req.data["kind"]
         message = when {
             kind == "auth_request_user" -> "Who are you?"
+            // (What PAM said: the account locked, the check taking too long, PAM missing.)
+            req.data["error"] is String -> req.data["error"] as String
             previous != null && previous.data["kind"] == "auth_request_cred" -> "That was not it. Again:"
-            else -> (req.data["message"] as String?)?.takeIf { it != "Password?" } ?: ""
+            else -> (req.data["message"] as? String)?.takeIf { it != "Password?" } ?: ""
         }
     }
+
+    /** Something keeps the password from being checked at all: said on the lock screen. */
+    fun authProblem(text: String) {
+        request = null
+        message = text
+    }
+
+    /** The widget Caulis locks the session with (newm's lock screen; with a lock panel program, it stays hidden). */
+    fun lockScreenWidget(): ComposeWidget? = lockWidget
 
     /** The lock screen gets the keyboard (and newm's own and Caulis's keys stop meanwhile). */
     fun locked() {
         lockWidget?.let { wm.caulis.desktop.focusWidget(it) }
-        message = ""
     }
 
     fun unlocked() {
         request = null
+        message = ""
         if (wm.caulis.desktop.keyboardWidget === lockWidget) wm.caulis.desktop.focusWidget(null)
     }
 
@@ -159,9 +218,7 @@ class Panels(private val wm: Layout) {
     fun prewarmLauncher() {
         val widget = launcherWidget ?: return
         val m = wm.caulis.desktop.monitors.firstOrNull() ?: return
-        val a = m.area
-        val w = minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
-        val h = minOf(560, (a.height * 0.62).toInt())
+        val (w, h) = launcherSize(m)
         widget.prewarm(m, w, h)
     }
 
@@ -169,7 +226,8 @@ class Panels(private val wm: Layout) {
     val ownLauncher: Boolean get() = wm.panels().none { it.panel == "launcher" }
 
     /** True while newm's own lock screen (not a panel program) is in use. */
-    val ownLock: Boolean get() = wm.panels().none { it.panel == "lock" }
+    // (Also when a lock panel window is still about but its program is not running: no one else to take the password.)
+    val ownLock: Boolean get() = wm.panels().none { it.panel == "lock" } || wm.panelLauncher.pidOf("lock") == null
 
     fun start() {
         val desktop = wm.caulis.desktop
@@ -183,20 +241,20 @@ class Panels(private val wm: Layout) {
             desktop, post,
             place = { m -> if (ownLauncher) launcherArea(m) else null },
             level = DrawingLevel.ON_TOP, takesKeyboard = true,
-            // Coming and going with newm's launcher animation: see-through, smaller, a little higher.
+            // Coming and going with newm's launcher animation: see-through, smaller, a little higher
+            // (along the curve of the animation "launcher", fast at first and gently at the end).
             appearance = { _ ->
-                val p = wm.layoutDown.launcherPerc.toFloat().coerceIn(0f, 1f)
-                val e = 1f - (1f - p) * (1f - p) * (1f - p)
+                val e = wm.layoutDown.launcherPerc.toFloat().coerceIn(0f, 1f)
                 if (e >= 1f) dev.caulis.compose.WidgetLook.SHOWN else dev.caulis.compose.WidgetLook(alpha = e, scale = 0.94f + 0.06f * e, dy = (1f - e) * -16f)
             },
+            // A click beside the launcher closes it (and goes no further).
+            onPressOutside = { _, _, _ ->
+                if (ownLauncher && wm.overlay is LauncherOverlay && wm.layoutDown.launcherPerc > 0.5) {
+                    wm.exitOverlay()
+                    true
+                } else false
+            },
         ) { LauncherPanel(wm, apps, opened, launcherClosing) }
-        // A click beside the launcher closes it (and goes no further).
-        launcher.onPressOutside = { _, _, _ ->
-            if (ownLauncher && wm.overlay is LauncherOverlay && wm.layoutDown.launcherPerc > 0.5) {
-                wm.exitOverlay()
-                true
-            } else false
-        }
         lockWidget = lock
         launcherWidget = launcher
         wm.caulis.addWidget(lock)
@@ -204,11 +262,24 @@ class Panels(private val wm: Layout) {
     }
 
     @Composable
-    private fun Panel(radius: Double, content: @Composable () -> Unit) {
+    private fun Panel(radius: Double, background: Color, content: @Composable () -> Unit) {
         Box(
-            Modifier.fillMaxSize().background(panelBackground, RoundedCornerShape(radius.dp)).padding(32.dp),
+            Modifier.fillMaxSize().background(background, RoundedCornerShape(radius.dp)).padding(32.dp),
             contentAlignment = Alignment.Center,
         ) { content() }
+    }
+
+    // lock { background, text, accent } over the bar's colours.
+    private fun lockColors(): LockColors {
+        val bar = wm.barModel.colorsNow()
+        val text = colourOf(confLockText()) ?: bar.text
+        return LockColors(
+            background = colourOf(confLockBackground()) ?: bar.island.copy(alpha = 0.93f),
+            text = text,
+            dim = if (confLockText().isBlank()) bar.dim else text.copy(alpha = 0.6f),
+            accent = colourOf(confLockAccent()) ?: bar.accent,
+            field = text.copy(alpha = 0.08f),
+        )
     }
 
     @Composable
@@ -224,15 +295,28 @@ class Panels(private val wm: Layout) {
         val focus = remember { FocusRequester() }
         val req = request
         LaunchedEffect(req) { runCatching { focus.requestFocus() } }
-        Panel(confLockCornerRadius()) {
+        val c = lockColors()
+        val panelText = c.text
+        val panelDim = c.dim
+        val panelAccent = c.accent
+        val fieldBackground = c.field
+        Panel(confLockCornerRadius(), c.background) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                BasicText(now.format(DateTimeFormatter.ofPattern("HH:mm")), style = TextStyle(color = panelText, fontSize = 72.sp, fontWeight = FontWeight.Light))
-                BasicText(now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), style = TextStyle(color = panelDim, fontSize = 18.sp))
+                val shows = confShowOnLock().map { it.lowercase() }
+                val clock = if ("clock" in shows) formatted(now, confLockClock() ?: confTimeFormat()) else ""
+                val date = if ("clock" in shows) formatted(now, confLockDate()) else ""
+                if (clock.isNotEmpty()) BasicText(clock, style = TextStyle(color = panelText, fontSize = 72.sp, fontWeight = FontWeight.Light))
+                if (date.isNotEmpty()) BasicText(date, style = TextStyle(color = panelDim, fontSize = 18.sp))
+                // The battery, if there is one (text only: nothing here but the password field takes input).
+                if ("battery" in shows) wm.barModel.status.battery?.let { b ->
+                    Spacer(Modifier.height(6.dp))
+                    BasicText("${b.percent} %${if (b.charging) " ⚡" else ""}", style = TextStyle(color = panelDim, fontSize = 14.sp))
+                }
                 Spacer(Modifier.height(40.dp))
                 if (req?.data?.get("kind") == "auth_request_user") {
                     @Suppress("UNCHECKED_CAST")
                     val users = req.data["users"] as? List<String> ?: emptyList()
-                    BasicText(message, style = TextStyle(color = panelDim, fontSize = 14.sp))
+                    BasicText(tr(message), style = TextStyle(color = panelDim, fontSize = 14.sp))
                     Spacer(Modifier.height(12.dp))
                     for (user in users) {
                         BasicText(
@@ -263,7 +347,7 @@ class Panels(private val wm: Layout) {
                         cursorBrush = SolidColor(panelAccent),
                     )
                     Spacer(Modifier.height(12.dp))
-                    BasicText(if (req == null && message.isEmpty()) "" else message, style = TextStyle(color = panelDim, fontSize = 14.sp))
+                    BasicText(if (req == null && message.isEmpty()) "" else tr(message), style = TextStyle(color = panelDim, fontSize = 14.sp))
                 }
             }
         }
@@ -278,7 +362,11 @@ class Panels(private val wm: Layout) {
 }
 
 /** A program as the desktop knows it (a .desktop file): its name, what it says, how to start it. */
-data class DesktopApp(val name: String, val comment: String, val command: String, val keywords: String, val icon: String = "", val id: String = "") {
+data class DesktopApp(
+    val name: String, val comment: String, val command: String, val keywords: String, val icon: String = "", val id: String = "",
+    /** An entry of the configuration (launcher { entries { } }): what it does instead of a command. */
+    val run: ((Layout) -> Unit)? = null,
+) {
     companion object {
         /** The programs installed (applications folders of XDG_DATA_HOME and XDG_DATA_DIRS; the user's first). */
         fun installed(): List<DesktopApp> {

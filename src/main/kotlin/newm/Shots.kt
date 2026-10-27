@@ -37,7 +37,7 @@ private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 internal class Shots(private val wm: Layout) {
     private val shots: Screenshots = wm.caulis.screenshots {
         // (No keys of Caulis's own: newm's keys call these.)
-        keys(choose = null, screen = null, window = null)
+        keys(choose = null, screen = null, window = null, selective = null)
         notify = false
         onTaken = { path ->
             if (confToast()) wm.caulis.post {
@@ -70,7 +70,7 @@ internal class Shots(private val wm: Layout) {
             else -> runCatching { dev.caulis.render.Color.hex(bg) }.getOrNull()
         }
         shots.fileName = confFileName()
-        shots.format = confFormat()
+        shots.format = dev.caulis.screenshot.ShotFormat.parse(confFormat()) ?: dev.caulis.screenshot.ShotFormat.PNG.also { log.warn("screenshots.format \"${confFormat()}\" is not png or jpg: png") }
         shots.jpegQuality = confQuality().coerceIn(10, 100) / 100f
         shots.then = confThen()
         shots.style = style()
@@ -80,12 +80,19 @@ internal class Shots(private val wm: Layout) {
     private fun style(): dev.caulis.screenshot.ScreenshotStyle {
         val c = wm.barModel.colorsNow()
         fun of(x: androidx.compose.ui.graphics.Color, alpha: Float = x.alpha) = dev.caulis.render.Color(x.red, x.green, x.blue, alpha)
-        val words = listOf("Area", "Window", "Screen", "Pointer", "Timer", "Capture", "%s s", "Drag to choose a part first", "Point at a window first",
-            "No window has the focus", "Screenshot in %s", "Windows, whole", "Move and resize the area", "A new area each time", "Pointer: in the picture",
-            "Pointer: left out", "Timer: %s s", "Timer: off", "Close", "1 window", "%s windows", "Drag over windows or click them first")
+        val d = dev.caulis.screenshot.ScreenshotWords()
+        val tr: (String) -> String = { newm.bar.tr(it) }
+        val words = dev.caulis.screenshot.ScreenshotWords(
+            area = tr(d.area), window = tr(d.window), screen = tr(d.screen), windows = tr(d.windows), adjustArea = tr(d.adjustArea),
+            newArea = tr(d.newArea), pointerIn = tr(d.pointerIn), pointerOut = tr(d.pointerOut), pointerNotHere = tr(d.pointerNotHere),
+            timer = tr(d.timer), timerOff = tr(d.timerOff), capture = tr(d.capture), close = tr(d.close), oneWindow = tr(d.oneWindow),
+            manyWindows = tr(d.manyWindows), dragFirst = tr(d.dragFirst), pointFirst = tr(d.pointFirst), pickFirst = tr(d.pickFirst),
+            noFocusedWindow = tr(d.noFocusedWindow), hiddenWindow = tr(d.hiddenWindow), countdown = tr(d.countdown), title = tr(d.title),
+            savedTo = tr(d.savedTo), copied = tr(d.copied), notSaved = tr(d.notSaved),
+        )
         return dev.caulis.screenshot.ScreenshotStyle(
             background = of(c.island, 0.96f), text = of(c.text), dim = of(c.dim), border = of(c.edge), accent = of(c.accent),
-            onAccent = of(newm.bar.onAccent(c)), cornerRadius = 18f, labels = words.associateWith { newm.bar.tr(it) },
+            onAccent = of(newm.bar.onAccent(c)), cornerRadius = 18f, words = words,
         )
     }
 

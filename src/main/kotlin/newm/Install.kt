@@ -82,11 +82,15 @@ fun installSession(): Int {
 // (A class for the resources.)
 private object Install
 
+// terminal = "foot" (top level): the terminal newm opens.
+private val confTerminal = configuredValue("terminal", "")
+
 /**
- * The terminal to open: $TERMINAL, else the first of the usual ones that is installed
- * (newm used to expect alacritty).
+ * The terminal to open: the configuration's (terminal = "foot"), else $TERMINAL, else the
+ * first of the usual ones that is installed (newm used to expect alacritty).
  */
-fun defaultTerminal(): String = System.getenv("TERMINAL")?.takeIf { it.isNotBlank() }
+fun defaultTerminal(): String = confTerminal().takeIf { it.isNotBlank() }
+    ?: System.getenv("TERMINAL")?.takeIf { it.isNotBlank() }
     ?: listOf("alacritty", "foot", "kitty", "wezterm", "ghostty", "gnome-terminal", "konsole", "xfce4-terminal", "xterm").firstOrNull(::onPath)
     ?: "alacritty"
 
@@ -102,7 +106,7 @@ fun sessionHint(): String? {
     } catch (_: Exception) {
         false
     }
-    return if (installed) null else "To choose newm at login (ly, SDDM, GDM): run  newm install-session  in a terminal."
+    return if (installed) null else newm.bar.tr("To choose newm at login (ly, SDDM, GDM): run  newm install-session  in a terminal.")
 }
 
 const val USAGE = """newm — a Wayland compositor: windows on an endless wall, made for touchpads.

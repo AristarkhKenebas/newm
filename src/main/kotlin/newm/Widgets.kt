@@ -244,7 +244,7 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
 
     private fun state(s: LayoutState) = BackgroundState(s, s.workspaceState(workspace), size, output, monitor.scale)
 
-    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double, curve: dev.caulis.core.Curve) {
         if (preventAnim) return
         animCaught = -dt
         target = state(newState)
@@ -269,8 +269,10 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
                 animCaught = t - 1.0 / 120.0 - caught
                 lastFrame = t - 1.0 / 120.0
             }
-            if (current.delta(target) > 1) {
-                current.approach(target, confTimeScale(), t - lastFrame)
+            // (Gliding: backgroundMove, background.time_scale its usual time; off, right where the view says.)
+            val glide = NewmAnimations.resolveSeconds("backgroundMove", confTimeScale())
+            if (current.delta(target) > 1 && glide.on) {
+                current.approach(target, glide.seconds, t - lastFrame)
             } else if (current !== target) {
                 current = target
             }
@@ -287,15 +289,16 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
     // When it was first shown (System.nanoTime): it fades in from then, once (not again on a reload).
     private var shownAt = 0L
 
-    /** How far it has faded in (0..1, eased). */
+    /** How far it has faded in (0..1, along backgroundIn's curve; 600 ms, fast at first, usually). */
     fun appearing(): Float {
         if (shownAt == 0L) shownAt = System.nanoTime()
-        val t = ((System.nanoTime() - shownAt) / 600_000_000.0).coerceIn(0.0, 1.0)
-        return (1 - (1 - t) * (1 - t) * (1 - t)).toFloat()
+        val fade = NewmAnimations["backgroundIn"]
+        if (!fade.on) return 1f
+        return fade.at((System.nanoTime() - shownAt) / (fade.millis * 1_000_000.0)).toFloat().coerceIn(0f, 1f)
     }
 
     /** Still fading in. */
-    val fading: Boolean get() = shownAt == 0L || System.nanoTime() - shownAt < 600_000_000L
+    val fading: Boolean get() = shownAt == 0L || System.nanoTime() - shownAt < NewmAnimations["backgroundIn"].effectiveMillis * 1_000_000L
 
     companion object {
         // The picture read from [path] (slow for a big one: not on the compositor's thread).
@@ -419,7 +422,7 @@ private val confRadius = BarSetting("corner_radius", 12)
 private val confTheme = BarSetting("theme", "auto")
 private val confLeft = BarSetting("left", listOf("window"))
 private val confCenter = BarSetting("center", listOf("clock"))
-private val confRight = BarSetting("right", listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power"))
+private val confRight = BarSetting("right", listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power"))
 private val confClock = BarSetting("clock", "HH:mm")
 private val confDate = BarSetting("date", "EEE d MMM")
 private val confIslandColor = BarSetting<String?>("island_color", null)
@@ -432,12 +435,32 @@ private val confTitleWidth = BarSetting("title_width", 360)
 private val confTrayHide = BarSetting("tray_hide", listOf("nm-applet", "blueman"))
 private val confMenuButton = BarSetting("menu_button", true)
 private val confQuickButton = BarSetting("quick_button", true)
+private val confNotificationsButton = BarSetting("notifications_button", true)
+// layoutNames = mapOf("us" to "EN"): the keyboard layouts' labels at the bar (by the layout's name, or its code).
+private val confLayoutNames = BarSetting<Map<String, Any?>>("layout_names", emptyMap())
+// outputs = listOf("eDP-1"): the monitors with the bar (empty: all).
+private val confBarOutputs = BarSetting("outputs", emptyList<String>())
+// clockHint: the clock's hint (java.time's pattern).
+private val confClockHint = BarSetting("clock_hint", "EEEE, d MMMM yyyy")
+// hintDelayMs: how long the pointer stays on a part of the bar before its hint shows.
+private val confHintDelay = BarSetting("hint_delay_ms", 800)
+// module("name") { }: modules of one's own, by name (their text, icon, what clicks do).
+private val confModules = BarSetting<Map<String, Any?>>("modules", emptyMap())
+// on("window") { middle { } }: what a click, the middle and right buttons, the wheel do on a module (instead of newm's).
+private val confOn = BarSetting<Map<String, Any?>>("on", emptyMap())
 
-// "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
-private fun layoutLabel(name: String): String = when (val code = name.substringBefore('(').trim().lowercase()) {
-    "us", "gb" -> "EN"
-    else -> code.take(2).uppercase()
+// The configuration's label of layout [name] ("us", "de(neo)"), else "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
+private fun layoutLabel(name: String, labels: Map<String, Any?>): String {
+    val code = name.substringBefore('(').trim().lowercase()
+    (labels[name] ?: labels[code])?.let { return it.toString() }
+    return when (code) {
+        "us", "gb" -> "EN"
+        else -> code.take(2).uppercase()
+    }
 }
+
+// The configuration wrote the bar's list [name] itself ("left", "right" of the top or bottom bar).
+private fun listWritten(top: Boolean, name: String) = Config.lookup("panels.${if (top) "top" else "bottom"}_bar.native.$name") != null
 
 /** The room newm's own bar keeps at the top ([top]) or bottom: its height, and the gaps around islands. */
 internal fun nativeBarRoom(top: Boolean): Int {
@@ -478,16 +501,26 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val textColor: String? get() = confTextColor(top)
     val accentColor: String? get() = confAccentColor(top)
 
-    /** The modules of each island ("wall", "window", "clock", "tray", "network", "volume", "battery", "power", "texts"). */
+    /**
+     * The modules of each island ("wall", "window", "clock", "tray", "network", "volume", "battery", "notifications", "power", "texts").
+     * The menu's, quick actions' and notifications' buttons are added to newm's own lists only:
+     * a list the configuration writes is shown as written.
+     */
     val left: List<String> get() = confLeft(top).let { left ->
         // The menu's button (three lines) first, unless it is placed elsewhere or turned off.
-        if (confMenuButton(top) && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
+        if (confMenuButton(top) && !listWritten(top, "left") && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
     }
     val center: List<String> get() = confCenter(top)
     val right: List<String> get() = confRight(top).let { right ->
+        if (listWritten(top, "right")) return@let right
         // Quick actions' button before the power button, unless placed elsewhere or turned off.
-        if (!confQuickButton(top) || "quick" in right || "quick" in confLeft(top) || "quick" in confCenter(top)) right
+        val withQuick = if (!confQuickButton(top) || "quick" in right || "quick" in confLeft(top) || "quick" in confCenter(top)) right
         else right.indexOf("power").let { at -> if (at < 0) right + "quick" else right.take(at) + "quick" + right.drop(at) }
+        // The notifications' bell before them (a list of one's own without it gets it too), unless placed elsewhere or turned off.
+        if (!confNotificationsButton(top) || "notifications" in withQuick || "notifications" in confLeft(top) || "notifications" in confCenter(top)) withQuick
+        else (withQuick.indexOf("quick").takeIf { it >= 0 } ?: withQuick.indexOf("power")).let { at ->
+            if (at < 0) withQuick + "notifications" else withQuick.take(at) + "notifications" + withQuick.drop(at)
+        }
     }
     val clockPattern: String get() = confClock(top)
     val datePattern: String get() = confDate(top)
@@ -495,6 +528,19 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val showPercent: Boolean get() = confShowPercent(top)
     val showPassive: Boolean get() = confShowPassive(top)
     val titleWidth: Int get() = confTitleWidth(top)
+
+    /** The clock's hint (java.time's pattern), and how long the pointer stays before a hint shows (ms). */
+    val clockHint: String get() = confClockHint(top)
+    val hintDelayMs: Int get() = confHintDelay(top).coerceAtLeast(0)
+
+    /** Modules of the configuration's own, by name: {text | command, every_seconds, icon, on_click, ...}. */
+    val modules: Map<String, Any?> get() = confModules(top)
+
+    /** What clicks and the wheel do on a module instead of newm's (module name -> click, middle, right, scroll_up, scroll_down). */
+    val clicks: Map<String, Any?> get() = confOn(top)
+
+    /** This monitor has the bar (topBar { outputs }: empty is all). */
+    val shownHere: Boolean get() = confBarOutputs(top).let { it.isEmpty() || monitor.name in it }
 
     /** Tray icons not shown, by their name or title (those the bar shows itself: nm-applet's Wi-Fi, blueman's Bluetooth). */
     val trayHide: List<String> get() = confTrayHide(top)
@@ -538,7 +584,7 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
 
     private val animation = object : Animate<WidgetDown>() {
         fun at(default: WidgetDown) = process(default)
-        fun start(from: WidgetDown, to: WidgetDown, dt: Double) = startAnimation(WidgetDownInterpolation(from, to, workspace.preventAnim), dt)
+        fun start(from: WidgetDown, to: WidgetDown, dt: Double, curve: dev.caulis.core.Curve) = startAnimation(WidgetDownInterpolation(from, to, workspace.preventAnim), dt, curve)
         override fun animDamage() = wm.damage()
     }
 
@@ -554,7 +600,7 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
         return WidgetDown(1000.0, box)
     }
 
-    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) = animation.start(reducer(oldState), reducer(newState), dt)
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double, curve: dev.caulis.core.Curve) = animation.start(reducer(oldState), reducer(newState), dt, curve)
 
     override fun flushAnimation() = animation.flushAnimationOwn()
 
@@ -562,6 +608,8 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
 
     /** Where it is this frame (null: out of sight). */
     fun place(): Rect? {
+        // (Never over the lock screen: what windows are open, the tray, the network are nobody's business there.)
+        if (!shownHere || wm.lockShown()) return null
         val b = animation.at(reducer(wm.state)).box
         val rect = Rect(Math.round(b.x).toInt(), Math.round(b.y).toInt(), Math.round(b.w).toInt(), Math.round(b.h).toInt())
         return rect.intersect(monitor.area)?.takeIf { it.height > 0 }?.let { rect }
@@ -603,7 +651,7 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
         val f = focusedView?.let { newm.bar.Focused(it.title, it.appId) } ?: newm.bar.Focused("", "")
         if (f != focused) focused = f
         val names = wm.caulis.keyboardLayoutNames
-        val k = if (names.size > 1) names.getOrNull(wm.caulis.keyboardLayoutNow)?.let(::layoutLabel).orEmpty() else ""
+        val k = if (names.size > 1) names.getOrNull(wm.caulis.keyboardLayoutNow)?.let { layoutLabel(it, confLayoutNames(top)) }.orEmpty() else ""
         if (k != keyboardLayout) keyboardLayout = k
     }
 }

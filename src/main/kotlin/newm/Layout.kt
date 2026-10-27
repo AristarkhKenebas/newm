@@ -7,6 +7,7 @@ import newm.bar.connectionChanged
 import newm.bar.hintPill
 import newm.bar.showOsd
 import newm.bar.showPopups
+import newm.bar.showNotificationCards
 import dev.caulis.core.Monitor
 import dev.caulis.core.OverlayCanvas
 import dev.caulis.core.Window
@@ -32,10 +33,15 @@ private val confBackgroundPath = configuredValue<String?>("background.path", "re
 private val confSendFullscreenToViews = configuredValue("view.send_fullscreen", true)
 private val confKeyHelp = configuredValue<List<Pair<String, String>>>("key_help", emptyList())
 private val confKeyBindings = configuredValue<(Layout) -> List<Pair<String, () -> Unit>>>("key_bindings") { emptyList() }
-private val confAnimT = configuredValue("anim_time", .3)
+// newm fading in at the start and out at the end: the usual time of "startup" and "quit".
 private val confBlendT = configuredValue("blend_time", 1.0)
 private val confIdleTimes = configuredValue("energy.idle_times", listOf(120, 300, 600))
 private val confSuspendCommand = configuredValue("energy.suspend_command", "systemctl suspend")
+// energy { dimAfter; lockAfter; suspendAfter } (seconds, 0: never; unset: idle_times'), and after(seconds) { } of your own.
+private val confDimAfter = configuredValue<Any?>("energy.dim_after", null)
+private val confLockAfter = configuredValue<Any?>("energy.lock_after", null)
+private val confSuspendAfter = configuredValue<Any?>("energy.suspend_after", null)
+private val confIdleActions = configuredValue("energy.after", emptyList<Map<String, Any?>>())
 
 /**
  * code "lock": on lock (dim the screen now); "idle": idle_times[0] passed; "idle-lock":
@@ -46,6 +52,8 @@ private val confIdleCallback = configuredValue<(String) -> Unit>("energy.idle_ca
 private val confOnStartup = configuredValue<() -> Unit>("on_startup") { }
 private val confOnReconfigure = configuredValue<() -> Unit>("on_reconfigure") { }
 private val confLockOnWakeup = configuredValue("lock_on_wakeup", true)
+// lock { sleepWait = 3 }: seconds sleep waits for the lock screen to show (0..30).
+private val confSleepWait = configuredValue<Number>("panels.lock.sleep_wait", 3.0)
 private val confSynchronousUpdate = configuredValue<() -> Unit>("synchronous_update") { }
 private val confEnableCGestures = configuredValue("gestures.c.enabled", true)
 private val confEnableDBusGestures = configuredValue("gestures.dbus.enabled", true)
@@ -63,6 +71,8 @@ private val confOverviewChoose = configuredValue("overview.choose", true)
 private val confOverviewFollow = configuredValue("overview.follow_pointer", true)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
 private val confGestureBindingLauncher = configuredValue<List<String?>>("gesture_bindings.launcher", listOf(null, "swipe-5"))
+// gestures { on("swipe-4", "down") { } }: kind, direction, modifier, description, action.
+private val confGestureOn = configuredValue("gestures.on", emptyList<Map<String, Any?>>())
 
 /** A layout reducer: the state now → (the animation's first state or null, its last state or null). */
 typealias Reducer = (LayoutState) -> Pair<LayoutState?, LayoutState?>
@@ -112,6 +122,7 @@ class Animation(
     duration: Double,
     private val then: (() -> Unit)?,
     val overlaySafe: Boolean = false,
+    private val curve: dev.caulis.core.Curve = dev.caulis.core.Curve.LINEAR,
 ) {
     private var initialState: LayoutState? = null
     private var finalState: LayoutState? = null
@@ -120,8 +131,8 @@ class Animation(
     // The workspaces it was made for (the monitors may change while it runs).
     private var generation = -1
 
-    // (Prevent division by zero.)
-    private val duration = max(0.1, duration)
+    // (0: at once — the animation is off.)
+    private val duration = max(0.0, duration)
 
     fun checkFinished(): Boolean {
         if (started && finalState == null) return finished(null)
@@ -155,6 +166,8 @@ class Animation(
 
     fun start() {
         generation = layout.layoutGeneration
+        // (What the reducer starts along with it — the focus border — goes as long, along the same curve.)
+        layout.runningAnimation = duration to curve
         try {
             reducer(layout.state).let { (i, f) ->
                 initialState = i
@@ -169,7 +182,7 @@ class Animation(
                     log.trace { "Skipping moot animation" }
                     finalState = null
                 } else {
-                    layout.animateAll(f, duration)
+                    layout.animateAll(f, duration, curve)
                 }
             } else {
                 log.trace { "Animation decided not to take place anymore" }
@@ -300,6 +313,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         private set
 
     val focusBorders = FocusBorders(this)
+
+    // Hyprland's special workspaces (Caulis's), above the wall.
+    private val specials = NewmSpecialWorkspaces(this)
     private var backgrounds: List<Background> = emptyList()
     // (Compose state: the bars' parts follow when a reload makes them anew.)
     private var topBars: List<Bar> by androidx.compose.runtime.mutableStateOf<List<Bar>>(emptyList())
@@ -343,6 +359,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private var constantDamage = 0
     private var modifiers = 0
     private val requestedSize = java.util.IdentityHashMap<Window, Pair<Int, Int>>()
+    // Views whose placing failed (told once each).
+    private val brokenViews = HashSet<Int>()
     // The view with the focus now, and the one that had it when its window closed.
     private var focusedView: View? = null
     private var closingFocused: View? = null
@@ -381,9 +399,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onMonitorRemoved { onLayoutChange() }
         caulis.onSleep { onSleep() }
         // One lock screen: newm's (or the configuration's locker), never Caulis's swaylock as well.
-        // (Shown once it covers the screen: sleep waits for that, and is not locked twice.)
-        caulis.locker(shows = { layoutDown.lockPerc >= 0.99 }) { ensureLocked() }
-        caulis.lockBeforeSleep = false
+        // Shown: newm's once it covers the screen, a locker program's once it locked the session
+        // (ext-session-lock) — sleep waits for that (lock { sleepWait }), and it is not locked twice.
+        caulis.locker(shows = { lockScreenShows() }) { ensureLocked() }
         caulis.onWake { onWakeup() }
         // Idle: Caulis says when nobody is there (programs that keep the screen on hold it off),
         // newm counts the seconds and goes through energy.idle_times.
@@ -419,7 +437,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         constantDamage = max(0, constantDamage - 1)
     }
 
-    private fun isLocked(): Boolean = state.lockPerc > 0.0
+    // newm's own lock: shown (or coming, going), or in force for Caulis.
+    private fun isLocked(): Boolean = state.lockPerc > 0.0 || caulis.desktop.lockedInternally
 
     // The desktop, once the compositor runs.
     private fun desktopOrNull(): dev.caulis.core.Desktop? = try {
@@ -440,7 +459,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
             val up = Up(window, window === caulis.desktop.focusedWindow)
             val previous = view.upState
-            val down = view.process(up)
+            // (A view that cannot be placed — a broken rule, a bug — is hidden, never left where
+            // Caulis would put it: outside the layout and the lock screen. Told once.)
+            val down = try {
+                view.process(up)
+            } catch (e: Exception) {
+                if (brokenViews.add(view.handle)) log.error("$view cannot be placed: hidden", e)
+                return null
+            }
             // The program asked to draw at the size newm wants.
             val (w, h) = down.size
             if (w > 0 && h > 0 && requestedSize[window] != w to h) {
@@ -466,11 +492,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
             val focused = focusBorders.currentView
             if (focused?.window === window && focused.wantsFocusBorder) focusBorders.draw(canvas)
+            // (One wanting attention, not focused: its own border, if focus { urgentColor } says one.)
+            else if (window.urgent && viewsByWindow[window]?.wantsFocusBorder == true) focusBorders.drawUrgent(place, canvas)
         }
 
         // Asked once a frame: the layout's own state of this frame (pywm processed it every frame).
         override fun animating(now: Long): Boolean {
             layoutDown = process(reducer(state))
+            specials.everyFrame(overviewShown())
             // A monitor got another mode, scale or place (Caulis says nothing of it): workspaces anew.
             val geometry = geometryNow()
             if (geometry != lastGeometry) {
@@ -483,7 +512,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // A bar program came, went or changed its height: windows make way anew.
             val usable = desktopOrNull()?.monitors?.map { it.usableArea }
             if (usable != lastUsable) {
-                if (lastUsable != null) animateTo({ s -> null to s.copy() }, confAnimT())
+                if (lastUsable != null) animateTo({ s -> null to s.copy() }, "camera")
                 lastUsable = usable
             }
             val moving = constantDamage > 0 || animating || focusBorders.animating || views.values.any { it.animating } ||
@@ -671,8 +700,35 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     private fun setup(reconfigure: Boolean = true) {
         setupWidgets()
+        // Sleep locks first (lock_on_wakeup) and waits up to lock { sleepWait } seconds for the lock screen to show.
+        caulis.lockBeforeSleep = confLockOnWakeup()
+        caulis.sleepLockWaitMillis = (confSleepWait().toDouble() * 1000).toLong().coerceIn(0L, 30_000L)
+        caulis.specialWorkspaces = specials.settings()
+        // Animations on or off: Caulis's own (scale changes, notices, ...) follow — but never its
+        // windows' (newm moves and draws its windows itself: Caulis's would come on top, a second
+        // pop where the window was). With preset = "newm" alone (newm's look as it always was)
+        // and set nowhere they stay as Caulis's settings say (off by default).
+        NewmAnimations.settings()
+        NewmAnimations.caulisEnabled()?.let { on ->
+            val now = caulis.animations
+            val windowsOff = now.entries["windows"]?.enabled == false
+            if (now.enabled != on || (on && !windowsOff)) {
+                log.info { "Caulis's animations ${if (on) "on too (its windows' not: newm's are)" else "off too"}" }
+                caulis.animations = NewmAnimations.caulisAnimations(now, on)
+            }
+        }
         keyProcessor.clear()
-        keyProcessor.registerBindings(*keyBindingsOf(confKeyBindings()(this)).toTypedArray())
+        // (Each action knows the key that runs it, for what it says: "Logo+S puts it beside".)
+        keyProcessor.registerBindings(*keyBindingsOf(confKeyBindings()(this)).map { (combo, action) ->
+            combo to {
+                runningKey = combo
+                try {
+                    action()
+                } finally {
+                    runningKey = null
+                }
+            }
+        }.toTypedArray())
 
         // Stop and set up the gestures anew.
         gestureProviders.forEach(GestureProvider::stop)
@@ -686,8 +742,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     fun reducer(state: LayoutState): LayoutDown = LayoutDown(state.lockPerc, state.launcherPerc)
 
-    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
-        startAnimation(LayoutDownInterpolation(reducer(oldState), reducer(newState)), dt)
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double, curve: dev.caulis.core.Curve) {
+        startAnimation(LayoutDownInterpolation(reducer(oldState), reducer(newState)), dt, curve)
     }
 
     override fun flushAnimation() = flushAnimationOwn()
@@ -702,41 +758,61 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         panelsUi.start()
         clipboardHistory.start()
         Warmup(this).start()
-        // The windows kept by `restart keep`, opened again.
-        caulis.after(1200) { session.restoreAtStart() }
+        // The windows kept by `restart keep` (or, with session.restore_at_login, of the last session), opened
+        // again — through Caulis's start queue: once newm is shown, one after another.
+        session.restoreAtStart()
+        session.startKeeping()
         // The native bars (Compose), their texts asked for every second.
-        caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
+        val topBarWidget = caulis.compose(place = { m -> topBars.firstOrNull { it.monitor === m }?.place() }) { m ->
             topBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
         }
-        caulis.compose(place = { m -> bottomBars.firstOrNull { it.monitor === m }?.place() }) { m ->
+        val bottomBarWidget = caulis.compose(place = { m -> bottomBars.firstOrNull { it.monitor === m }?.place() }) { m ->
             bottomBars.firstOrNull { it.monitor === m }?.let { if (it.islands) newm.bar.IslandBar(it, barModel) else BarContent(it) }
+        }
+        // The bars drawn once ahead while the screen is still dark (reveal): newm fades in whole,
+        // no bar popping in. (Right after the widgets are made, which is the next moment.)
+        caulis.whenWarm("the bars") { done ->
+            caulis.after(0) {
+                try {
+                    for ((widget, bars) in listOf(topBarWidget to topBars, bottomBarWidget to bottomBars)) {
+                        for (bar in bars) bar.place()?.let { r -> widget.prewarm(bar.monitor, r.width, r.height) }
+                    }
+                } finally {
+                    done()
+                }
+            }
         }
         barModel.showPopups()
         barModel.showOsd()
+        barModel.showNotificationCards()
         showKeyHelp()
         every(1000) { (topBars + bottomBars).forEach(Bar::refresh) }
         // The wall and the focused window, as the bars show them; a popup goes with its bar.
         every(200) {
             val bars = topBars + bottomBars
             bars.forEach(Bar::look)
-            barModel.popup?.let { p -> if (p.bar !in bars || p.bar.place() == null || isLocked()) barModel.close() }
+            barModel.popup?.let { p -> if (p.bar !in bars || p.bar.place() == null || lockShown()) barModel.close() }
         }
         queue.start()
         panelLauncher.start()
         dbusEndpoint.start()
+        barModel.notifications.start()
         try {
             confOnStartup()()
         } catch (e: Exception) {
             log.error("on_startup", e)
         }
-        // Fade in.
-        caulis.after(500) { animateTo({ s -> null to s.copy(backgroundOpacity = 1.0) }, confBlendT()) }
+        // Fade in: the wallpaper once newm is shown (with reveal { }: as the dark screen begins to
+        // fade, so the two go together; without it, half a second after the start as before).
+        val fadeIn: () -> Unit = { animateTo({ s -> null to s.copy(backgroundOpacity = 1.0) }, NewmAnimations.resolveSeconds("startup", confBlendT())) }
+        if (caulis.reveal.enabled && !caulis.revealed) caulis.onReveal { fadeIn() } else caulis.after(500) { fadeIn() }
 
-        // The greeter: locked at once, asking for the user, when the lock panel is there.
+        // The greeter: locked at once, asking for the user, when the lock panel is there (or
+        // newm's own lock screen, without a lock panel program).
         if (authBackend.isGreeter()) {
             lateinit var waiting: AutoCloseable
             waiting = every(500) {
-                if (panels().any { it.panel == "lock" }) {
+                if (panels().any { it.panel == "lock" } || Config.lookup("panels.lock.cmd") == null) {
                     waiting.close()
                     ensureLocked()
                     authBackend.initSession()
@@ -747,37 +823,76 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     private fun terminateNow() {
         dbusEndpoint.stop()
+        barModel.notifications.stop()
         panelLauncher.stop()
         gestureProviders.forEach(GestureProvider::stop)
         queue.stop()
         caulis.run("quit")
     }
 
+    /** Animates to what [reducer] gives, [duration] seconds (newm's own way, a straight line). */
     fun animateTo(reducer: Reducer, duration: Double, then: (() -> Unit)? = null, overlaySafe: Boolean = false) {
         queue.push(Animation(this, reducer, duration, then, overlaySafe))
     }
 
+    /** Animates to what [reducer] gives as [animation] says (off: there at once). */
+    fun animateTo(reducer: Reducer, animation: dev.caulis.core.ResolvedAnimation, then: (() -> Unit)? = null, overlaySafe: Boolean = false) {
+        queue.push(Animation(this, reducer, animation.seconds, then, overlaySafe, animation.curve))
+    }
+
+    /** Animates to what [reducer] gives as the animation [name] says (see [NewmAnimations]). */
+    fun animateTo(reducer: Reducer, name: String, then: (() -> Unit)? = null, overlaySafe: Boolean = false) =
+        animateTo(reducer, NewmAnimations[name], then, overlaySafe)
+
+    /** The time (seconds) and curve of the animation that started last (what its reducer starts goes along). */
+    internal var runningAnimation: Pair<Double, dev.caulis.core.Curve> = 0.0 to dev.caulis.core.Curve.LINEAR
+
     fun update(newState: LayoutState) {
         state = newState
         damage()
+        // Fullscreen left another way (the view moved, a gesture zoomed): the programs told so too,
+        // or a browser stays without its tabs and address bar in an ordinary tile.
+        if (toldFullscreen.isNotEmpty() || fullscreenComing.isNotEmpty()) {
+            fullscreenComing.removeIf { it.destroyed }
+            for (v in fullscreenComing.toList()) {
+                if (newState.findViewOrNull(v)?.second?.isFullscreen() == true) {
+                    fullscreenComing -= v
+                    toldFullscreen += v
+                }
+            }
+            for (v in toldFullscreen.toList()) {
+                val wsState = newState.findViewOrNull(v)?.second
+                if (wsState == null || !wsState.isFullscreen()) {
+                    toldFullscreen -= v
+                    if (!v.destroyed) v.setFullscreen(false)
+                }
+            }
+        }
     }
+
+    // The views told they are fullscreen (newm's fullscreen of their workspace).
+    private val toldFullscreen = LinkedHashSet<View>()
+    private val fullscreenComing = LinkedHashSet<View>()
 
     private fun allAnimates(): List<Animatable> = listOf(this) + views.values + backgrounds + topBars + bottomBars + focusBorders
 
     fun doFlushAnimation() = allAnimates().forEach(Animatable::flushAnimation)
 
     /** Every animated part starts towards [newState]. */
-    internal fun animateAll(newState: LayoutState, duration: Double) {
-        for (a in allAnimates()) a.animate(state, newState, duration)
+    internal fun animateAll(newState: LayoutState, duration: Double, curve: dev.caulis.core.Curve = dev.caulis.core.Curve.LINEAR) {
+        for (a in allAnimates()) a.animate(state, newState, duration, curve)
     }
 
     fun finalTimeAll(): Double? = (allAnimates().filterIsInstance<Animate<*>>() + listOf(this)).mapNotNull { it.finalTime() }.maxOrNull()
 
     internal fun trustedUnlock() {
         if (isLocked()) {
+            log.info { "Unlocked" }
+            caulis.desktop.unlockInternally()
+            lockAnimating = false
             panelsUi.unlocked()
             safelyEnterMode(null)
-            animateTo({ s -> null to s.copy(lockPerc = 0.0, backgroundOpacity = 1.0) }, confAnimT())
+            animateTo({ s -> null to s.copy(lockPerc = 0.0, backgroundOpacity = 1.0) }, "lock")
         }
     }
 
@@ -970,7 +1085,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         // In the overview the window under the pointer is the chosen one: its border, and what
         // Super+drag moves (else it stayed the window one came from).
         if (overlay == null && confOverviewFollow() && overviewShown()) {
-            viewUnderPointer(dx, dy)?.takeIf { !it.isFocused() && it.window.mapped }?.let { v ->
+            // (A window whose modal dialog has the focus already: its dialog keeps it.)
+            viewUnderPointer(dx, dy)?.takeIf { v ->
+                !v.isFocused() && v.window.mapped && caulis.desktop.modalDialogOf(v.window)?.let { it === caulis.desktop.focusedWindow } != true
+            }?.let { v ->
                 log.trace { "Overview: $v under the pointer, focused" }
                 v.focus()
             }
@@ -1013,7 +1131,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         animateTo({ s ->
             view.focus()
             null to s.withOverviewSet(false, activeWorkspace(), view)
-        }, confAnimT())
+        }, "overview")
         return true
     }
 
@@ -1065,6 +1183,25 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
         if (o != null) return false
 
+        // gestures { on("swipe-4", "down") { ... } }: the configuration's own first, for the way the fingers go.
+        val own = ownGestureBindings(gesture.kind)
+        if (own.isNotEmpty()) {
+            log.trace { "...own binding (${own.size} for ${gesture.kind})" }
+            GestureChooser(gesture, own)
+            return true
+        }
+        return builtinGesture(gesture)
+    }
+
+    // gestures.on: the configuration's own gestures of [kind] whose modifier is held. (Unheld
+    // "move-1" and "swipe-2" are the mouse and two-finger scrolling: never taken.)
+    private fun ownGestureBindings(kind: String): List<Map<String, Any?>> = confGestureOn().filter { b ->
+        val modifier = b["modifier"] as? String
+        b["kind"] == kind && hasModifier(modifier) && !(modifier == null && (kind == "move-1" || kind == "swipe-2"))
+    }
+
+    // newm's own gestures (gesture_bindings): moving and resizing, swiping, zooming, the launcher.
+    private fun builtinGesture(gesture: NewmGesture): Boolean {
         fun enter(overlay: Overlay): Boolean {
             overlay.onGesture(gesture)
             enterOverlay(overlay)
@@ -1100,17 +1237,70 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         return false
     }
 
+    /**
+     * A gesture of gestures.on: once the fingers have gone far enough one way, the binding for
+     * that way runs (once); a way no binding has goes on as newm's own gesture of that kind
+     * (zooming, ...). Ended before: the binding for any way, if there is one.
+     */
+    private inner class GestureChooser(private val gesture: NewmGesture, private val bindings: List<Map<String, Any?>>) {
+        private var decided = false
+
+        init {
+            gesture.listener(GestureListener(::update, ::end))
+        }
+
+        private fun update(values: Map<String, Double>) {
+            if (decided) return
+            val dx = values["delta_x"] ?: 0.0
+            val dy = values["delta_y"] ?: 0.0
+            // (A twentieth of a screen: not a twitch of the fingers.)
+            if (maxOf(Math.abs(dx), Math.abs(dy)) < 0.05) return
+            decided = true
+            val way = if (Math.abs(dx) > Math.abs(dy)) (if (dx > 0) "right" else "left") else (if (dy > 0) "down" else "up")
+            val binding = bindings.firstOrNull { it["direction"] == way } ?: bindings.firstOrNull { it["direction"] == null }
+            if (binding != null) run(binding, way)
+            else {
+                log.trace { "Gesture ${gesture.kind} $way: no own binding, newm's own" }
+                builtinGesture(gesture)
+            }
+        }
+
+        private fun end() {
+            if (decided) return
+            decided = true
+            bindings.firstOrNull { it["direction"] == null }?.let { run(it, "any way") }
+        }
+
+        private fun run(binding: Map<String, Any?>, way: String) {
+            log.info { "Gesture ${gesture.kind} $way: the configuration's own" }
+            @Suppress("UNCHECKED_CAST")
+            val action = binding["action"] as? (Layout) -> Unit ?: return
+            try {
+                action(this@Layout)
+            } catch (e: Exception) {
+                log.warn("The gesture ${gesture.kind} $way failed: $e", e)
+            }
+        }
+    }
+
     // --- idle, sleep -----------------------------------------------------------------------------
 
-    // Since when nobody has been there (null: someone is), and the stage of idle_times reached.
+    // Since when nobody has been there (null: someone is).
     private var idleSince: Double? = null
-    private var idleStage = 0
+    // What of the idle stages happened since someone was last there ("idle", "idle-lock", ..., "after:<n>").
+    private val idleDone = HashSet<String>()
     private var screensOff = false
 
+    // A stage's seconds: its own setting (energy.dim_after, ...), else idle_times' [index]; 0: never.
+    private fun idleSeconds(own: Any?, index: Int): Double =
+        (own as? Number)?.toDouble() ?: confIdleTimes().getOrNull(index)?.toDouble() ?: 0.0
+
     /**
-     * [elapsed] seconds without input (0: someone is back). Each stage of energy.idle_times
-     * happens once until someone is back: newm called them again and again, locking a locked
-     * screen over and over (newm issue 98).
+     * [elapsed] seconds without input (0: someone is back). Each stage (dim_after: "idle",
+     * lock_after: "idle-lock" and locked, 5 s before suspend_after: "idle-presuspend",
+     * suspend_after: "idle-suspend" and suspended, and energy { after(n) { } }) happens once until
+     * someone is back: newm called them again and again, locking a locked screen over and over
+     * (newm issue 98).
      */
     fun onIdle(elapsed: Double, idleInhibited: Boolean) {
         if (caffeineUntil != null && !caffeineOn) caffeine(null)
@@ -1126,39 +1316,56 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             caulis.run("dpms off")
         }
         if (elapsed == 0.0) {
-            if (idleStage > 0) confIdleCallback()("active")
-            idleStage = 0
+            if (idleDone.any { !it.startsWith("after:") }) confIdleCallback()("active")
+            idleDone.clear()
             return
         }
         if (inhibited) return
-        val times = confIdleTimes()
-        val stage = when {
-            times.size > 2 && elapsed > times[2] -> 4
-            times.size > 2 && elapsed > times[2] - 5.0 -> 3
-            times.size > 1 && elapsed > times[1] -> 2
-            times.isNotEmpty() && elapsed > times[0] -> 1
-            else -> 0
+        val dim = idleSeconds(confDimAfter(), 0)
+        val lock = idleSeconds(confLockAfter(), 1)
+        val suspend = idleSeconds(confSuspendAfter(), 2)
+        // Each stage that is due, in the order of their times.
+        val stages = ArrayList<Triple<Double, String, () -> Unit>>()
+        if (dim > 0) stages += Triple(dim, "idle") { confIdleCallback()("idle") }
+        if (lock > 0) stages += Triple(lock, "idle-lock") {
+            confIdleCallback()("idle-lock")
+            ensureLocked()
         }
-        if (stage <= idleStage) return
-        idleStage = stage
-        log.info { "Idle for ${elapsed.toInt()} s: stage $stage" }
-        when (stage) {
-            4 -> {
+        if (suspend > 0) {
+            stages += Triple((suspend - 5.0).coerceAtLeast(0.0), "idle-presuspend") { confIdleCallback()("idle-presuspend") }
+            stages += Triple(suspend, "idle-suspend") {
                 confIdleCallback()("idle-suspend")
                 caulis.launch(confSuspendCommand())
             }
-            3 -> confIdleCallback()("idle-presuspend")
-            2 -> {
-                confIdleCallback()("idle-lock")
-                ensureLocked()
+        }
+        for ((i, a) in confIdleActions().withIndex()) {
+            val seconds = (a["seconds"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: continue
+            @Suppress("UNCHECKED_CAST")
+            val action = a["action"] as? (Layout) -> Unit ?: continue
+            stages += Triple(seconds, "after:$i") { action(this) }
+        }
+        for ((at, name, run) in stages.sortedBy { it.first }) {
+            if (elapsed <= at || name in idleDone) continue
+            idleDone += name
+            log.info { "Idle for ${elapsed.toInt()} s: $name" }
+            try {
+                run()
+            } catch (e: Exception) {
+                log.warn("The idle stage $name failed: $e", e)
             }
-            1 -> confIdleCallback()("idle")
         }
     }
 
     fun onSleep() {
         confIdleCallback()("sleep")
+        // (At once, no sliding in; Caulis then waits until it shows before the computer sleeps.)
         if (confLockOnWakeup()) ensureLocked(anim = false)
+    }
+
+    // True while the lock screen shows: a locker program's lock is in force, or newm's own covers the screen.
+    private fun lockScreenShows(): Boolean {
+        val d = desktopOrNull() ?: return false
+        return if (!confLockProgram().isNullOrBlank()) d.locked else d.lockedInternally && layoutDown.lockPerc >= 0.99
     }
 
     fun onWakeup() {
@@ -1177,10 +1384,17 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         focusBorders.damage() // (no border while a window is moved or resized)
         overlay.init()
         // What a gesture does, said while it runs (they are not known by heart at first).
+        // (Said with the gestures the configuration binds: gesture_bindings.)
         if (confGestureHints()) when (overlay) {
-            is SwipeOverlay -> barModel.hintPill("Three fingers: moving over the wall — let go to stay")
-            is SwipeToZoomOverlay -> barModel.hintPill("Four fingers: up shows more windows, down fewer")
-            is MoveResizeOverlay, is MoveResizeFloatingOverlay -> barModel.hintPill("Moving the window — two fingers resize it")
+            is SwipeOverlay -> confGestureBindingSwipe().let { b ->
+                barModel.hintPill("%s: moving over the wall — let go to stay".replace("%s", gestureWords(b.getOrNull(0), b.getOrNull(1))))
+            }
+            is SwipeToZoomOverlay -> confGestureBindingSwipeToZoom().let { b ->
+                barModel.hintPill("%s: up shows more windows, down fewer".replace("%s", gestureWords(b.getOrNull(0), b.getOrNull(1))))
+            }
+            is MoveResizeOverlay, is MoveResizeFloatingOverlay -> confGestureBindingMoveResize().getOrNull(2).let { resize ->
+                barModel.hintPill(if (resize == null) "Moving the window" else "Moving the window — %s resize it".replace("%s", gestureWords(null, resize)))
+            }
             else -> {}
         }
     }
@@ -1228,7 +1442,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         viewsByWindow.remove(window)
         requestedSize.remove(window)
         // (Caulis gave the focus to another window already: it had it if it had it last.)
-        val wasFocused = view.isFocused() || view === closingFocused || view === focusedView
+        // (Gone into a special workspace: it keeps the focus there, no other view takes it.)
+        val wasFocused = (view.isFocused() || view === closingFocused || view === focusedView) && caulis.desktop.scratchpadOf(window) == null
         if (closingFocused === view) closingFocused = null
         if (focusedView === view) focusedView = null
         val (s, wsState, _) = state.findViewOrNull(view) ?: run {
@@ -1292,10 +1507,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                     st.unswallowing(view).withoutViewState(view).constrain()
                 }
                 null to result
-            }, confAnimT(), { views.remove(view.handle); view.releaseDamage() })
+            }, "windowsOut", { views.remove(view.handle); view.releaseDamage() })
         } else {
             if (wasFocused) focusBorders.unfocus()
-            animateTo({ st -> null to st.unswallowing(view).withoutViewState(view).constrain() }, confAnimT(), { views.remove(view.handle); view.releaseDamage() })
+            animateTo({ st -> null to st.unswallowing(view).withoutViewState(view).constrain() }, "windowsOut", { views.remove(view.handle); view.releaseDamage() })
         }
     }
 
@@ -1331,6 +1546,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 caulis.useDisplays(mode)
                 null
             }
+            // `newm cmd special [name]`: shows or hides a special workspace (Hyprland's togglespecialworkspace).
+            "special" -> {
+                toggleSpecialWorkspace(arg?.trim()?.takeIf { it.isNotEmpty() } ?: "special")
+                null
+            }
             // `newm cmd scratchpad <name>`: shows or hides one of caulis.scratchpad(...).
             "scratchpad" -> {
                 arg?.trim()?.takeIf { it.isNotEmpty() }?.let(::scratchpad)
@@ -1341,8 +1561,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // log <area> <0..3> | log <area> reset: one area of the log in more detail, now (render, input, ...).
             "log" -> {
                 val w = arg.orEmpty().trim().split(Regex("\\s+"))
-                val area = w.getOrNull(0)?.takeIf { it in dev.caulis.log.Log.AREAS }
-                    ?: return "log <area> <0..3>; the areas: ${dev.caulis.log.Log.AREAS.keys.joinToString()}"
+                // (Caulis' areas, and newm's own: bar, sound, network, bluetooth, screenshot, auth, ...)
+                val area = w.getOrNull(0)?.takeIf { it.matches(Regex("[a-z][a-z-]*")) }
+                    ?: return "log <area> <0..3>; Caulis' areas: ${dev.caulis.log.Log.AREAS.keys.joinToString()}; newm's: layout, view, state, gestures, keys, bar, tray, sound, network, bluetooth, power, screenshot, clipboard, launcher, panels, auth, session, config"
                 when (val level = w.getOrNull(1)) {
                     "reset" -> dev.caulis.log.Log.clearLevel(area)
                     else -> dev.caulis.log.Log.setLevel(area, level?.toIntOrNull()?.coerceIn(0, 3) ?: return "a level is 0, 1, 2 or 3")
@@ -1371,6 +1592,21 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             "open-launcher" -> {
                 enterLauncherOverlay()
                 null
+            }
+            // The programs of autostart { } and how each is.
+            "autostart" -> caulis.autostartStatus().joinToString("\n").ifEmpty { "no program started with the session" }
+            // The startup sound now (to try it), or one of the presets: `newm cmd play-startup-sound glass`.
+            "play-startup-sound" -> try {
+                caulis.playStartupSound(arg?.trim()?.lowercase()?.ifEmpty { null })
+                null
+            } catch (e: IllegalArgumentException) {
+                e.message
+            }
+            // The windows left out when the session came back (more than session.max_windows).
+            "restore-rest" -> {
+                val n = session.restLeft()
+                restoreRest()
+                if (n == 0) "nothing left" else "$n programs"
             }
             "close-launcher" -> {
                 if (overlay is LauncherOverlay) exitOverlay()
@@ -1415,14 +1651,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             "restart" -> {
                 // `restart keep`: the windows open now open again after it, each in its place.
                 val keep = arg?.trim()?.removePrefix("--") in setOf("keep", "restore", "windows", "session")
-                if (keep) session.save()
+                if (keep) session.save() else session.forgetForRestart()
                 // For dev/newm-dev: newm ends, and the script starts it again (a new build).
                 restartRequested = true
                 terminate()
                 null
             }
             "clean" -> {
-                animateTo({ s -> null to s.copy().clean(views.keys.toList()) }, confAnimT())
+                animateTo({ s -> null to s.copy().clean(views.keys.toList()) }, "windowsMove")
                 null
             }
             "unlock" -> if (confEnableUnlockCommand()) {
@@ -1469,9 +1705,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 caulis.simulateScroll(w.getOrNull(3)?.toIntOrNull() ?: 1)
             }
             // (Held and let go apart: a drag.)
-            "left-down", "left-up" -> {
+            "left-down", "left-up", "right-down", "right-up", "middle-down", "middle-up" -> {
                 caulis.simulatePointer(x, y)
-                caulis.simulateButton(272, w[2] == "left-down")
+                val button = when (w[2].substringBefore('-')) { "right" -> 273; "middle" -> 274; else -> 272 }
+                caulis.simulateButton(button, w[2].endsWith("-down"))
             }
             else -> caulis.simulatePointer(x, y, when (w[2]) { "right" -> 273; "middle" -> 274; else -> 272 })
         }
@@ -1480,6 +1717,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     // The monitor with the pointer.
     private fun activeMonitor(): Monitor? = desktopOrNull()?.let { d -> d.monitors.firstOrNull { m -> d.pointerX >= m.area.x && d.pointerX < m.area.right && d.pointerY >= m.area.y && d.pointerY < m.area.bottom } }
+
+    /** The windows left out when the session came back (more than session { maxWindows }): opened now. */
+    fun restoreRest() = session.restoreRest()
 
     fun launchApp(cmd: String) {
         exitOverlay()
@@ -1529,11 +1769,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     fun ensureLocked(anim: Boolean = true, dim: Boolean = false) {
-        // What is newm's own on top goes first: the clipboard's history, the launcher, the keys' help.
+        // What is newm's own on top goes first: the clipboard's history, the launcher (any
+        // overlay), the keys' help, the bar's popup.
         clipboardHistory.close()
-        if (overlay is LauncherOverlay) exitOverlay()
+        if (overlay != null) exitOverlay()
         keyHelpShown = false
+        barModel.close()
         fun focusLock() {
+            lockAnimating = false
             // Meanwhile no keys of newm's or Caulis's but the laptop's (XF86) ones.
             safelyEnterMode(LOCKED_MODE)
             val lockScreen = panels().filter { it.panel == "lock" }
@@ -1541,7 +1784,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
         // A locker of one's own (swaylock, gtklock: ext-session-lock), which Caulis shows (newm issue 154).
         confLockProgram()?.takeIf { it.isNotBlank() }?.let { program ->
-            if (!caulis.desktop.locked) {
+            // (Started once: asked again before it locked — the lock before sleep right after Super+L — it is not started twice.)
+            val now = System.currentTimeMillis()
+            if (!caulis.desktop.locked && now - lockProgramStarted > LOCK_PROGRAM_PATIENCE_MS) {
+                lockProgramStarted = now
                 log.info { "Locking with $program" }
                 caulis.launch(program)
             }
@@ -1549,17 +1795,49 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             return
         }
         // Locked already: nothing more (a second lock asked for the password again, newm issue 98).
-        if (state.lockPerc >= 1.0) {
+        if (caulis.desktop.lockedInternally && (state.lockPerc >= 1.0 || lockAnimating)) {
             if (dim) confIdleCallback()("lock")
             return
         }
-        authBackend.lock()
-        animateTo({ s -> (if (anim) null else s.copy(lockPerc = 1.0, backgroundOpacity = 0.5)) to s.copy(lockPerc = 1.0, backgroundOpacity = 0.5) }, confAnimT(), ::focusLock)
+        // Locked at once for Caulis (keys only to the lock screen, no window takes the focus,
+        // nothing else clickable); the lock screen slides in after.
+        if (!caulis.desktop.lockedInternally) {
+            lockSession()
+            authBackend.lock()
+        }
+        lockAnimating = true
+        animateTo({ s -> (if (anim) null else s.copy(lockPerc = 1.0, backgroundOpacity = 0.5)) to s.copy(lockPerc = 1.0, backgroundOpacity = 0.5) }, "lock", ::focusLock)
         if (dim) confIdleCallback()("lock")
     }
 
+    // Tells Caulis the session is locked by newm's lock screen (or the lock panel program's window).
+    private fun lockSession() {
+        val screen = panelsUi.lockScreenWidget() ?: return log.error("No lock screen to lock with")
+        var panelPid = panelLauncher.pidOf("lock")
+        log.info { "Locked${if (panelPid != null) " (the lock panel program's window takes the password)" else ""}" }
+        caulis.desktop.lockInternally(screen, allowSurface = { surface ->
+            // (Only the lock panel program's own windows: any other program stays behind the lock.
+            // Its process is asked for each time: started again while locked, the new one's window
+            // takes the password; its old number, used again by another program, does not.)
+            val now = panelLauncher.pidOf("lock")
+            if (now != panelPid) {
+                log.info { if (now != null) "The lock panel program is running again (another process): its window takes the password" else "The lock panel program is gone: newm's own lock screen takes the password" }
+                panelPid = now
+            }
+            now != null && runCatching { surface.resource.client.pid.toLong() }.getOrNull()
+                ?.let { isInProcessTree(it, now, panelLauncher.startTimeOf("lock"), ::parentPid, ::processStartTime) } == true
+        })
+    }
+
+    // The lock animation is under way (asked again meanwhile: not asked twice).
+    private var lockAnimating = false
+    // When the configuration's locker program was last started (milliseconds).
+    private var lockProgramStarted = 0L
+
     fun terminate() {
-        animateTo({ s -> s.copy(final = true) to s.copy(final = true, backgroundOpacity = 0.0) }, confBlendT(), ::terminateNow)
+        // session { restoreAtLogin }: the windows kept for the next login (`restart keep` kept them already).
+        if (!restartRequested && session.keepsForLogin) session.save(reason = "login")
+        animateTo({ s -> s.copy(final = true) to s.copy(final = true, backgroundOpacity = 0.0) }, NewmAnimations.resolveSeconds("quit", confBlendT()), ::terminateNow)
     }
 
     // --- 3. global or workspace state, the viewpoint ------------------------------------------------------
@@ -1576,7 +1854,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // pointer on another, Super again), else the focused one.
             val focused = if (!overview) (viewUnderPointer()?.also { if (!it.isFocused()) it.focus() } ?: findFocusedView()) else null
             null to s.withOverviewSet(overview, if (onlyActiveWorkspace) activeWorkspace() else null, focused)
-        }, confAnimT())
+        }, "overview")
     }
 
     fun toggleFullscreen(definedState: Boolean? = null) {
@@ -1605,7 +1883,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
             // Told to the programs of that workspace's tiles, only when it changes.
             fun tell(on: Boolean) {
-                if (confSendFullscreenToViews()) for (v in tiles(ws)) v.setFullscreen(on)
+                if (confSendFullscreenToViews()) for (v in tiles(ws)) {
+                    v.setFullscreen(on)
+                    // (Counted once the layout is fullscreen: the animation there is still to come.)
+                    if (on) fullscreenComing += v else { fullscreenComing -= v; toldFullscreen -= v }
+                }
             }
             when {
                 fs -> {
@@ -1618,14 +1900,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 }
                 else -> null to null
             }
-        }, confAnimT())
+        }, "fullscreen")
     }
 
     fun basicMove(deltaI: Int, deltaJ: Int) {
         val ws = activeWorkspace()
         animateTo({ s ->
             null to s.replacingWorkspaceState(ws) { copy(i = i + deltaI, j = j + deltaJ) }
-        }, confAnimT())
+        }, "camera")
     }
 
     /** Zooms so the focused window fills the screen: its tiles, one by one (the view as big as the window). */
@@ -1637,7 +1919,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             if (!vs.isTiled || ws == null) return@animateTo null to s
             val size = max(1.0, max(vs.w, vs.h))
             null to s.replacingWorkspaceState(ws) { copy(size = size, i = vs.i - (size - vs.w) / 2, j = vs.j - (size - vs.h) / 2) }
-        }, confAnimT())
+        }, "camera")
     }
 
     /**
@@ -1645,7 +1927,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
      * left) become halves of the screen — both two tiles tall, seen two by two. Again: back to
      * one tile each, the focused one filling the screen.
      */
+    /** The key whose action runs now (newm's notation, "L-s"), or null (a command, the bar, a gesture). */
+    internal var runningKey: String? = null
+        private set
+
     fun sideBySide() {
+        // (The key that asked, for the words if there is no neighbour.)
+        val key = runningKey
         val view = findFocusedView() ?: return
         animateTo({ s0 ->
             val s = s0.copy()
@@ -1659,7 +1947,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             val row = wsState.viewStates.entries.filter { (h, v) -> h != view.handle && v.isTiled && near(v.j, fs.j) }
             val other = row.firstOrNull { near(it.value.i, fs.i + fs.w) } ?: row.firstOrNull { near(it.value.i + it.value.w, fs.i) }
             if (other == null) {
-                caulis.notify("Open a second window first: Logo+S puts it beside this one.", title = "newm")
+                val keyWords = key?.let { k -> keyNames(k).joinToString(", ") { it.joinToString("+") } }
+                caulis.notify(
+                    if (keyWords != null) newm.bar.tr("Open a second window first: %s puts it beside this one.").replace("%s", keyWords)
+                    else newm.bar.tr("Open a second window first: then the two go side by side."),
+                    title = "newm",
+                )
                 return@animateTo null to s0
             }
             val os = other.value
@@ -1687,7 +1980,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             val next = s.replacingWorkspaceState(ws) { copy(size = 2 * u, i = left, j = fj) }
             log.info { "Side by side: ${view.appId} and ${views[other.key]?.appId} (a tile: $u)" }
             null to next.constrain()
-        }, confAnimT())
+        }, "windowsMove")
     }
 
     // Screenshots (made when the compositor runs).
@@ -1710,6 +2003,18 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
      */
     fun scratchpad(name: String) = caulis.toggleScratchpad(name)
 
+    /**
+     * Shows the special workspace [name] (Hyprland's togglespecialworkspace; "special" without
+     * a name) above the wall on the focused monitor, or hides it.
+     */
+    fun toggleSpecialWorkspace(name: String = "special") = caulis.toggleSpecialWorkspace(name)
+
+    /** Moves the focused window into the special workspace [name] — shown with it, or [silent]ly waiting there. */
+    fun moveToSpecialWorkspace(name: String = "special", silent: Boolean = false) = caulis.moveToSpecialWorkspace(null, name, silent)
+
+    /** Moves the focused window out of its special workspace back onto the wall. */
+    fun moveOutOfSpecialWorkspace() = caulis.moveOutOfSpecialWorkspace(null)
+
     /** The clipboard's history (Logo+V): what was copied lately, to copy again. */
     val clipboardHistory by lazy { ClipboardHistory(this) }
 
@@ -1725,7 +2030,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
 
     /** The keys' help coming and going (done by the compositor). */
-    internal val keyHelpFade = newm.bar.Fade(inMillis = 260, outMillis = 180)
+    internal val keyHelpFade = newm.bar.Fade("keyHelp", inMillis = 260, outMillis = 180)
 
     fun toggleKeyHelp() {
         keyHelpShown = !keyHelpShown
@@ -1743,7 +2048,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val ws = activeWorkspace()
         animateTo({ s ->
             null to s.replacingWorkspaceState(ws) { copy(size = max(1.0, size + deltaS)) }
-        }, confAnimT())
+        }, "camera")
     }
 
     // --- 4. focus -----------------------------------------------------------------------------------------
@@ -1752,7 +2057,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         animateTo({ s ->
             view.focus()
             null to s.focusingView(view)
-        }, confAnimT())
+        }, "camera")
     }
 
     fun moveInStack(@Suppress("UNUSED_PARAMETER") delta: Int) {
@@ -1854,7 +2159,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } catch (e: Exception) {
                 null to s
             }
-        }, confAnimT())
+        }, "windowsMove")
     }
 
     fun changeFocusedViewWorkspace(ds: Int = 1) {
@@ -1872,7 +2177,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } catch (e: Exception) {
                 null to s
             }
-        }, confAnimT())
+        }, "windowsMove")
     }
 
     fun moveFocusedView(di: Int, dj: Int) {
@@ -1887,7 +2192,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } catch (e: Exception) {
                 null to s
             }
-        }, confAnimT())
+        }, "windowsMove")
     }
 
     fun resizeFocusedView(di: Int, dj: Int) {
@@ -1918,13 +2223,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 if (w == vs.w && h == vs.h && (di < 0 || dj < 0)) return@animateTo null to s
                 val next = wsState.replacingViewState(view) { this.i = i; this.j = j; this.w = w; this.h = h }
                 if (confResizePushes()) makeRoom(next, view.handle, vs, i, j, w, h)
-                s.validateStackIndices(view)
+                // (The new state's stacks, not the live one's: that is changed only through update.)
+                next.validateStackIndices(view)
                 null to s.settingWorkspaceState(ws, next.coarsened().focusingView(view))
             } catch (e: Exception) {
                 log.warn("The window could not be resized: $e")
                 null to s
             }
-        }, confAnimT())
+        }, "windowsMove")
     }
 
     // A window grown over its neighbours pushes them aside (the columns right of it, the rows
@@ -1973,7 +2279,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             focusBorders.updateFocus(by, null to next)
             by.focus()
             null to next
-        }, confAnimT())
+        }, "windowsMove")
     }
 
     private fun safelyEnterMode(mode: String?) {
@@ -1994,5 +2300,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
 /** Caulis's key mode while newm is locked: no keys of its own (the emergency ones neither). */
 const val LOCKED_MODE = "newm-locked"
+
+// A locker program started is given this long to lock before it is started again (milliseconds).
+private const val LOCK_PROGRAM_PATIENCE_MS = 10_000L
 
 private fun Double.toMillis(): Int = (this * 1000).toLong().toInt()

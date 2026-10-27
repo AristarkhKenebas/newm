@@ -100,7 +100,25 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
         } else {
             clearError()
         }
-        return settings
+        // On top of newm's own configuration: a config.json of a few lines (NixOS'
+        // programs.newm.settings = { view.corner_radius = 24; }) changes those, and the keys,
+        // the bar and the rest stay — they were all gone. A section given whole replaces it.
+        val base = defaults ?: loadDefault().also { defaults = it } ?: return settings
+        return merged(base, settings)
+    }
+
+    // newm's own configuration (the template), made once: what config.json and config.lua add to.
+    private var defaults: Map<String, Any?>? = null
+
+    // [over] on top of [base]: maps in both are merged the same way, anything else is [over]'s.
+    @Suppress("UNCHECKED_CAST")
+    private fun merged(base: Map<String, Any?>, over: Map<String, Any?>): Map<String, Any?> {
+        val out = LinkedHashMap(base)
+        for ((key, value) in over) {
+            val below = out[key]
+            out[key] = if (below is Map<*, *> && value is Map<*, *>) merged(below as Map<String, Any?>, value as Map<String, Any?>) else value
+        }
+        return out
     }
 
     /** newm's own default (when the user's cannot be loaded at the start). */

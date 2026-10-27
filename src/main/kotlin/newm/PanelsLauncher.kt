@@ -26,6 +26,10 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
 
 
     val pid: Long? get() = process?.pid()
+    val alive: Boolean get() = process?.isAlive == true
+    /** When its process started (/proc's start time; null: none, or not read). */
+    var startTime: Long? = null
+        private set
 
     private fun start() {
         process = null
@@ -34,6 +38,7 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
         log.info { "Starting $cmd${cwd?.let { " in $it" }.orEmpty()}" }
         // (Inside the compositor: its environment, its socket.)
         process = spawn(cmd.split(" "), cwd?.let { java.nio.file.Path.of(it) })
+        startTime = process?.pid()?.let(::processStartTime)
     }
 
     fun check() {
@@ -53,6 +58,7 @@ class PanelLauncher(val panel: String, private val spawn: (List<String>, java.ni
     fun stop() {
         process?.destroyForcibly()
         process = null
+        startTime = null
     }
 }
 
@@ -76,4 +82,10 @@ class PanelsLauncher(private val every: (Long, () -> Unit) -> AutoCloseable, spa
     }
 
     fun panelForPid(pid: Int): String? = panels.firstOrNull { it.pid == pid.toLong() }?.panel
+
+    /** The process of [panel]'s program now (null: none running). */
+    fun pidOf(panel: String): Long? = panels.firstOrNull { it.panel == panel }?.takeIf { it.alive }?.pid
+
+    /** When the process of [panel]'s program now started (see [processStartTime]; null: none, or not read). */
+    fun startTimeOf(panel: String): Long? = panels.firstOrNull { it.panel == panel }?.takeIf { it.alive }?.startTime
 }

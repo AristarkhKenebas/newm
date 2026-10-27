@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
-import dev.caulis.core.dbus.DBusConnection
+import dev.caulis.core.dbus.DBusScope
 import dev.caulis.core.dbus.DBusError
 import dev.caulis.core.dbus.DBusMessage
 import dev.caulis.core.dbus.DBusMethod
@@ -22,9 +22,46 @@ private const val ITEM = "org.kde.StatusNotifierItem"
 private const val PROPERTIES = "org.freedesktop.DBus.Properties"
 private const val MENU = "com.canonical.dbusmenu"
 private const val BUS = "org.freedesktop.DBus"
+private const val INVALID_ARGS = "org.freedesktop.DBus.Error.InvalidArgs"
 
 /** The size tray icons are drawn at (pixels: sharp up to a scale of 2). */
 internal const val TRAY_ICON_PIXELS = 40
+
+// tray { maxItemsPerProgram = 8; maxIconSize = 1024 }: how many icons one program may put in the
+// tray, and the biggest picture (pixels each way) taken from a program; bigger ones are not drawn.
+private val confMaxPerProgram = newm.configuredValue("tray.max_items_per_program", 8)
+private val confMaxIconSize = newm.configuredValue("tray.max_icon_size", 1024)
+// (Hosts that registered: told nothing but kept; a program asking again and again is not kept for ever.)
+private const val MAX_HOSTS = 64
+// A first reading of an icon's properties that failed: asked again so often, so many ms apart (then more).
+private const val GETALL_RETRIES = 2
+private const val GETALL_RETRY_MILLIS = 500L
+
+/**
+ * D-Bus's rules for names and paths: what a program registers is checked before newm sends
+ * anything to it (a message to a malformed name or path makes the bus drop newm's connection).
+ */
+internal object DBusNames {
+    private val pathPart = Regex("[A-Za-z0-9_]+")
+    private val wellKnownPart = Regex("[A-Za-z_-][A-Za-z0-9_-]*")
+    private val uniquePart = Regex("[A-Za-z0-9_-]+")
+
+    /** An object path: "/" or "/a/b_c/d1" (no empty parts, no trailing slash). */
+    fun isObjectPath(path: String): Boolean =
+        path == "/" || path.length in 2..1024 && path.startsWith("/") && path.substring(1).split('/').all { pathPart.matches(it) }
+
+    /** A bus name: unique (":1.42") or well-known ("org.kde.StatusNotifierItem-12-1"), at most 255 characters. */
+    fun isBusName(name: String): Boolean {
+        if (name.isEmpty() || name.length > 255) return false
+        return if (name.startsWith(":")) {
+            val parts = name.substring(1).split('.')
+            parts.size >= 2 && parts.all { uniquePart.matches(it) }
+        } else {
+            val parts = name.split('.')
+            parts.size >= 2 && parts.all { wellKnownPart.matches(it) }
+        }
+    }
+}
 
 /** A program's icon in the tray (a StatusNotifierItem: Telegram, nm-applet, Steam, ...). */
 class TrayItem internal constructor(
@@ -34,6 +71,10 @@ class TrayItem internal constructor(
 ) {
     /** The unique bus name behind [service] (signals come from it). */
     internal var owner: String = service
+
+    // Its properties were read once (until then a failed reading is tried again: a program may
+    // register its icon a moment before it shows the object).
+    internal var read = false
 
     var title by mutableStateOf("")
         internal set
@@ -86,7 +127,7 @@ class Tray(private val caulis: Caulis) {
     /** The icons now, in the order they came. */
     val items = mutableStateListOf<TrayItem>()
 
-    private var bus: DBusConnection? = null
+    private var bus: DBusScope? = null
     private var ownWatcher = false
     private val hosts = LinkedHashSet<String>()
 
@@ -94,7 +135,7 @@ class Tray(private val caulis: Caulis) {
     fun start() {
         val bus = caulis.sessionBus ?: return log.warn("No session bus: no tray")
         this.bus = bus
-        bus.onSignal(BUS, "NameOwnerChanged") { m -> nameOwnerChanged(m) }
+        bus.onSignal(BUS, "NameOwnerChanged", sender = BUS) { m -> nameOwnerChanged(m) }
         for (member in listOf("NewIcon", "NewAttentionIcon", "NewOverlayIcon", "NewTitle", "NewToolTip", "NewStatus", "NewMenu")) {
             bus.onSignal(ITEM, member) { m -> items.filter { it.owner == m.sender }.forEach(::refresh) }
         }
@@ -112,17 +153,27 @@ class Tray(private val caulis: Caulis) {
 
     // --- newm as the watcher -------------------------------------------------------------------
 
-    private fun exportWatcher(bus: DBusConnection) {
+    private fun exportWatcher(bus: DBusScope) {
         bus.export(WATCHER_PATH, WATCHER, mapOf(
             "RegisterStatusNotifierItem" to DBusMethod("s", "") { m ->
-                val arg = m.body.firstOrNull() as? String ?: throw DBusError("org.freedesktop.DBus.Error.InvalidArgs", "a service")
-                val sender = m.sender ?: arg
+                val arg = m.body.firstOrNull() as? String ?: throw DBusError(INVALID_ARGS, "a service")
+                val sender = m.sender ?: throw DBusError(INVALID_ARGS, "no sender")
                 // A path alone (libappindicator) is on the sender; a name is at the usual path.
-                if (arg.startsWith("/")) add(sender, arg) else add(arg, "/StatusNotifierItem")
+                val (service, path) = if (arg.startsWith("/")) sender to arg else arg to "/StatusNotifierItem"
+                if (!DBusNames.isBusName(service) || !DBusNames.isObjectPath(path)) {
+                    log.warn("A tray icon with a malformed name or path from $sender: refused")
+                    throw DBusError(INVALID_ARGS, "not a bus name or object path")
+                }
+                val max = confMaxPerProgram().coerceAtLeast(1)
+                if (items.count { it.owner == sender || it.service == sender } >= max) {
+                    log.warn("$sender has $max tray icons already: another refused (tray { maxItemsPerProgram })")
+                    throw DBusError("org.freedesktop.DBus.Error.LimitsExceeded", "too many tray icons")
+                }
+                add(service, path, sender)
                 emptyList()
             },
             "RegisterStatusNotifierHost" to DBusMethod("s", "") { m ->
-                (m.body.firstOrNull() as? String)?.let { hosts += it }
+                (m.body.firstOrNull() as? String)?.takeIf { hosts.size < MAX_HOSTS && DBusNames.isBusName(it) }?.let { hosts += it }
                 bus.emitSignal(WATCHER_PATH, WATCHER, "StatusNotifierHostRegistered")
                 emptyList()
             },
@@ -146,12 +197,12 @@ class Tray(private val caulis: Caulis) {
 
     // --- newm as a host of another watcher ------------------------------------------------------
 
-    private fun hostOfOther(bus: DBusConnection) {
+    private fun hostOfOther(bus: DBusScope) {
         val host = "org.kde.StatusNotifierHost-${ProcessHandle.current().pid()}"
         bus.requestName(host)
         bus.call(WATCHER, ObjectPath(WATCHER_PATH), WATCHER, "RegisterStatusNotifierHost", "s", listOf(host))
-        bus.onSignal(WATCHER, "StatusNotifierItemRegistered") { m -> (m.body.firstOrNull() as? String)?.let(::addByKey) }
-        bus.onSignal(WATCHER, "StatusNotifierItemUnregistered") { m -> (m.body.firstOrNull() as? String)?.let { key -> remove { it.key == key || it.service == key } } }
+        bus.onSignal(WATCHER, "StatusNotifierItemRegistered", sender = WATCHER) { m -> (m.body.firstOrNull() as? String)?.let(::addByKey) }
+        bus.onSignal(WATCHER, "StatusNotifierItemUnregistered", sender = WATCHER) { m -> (m.body.firstOrNull() as? String)?.let { key -> remove { it.key == key || it.service == key } } }
         bus.call(WATCHER, ObjectPath(WATCHER_PATH), PROPERTIES, "Get", "ss", listOf(WATCHER, "RegisteredStatusNotifierItems")) { reply ->
             @Suppress("UNCHECKED_CAST")
             ((reply.body.firstOrNull() as? Variant)?.value as? List<String>)?.forEach(::addByKey)
@@ -161,19 +212,26 @@ class Tray(private val caulis: Caulis) {
     // "org.kde.StatusNotifierItem-1-1/StatusNotifierItem" or ":1.5/org/ayatana/NotificationItem/x".
     private fun addByKey(key: String) {
         val slash = key.indexOf('/')
-        if (slash < 0) add(key, "/StatusNotifierItem") else add(key.substring(0, slash), key.substring(slash))
+        val (service, path) = if (slash < 0) key to "/StatusNotifierItem" else key.substring(0, slash) to key.substring(slash)
+        // (Another watcher's list: checked as a program's own registration is.)
+        if (!DBusNames.isBusName(service) || !DBusNames.isObjectPath(path)) return log.warn("A tray icon with a malformed name or path: not shown")
+        add(service, path)
     }
 
     // --- the items --------------------------------------------------------------------------------
 
-    private fun add(service: String, path: String) {
+    // [service] and [path] are checked already (DBusNames); [sender]: who registered it, if known.
+    private fun add(service: String, path: String, sender: String? = null) {
         if (items.any { it.service == service && it.path == path }) return
         val item = TrayItem(service, path)
+        sender?.let { item.owner = it }
         items += item
         log.info { "Tray icon: $service$path" }
         val bus = bus ?: return
         bus.call(BUS, ObjectPath("/org/freedesktop/DBus"), BUS, "GetNameOwner", "s", listOf(service)) { reply ->
-            (reply.body.firstOrNull() as? String)?.takeIf { !reply.isError }?.let { item.owner = it }
+            val owner = (reply.body.firstOrNull() as? String)?.takeIf { !reply.isError }
+            // A name no one has: no icon (it would never go, as no owner change comes for it).
+            if (owner == null) remove { it === item } else item.owner = owner
         }
         refresh(item)
         if (ownWatcher) bus.emitSignal(WATCHER_PATH, WATCHER, "StatusNotifierItemRegistered", "s", listOf(item.key))
@@ -197,10 +255,21 @@ class Tray(private val caulis: Caulis) {
     }
 
     // Reads all of [item]'s properties again (its icon, title, status, menu).
-    private fun refresh(item: TrayItem) {
+    private fun refresh(item: TrayItem, tries: Int = 0) {
         val bus = bus ?: return
         bus.call(item.service, ObjectPath(item.path), PROPERTIES, "GetAll", "s", listOf(ITEM)) { reply ->
-            if (reply.isError) return@call log.warn("Tray icon ${item.service}${item.path}: ${reply.errorName} ${reply.body.firstOrNull()}")
+            if (reply.isError) {
+                // (Not read yet: asked again a little later, twice.)
+                if (!item.read && tries < GETALL_RETRIES) {
+                    log.info { "Tray icon ${item.service}${item.path}: ${reply.errorName}, asked again" }
+                    caulis.after(GETALL_RETRY_MILLIS * (tries + 1)) { if (items.any { it === item }) refresh(item, tries + 1) }
+                    return@call
+                }
+                // (One that cannot say what it is never shows more than a letter: away with it.)
+                log.warn("Tray icon ${item.service}${item.path}: ${reply.errorName}: removed")
+                return@call remove { it === item }
+            }
+            item.read = true
             val props = HashMap<String, Any?>()
             for (entry in reply.body.firstOrNull() as? List<*> ?: emptyList<Any?>()) {
                 val pair = entry as? List<*> ?: continue
@@ -217,8 +286,9 @@ class Tray(private val caulis: Caulis) {
         item.menu = (props["Menu"] as? ObjectPath)?.value?.takeIf { it != "/" }
         item.itemIsMenu = props["ItemIsMenu"] as? Boolean ?: false
         (props["ToolTip"] as? List<*>)?.let { tip ->
-            val title = tip.getOrNull(2) as? String ?: ""
-            val text = (tip.getOrNull(3) as? String ?: "").replace(Regex("<[^>]*>"), "")
+            val title = (tip.getOrNull(2) as? String ?: "").take(1000)
+            // (The same markup as a notification's body, taken out the same linear way: a tooltip comes from any program.)
+            val text = plainText((tip.getOrNull(3) as? String ?: "").take(4000))
             item.tooltip = listOf(title, text).filter { it.isNotBlank() }.joinToString("\n")
         }
         if (item.tooltip.isBlank()) item.tooltip = item.title
@@ -236,8 +306,18 @@ class Tray(private val caulis: Caulis) {
 
     // The biggest of an IconPixmap's pictures (a(iiay)).
     private fun pixmapOf(pixmaps: List<*>?): ImageBitmap? {
-        val best = pixmaps?.mapNotNull { it as? List<*> }?.maxByOrNull { (it[0] as Int) * (it[1] as Int) } ?: return null
-        val bytes = (best[2] as? List<*>)?.let { list -> ByteArray(list.size) { (list[it] as Int).toByte() } } ?: return null
+        // (Only pictures of a sensible size whose bytes are all there: a program may send anything.)
+        val max = confMaxIconSize().coerceIn(16, 8192)
+        if (pixmaps == null) return null
+        val fitting = pixmaps.mapNotNull { it as? List<*> }.filter { p ->
+            val w = p.getOrNull(0) as? Int ?: return@filter false
+            val h = p.getOrNull(1) as? Int ?: return@filter false
+            w in 1..max && h in 1..max && (p.getOrNull(2) as? List<*>)?.size == w * h * 4
+        }
+        val best = fitting.maxByOrNull { (it[0] as Int) * (it[1] as Int) } ?: return null
+        if (fitting.size < pixmaps.size) log.trace { "Tray pictures past ${max}x$max or broken: left out" }
+        val list = best[2] as List<*>
+        val bytes = ByteArray(list.size) { ((list[it] as? Number)?.toInt() ?: 0).toByte() }
         return IconTheme.fromArgb(best[0] as Int, best[1] as Int, bytes, TRAY_ICON_PIXELS)
     }
 

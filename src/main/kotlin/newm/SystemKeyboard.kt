@@ -7,8 +7,9 @@ import java.nio.file.Path
 private val log = Logger("keyboard")
 
 /**
- * The keyboard layouts of the system, for a configuration that names none: the X11 keyboard
- * setting (localectl set-x11-keymap writes /etc/X11/xorg.conf.d/00-keyboard.conf), else the
+ * The keyboard layouts of the system, for a configuration that names none: XKB_DEFAULT_LAYOUT,
+ * else the X11 keyboard setting (localectl set-x11-keymap writes
+ * /etc/X11/xorg.conf.d/00-keyboard.conf), else the
  * language (LANG=ru_RU: "us,ru"), with Alt+Shift switching when there are several.
  */
 data class SystemKeyboard(val layouts: String, val options: String) {
@@ -23,6 +24,13 @@ data class SystemKeyboard(val layouts: String, val options: String) {
         private const val SWITCH = "grp:alt_shift_toggle"
 
         fun detect(): SystemKeyboard {
+            // XKB_DEFAULT_LAYOUT and _OPTIONS (as wlroots compositors read them; newm's NixOS
+            // module sets them from services.xserver.xkb).
+            System.getenv("XKB_DEFAULT_LAYOUT")?.takeIf { it.isNotBlank() }?.let { layouts ->
+                val options = System.getenv("XKB_DEFAULT_OPTIONS")?.takeIf { it.isNotBlank() } ?: if (',' in layouts) SWITCH else ""
+                log.info { "Keyboard layouts from XKB_DEFAULT_LAYOUT: $layouts" }
+                return SystemKeyboard(layouts, options)
+            }
             fromX11Conf()?.let { return it.also { k -> log.info { "Keyboard layouts of the system: ${k.layouts}" } } }
             val lang = (System.getenv("LC_ALL") ?: System.getenv("LANG") ?: "").substringBefore('_').substringBefore('.').lowercase()
             if (lang.isEmpty() || lang == "en" || lang == "c" || lang == "posix") return SystemKeyboard("us", "")

@@ -7,7 +7,6 @@ import kotlin.math.min
 
 private val log = Logger("overlay")
 
-private val confAnimT = configuredValue("anim_time", .3)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
 
 /**
@@ -105,7 +104,7 @@ class MoveResizeFloatingOverlay(layout: Layout, private val view: View) : Overla
         log.trace { "MoveResizeFloatingOverlay: New ${gesture.kind}" }
         motionMode = false
         gestureMode = true
-        LowpassGesture(gesture, confLpInertia(), confLpFreq(), layout::every).listener(GestureListener(gesture(step), ::gestureFinish))
+        LowpassGesture(gesture, NewmAnimations.gestureInertia(confLpInertia(), confLpFreq()), confLpFreq(), layout::every).listener(GestureListener(gesture(step), ::gestureFinish))
         return true
     }
 
@@ -120,15 +119,15 @@ class MoveResizeFloatingOverlay(layout: Layout, private val view: View) : Overla
         return false
     }
 
-    override fun exitTransition(): Pair<LayoutState?, Double?> {
+    override fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
         if (layout.state.findViewOrNull(view) == null) {
             log.warn("Unexpected: Error accessing view $view state")
-            return null to 0.0
+            return null to null
         }
         val state = layout.state.copy()
         state.updateViewState(view) { scaleOrigin = null }
         state.constrain()
-        return state to confAnimT()
+        return state to NewmAnimations["moveResize"]
     }
 }
 
@@ -167,7 +166,7 @@ class SwipeOverlay(layout: Layout) : Overlay(layout) {
         setState()
     }
 
-    override fun exitTransition(): Pair<LayoutState?, Double?> {
+    override fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
         var (fi, ti) = iGrid.final(throwDistMax = size - confGridMinDist())
         var (fj, tj) = jGrid.final(throwDistMax = size - confGridMinDist())
         var t: Double? = null
@@ -180,7 +179,8 @@ class SwipeOverlay(layout: Layout) : Overlay(layout) {
                 t = tj
             }
         }
-        return layout.state.replacingWorkspaceState(workspace) { copy(i = fi.toDouble(), j = fj.toDouble()) } to t
+        // (Its time comes from the fingers' speed, unless gestureSnap says one.)
+        return layout.state.replacingWorkspaceState(workspace) { copy(i = fi.toDouble(), j = fj.toDouble()) } to t?.let { NewmAnimations.resolveSeconds("gestureSnap", it) }
     }
 
     private fun setState() {
@@ -195,7 +195,7 @@ class SwipeOverlay(layout: Layout) : Overlay(layout) {
             return false
         }
         if (!hasGesture) {
-            LowpassGesture(gesture, confLpInertia(), confLpFreq(), layout::every).listener(GestureListener(::onUpdate) { layout.exitOverlay() })
+            LowpassGesture(gesture, NewmAnimations.gestureInertia(confLpInertia(), confLpFreq()), confLpFreq(), layout::every).listener(GestureListener(::onUpdate) { layout.exitOverlay() })
             hasGesture = true
         }
         return true
@@ -271,14 +271,14 @@ class SwipeToZoomOverlay(layout: Layout) : Overlay(layout) {
         setState()
     }
 
-    override fun exitTransition(): Pair<LayoutState?, Double?> {
+    override fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
         val (finalSize, t) = grid.final()
         var state = layout.state.replacingWorkspaceState(workspace) { copy(size = finalSize.toDouble(), sizeOrigin = null) }
         focused?.let { state = state.focusingView(it) }
         if (finalSize != initialSize) {
             state = state.settingWorkspaceState(workspace, state.workspaceState(workspace).withoutFullscreen(drop = true))
         }
-        return state to t
+        return state to NewmAnimations.resolveSeconds("gestureSnap", t)
     }
 
     private fun setState() {
@@ -299,7 +299,7 @@ class SwipeToZoomOverlay(layout: Layout) : Overlay(layout) {
             return false
         }
         if (!hasGesture) {
-            LowpassGesture(gesture, confLpInertia(), confLpFreq(), layout::every).listener(GestureListener(::onUpdate) { layout.exitOverlay() })
+            LowpassGesture(gesture, NewmAnimations.gestureInertia(confLpInertia(), confLpFreq()), confLpFreq(), layout::every).listener(GestureListener(::onUpdate) { layout.exitOverlay() })
             hasGesture = true
         }
         return true
@@ -327,7 +327,7 @@ class LauncherOverlay(layout: Layout) : Overlay(layout) {
         log.trace { "LauncherOverlay: new gesture" }
         if (gesture.kind != confGestureBindingLauncher()[1]) return false
         // (The first gesture opens it, the next one closes it.)
-        LowpassGesture(gesture, confLpInertia(), confLpFreq(), layout::every).listener(GestureListener(::onUpdate) { onUpdate(null) })
+        LowpassGesture(gesture, NewmAnimations.gestureInertia(confLpInertia(), confLpFreq()), confLpFreq(), layout::every).listener(GestureListener(::onUpdate) { onUpdate(null) })
         hasGesture = true
         return true
     }
@@ -356,15 +356,15 @@ class LauncherOverlay(layout: Layout) : Overlay(layout) {
         return false
     }
 
-    override fun enterTransition(): Pair<LayoutState?, Double?> {
+    override fun enterTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
         if (hasGesture) return null to null
         log.trace { "Entering LauncherOverlay with animation..." }
-        return layout.state.copy(launcherPerc = 1.0) to confAnimT()
+        return layout.state.copy(launcherPerc = 1.0) to NewmAnimations["launcher"]
     }
 
-    override fun exitTransition(): Pair<LayoutState?, Double?> {
+    override fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
         log.trace { "Exiting LauncherOverlay with animation..." }
-        return layout.state.copy(launcherPerc = 0.0) to confAnimT()
+        return layout.state.copy(launcherPerc = 0.0) to NewmAnimations["launcher"]
     }
 
     override fun postInit() {

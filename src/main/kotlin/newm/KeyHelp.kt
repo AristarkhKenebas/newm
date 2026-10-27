@@ -1,7 +1,5 @@
 package newm
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -61,7 +59,7 @@ internal fun Layout.showKeyHelp(): AutoCloseable {
 
 // Rows of two keys, a title and the gestures below.
 // (Its margins and title, the rows, the touchpad's title and rows, a little room below them.)
-private fun Layout.keyHelpHeight(): Int = 60 + 40 + (helpRows(keyHelp()).size + 1) / 2 * 32 + 42 + (GESTURES.size + 1) / 2 * 26 - 2
+private fun Layout.keyHelpHeight(): Int = 60 + 40 + (helpRows(keyHelp()).size + 1) / 2 * 32 + 42 + (gestureHelp().size + 1) / 2 * 26 - 2
 
 /** Keys that do the same (the same words) in one row: their combinations, and the words. */
 internal fun helpRows(keys: List<Pair<String, String>>): List<Pair<List<String>, String>> {
@@ -71,14 +69,63 @@ internal fun helpRows(keys: List<Pair<String, String>>): List<Pair<List<String>,
     return rows.map { (what, combos) -> combos to (if (what.startsWith("\u0000")) "" else what) }
 }
 
-private val GESTURES = listOf(
-    "3 fingers" to "Move over the wall",
-    "4 fingers up / down" to "Zoom out / in",
-    "5 fingers" to "Launcher",
-    "Super + left drag" to "Move the window",
-    "Super + right drag" to "Resize the window",
-    "Super + 2 fingers" to "Resize the window",
-)
+// The gestures as the configuration binds them (gesture_bindings, mouse { }, gestures { on() }).
+private val confSwipe = configuredValue<List<String?>>("gesture_bindings.swipe", listOf(null, "swipe-3"))
+private val confZoom = configuredValue<List<String?>>("gesture_bindings.swipe_to_zoom", listOf(null, "swipe-4"))
+private val confMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
+private val confLauncher = configuredValue<List<String?>>("gesture_bindings.launcher", listOf(null, "swipe-5"))
+private val confOwnGestures = configuredValue("gestures.on", emptyList<Map<String, Any?>>())
+private val confCGestures = configuredValue("gestures.c.enabled", true)
+
+/** A gesture in words: "3 fingers", "Super + 2 fingers" ([modifier]: newm's letter, "L"; [kind]: "swipe-3", "move-1"). */
+internal fun gestureWords(modifier: String?, kind: String?): String {
+    val fingers = kind?.substringAfter('-', "")?.toIntOrNull() ?: 0
+    val what = when {
+        kind == null -> ""
+        fingers == 1 -> "1 finger"
+        fingers > 1 -> "$fingers fingers"
+        else -> kind
+    }
+    return listOfNotNull(modifierWord(modifier), what.ifEmpty { null }).joinToString(" + ")
+}
+
+private fun modifierWord(modifier: String?): String? = when (modifier) {
+    null, "" -> null
+    "L" -> "Super"
+    "A" -> "Alt"
+    "C" -> "Ctrl"
+    "S" -> "Shift"
+    else -> modifier
+}
+
+/** The touchpad's and the mouse's gestures and what they do (in English: the panel translates them). */
+internal fun gestureHelp(): List<Pair<String, String>> {
+    val out = ArrayList<Pair<String, String>>()
+    val touchpad = confCGestures()
+    val moveResize = confMoveResize()
+    if (touchpad) {
+        confSwipe().let { b -> b.getOrNull(1)?.let { out += gestureWords(b[0], it) to "Move over the wall" } }
+        confZoom().let { b -> b.getOrNull(1)?.let { out += "${gestureWords(b[0], it)} up / down" to "Zoom out / in" } }
+        confLauncher().let { b -> b.getOrNull(1)?.let { out += gestureWords(b[0], it) to "Launcher" } }
+    }
+    // The mouse with the modifier held (mouse { superMove, moveButton, resizeButton }).
+    val mod = modifierWord(moveResize.getOrNull(0))
+    if (mod != null && moveResize.getOrNull(1) != null) {
+        if (confSuperMove() == "motion") out += "$mod + mouse" to "Move the window"
+        else {
+            mouseButtonCode(confMoveButton())?.let { out += "$mod + ${mouseButtonName(it)} drag" to "Move the window" }
+            mouseButtonCode(confResizeButton())?.let { out += "$mod + ${mouseButtonName(it)} drag" to "Resize the window" }
+        }
+    }
+    if (touchpad) moveResize.getOrNull(2)?.let { out += gestureWords(moveResize[0], it) to "Resize the window" }
+    for (g in confOwnGestures()) {
+        val kind = g["kind"] as? String ?: continue
+        val way = g["direction"] as? String
+        val words = gestureWords(g["modifier"] as? String, kind) + (way?.let { " $it" } ?: "")
+        out += words to ((g["description"] as? String)?.ifBlank { null } ?: "Your own")
+    }
+    return out
+}
 
 @Composable
 internal fun KeyHelpPanel(wm: Layout) {
@@ -109,10 +156,13 @@ internal fun KeyHelpPanel(wm: Layout) {
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            BasicText(newm.bar.tr("Touchpad"), style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-            Spacer(Modifier.height(6.dp))
-            for (pair in GESTURES.chunked(2)) {
+            val gestures = gestureHelp()
+            if (gestures.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                BasicText(newm.bar.tr("Touchpad"), style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                Spacer(Modifier.height(6.dp))
+            }
+            for (pair in gestures.chunked(2)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     for ((how, what) in pair) Row(Modifier.weight(1f).height(26.dp), verticalAlignment = Alignment.CenterVertically) {
                         Cap(newm.bar.tr(how), colors)

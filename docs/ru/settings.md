@@ -2,82 +2,598 @@
 
 [English](../en/settings.md) · **Русский**
 
-В `config.kts`, который создаёт newm, перечислены все настройки с пояснениями. Эта страница —
-краткий справочник. В Lua и JSON названия те же, но в snake_case (`cornerRadius` →
-`corner_radius`).
+`config.kts`, который пишет newm, перечисляет основные настройки с пояснением к каждой. Эта
+страница — полный справочник. Настройка, которую вы не указали, имеет значение по умолчанию,
+указанное здесь; стартовый `config.kts` задаёт некоторые из них иначе (он у вас перед глазами,
+смотрите там).
 
-## Разделы
+В Lua и JSON имена те же, в snake_case (`cornerRadius` → `corner_radius`, `topBar` →
+`top_bar`; одно исключение: `numLock` — это `numlock`). `newm cmd config` выводит все
+действующие настройки.
 
-| Раздел | Настройки |
+## Верхний уровень
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `animTime` | `0.3` | сколько длятся перемещение и масштабирование, секунды (общее время анимаций; они идут, только когда включены) |
+| `blendTime` | `1.0` | плавное появление при запуске и исчезновение при выходе, секунды (анимации `startup`, `quit`) |
+| `animations { }` | выключены | все анимации, как в Hyprland: `preset = "newm"` (привычный вид newm), `enabled`, `millis`, `curve`, `curve(имя, …)`, `spring(имя, …)`, `animation(имя, enabled, millis, curve, style, speed)`, `on(имя)`, `off(имя)` — см. [Анимации](animations.md) |
+| `cornerRadius` | `18` | скругление углов самого экрана, пиксели (0: прямые) |
+| `lockOnWakeup` | `true` | блокировать экран перед сном (сон ждёт экран блокировки, см. `lock { sleepWait }`) и когда компьютер просыпается |
+| `colorScheme` | `"auto"` | `"dark"`, `"light"` или `"auto"`: последний выбор в быстрых настройках (пока нет — тёмная) |
+| `language` | `"auto"` | язык меню newm: `"auto"` (язык системы), `"en"`, `"ru"` |
+| `enableUnlockCommand` | `false` | `newm cmd unlock` снимает блокировку без пароля: только на компьютере для тестов |
+| `greeterUser` | `"greeter"` | пользователь, от которого greetd запускает экран входа (newm как экран входа) |
+| `greeterCommand` | этот newm | что greetd запускает, когда экран входа впустил пользователя; слова разделяются по пробелам (кавычек нет: для пути с пробелами нужен свой скрипт) |
+| `timeFormat` | `"HH:mm"` | как пишется время суток (java.time: `"h:mm a"`): история уведомлений, экран блокировки, буфер обмена |
+| `terminal` | `$TERMINAL`, иначе первый установленный (alacritty, foot, kitty, ...) | терминал, который открывает newm: действие `"terminal"`, `defaultTerminal()`, программы, работающие в терминале (Terminal=true); `"foot"`, `"kitty -1"` |
+
+## background { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `path` | `"resource:wallpaper.jpg"` | картинка (`"~/Pictures/wall.jpg"`; SVG остаётся чётким); `""` — без обоев |
+| `mode` | `"follow"` | `"follow"`: двигается и масштабируется с видом; `"static"`: стоит на месте |
+| `anim` | `true` | `false` — то же, что `mode = "static"` |
+| `timeScale` | `0.15` | как быстро обои следуют за видом, секунды (анимация `backgroundMove`) |
+
+## view { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `cornerRadius` | `12.0` | скругление углов окон, пиксели |
+| `padding` | `6.0` | отступ вокруг каждого окна, пиксели |
+| `fullscreenPadding` | `0.0` | отступ вокруг окна на весь экран |
+| `sendFullscreen` | `true` | программам сообщается, что они на весь экран |
+| `acceptFullscreen` | `true` | программы могут попросить полный экран (кнопка у видео) |
+| `floatingMinSize` | `true` | плавающее окно, программа которого не просит размера, открывается наименьшим |
+| `borderWsSwitch` | `10.0` | насколько окно нужно утянуть за край монитора, чтобы оно перешло на следующий |
+| `fillFirst` | `true` | первое окно занимает весь экран (`false`: четверть, как в старом newm) |
+| `placeBesideFocused` | `true` | новое окно встаёт справа от вашего (`false`: первая свободная плитка в виде) |
+| `fade` | `true` | окна плавно появляются и исчезают |
+| `unfocusedOpacity` | `1.0` | непрозрачность окон без фокуса |
+| `resizePushes` | `true` | увеличенное окно раздвигает соседей (`false`: ложится поверх) |
+| `crispResize` | `true` | окно при изменении размера рисуется в своём размере, не растягивается |
+| `minSizeKeepsShape` | `true` | программа больше своей плитки рисуется в форме плитки и уменьшается (`false`: наименьший размер, вписанный внутрь) |
+| `minSizeShrink` | `0.6` | насколько можно уменьшить такую программу (1: не меньше, чем она позволяет) |
+| `stickyFullscreen` | `false` | окно на весь экран остаётся таким, когда вид уходит с него или меняет масштаб |
+| `rules { view -> ... }` | | правила для некоторых окон: `rule(float, floatSize, floatPos, opacity, blur, focus)`, см. [Ваша конфигурация](configuration.md#одни-окна-плавают-у-других-размытие) |
+
+## focus { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | линия вокруг окна в фокусе |
+| `color` | `"auto"` | `"auto"` (акцент цветов), `"#RRGGBB"` или `"#RRGGBBAA"` |
+| `distance` | `4.0` | на каком расстоянии от окна, пиксели |
+| `width` | `2.0` | толщина, пиксели |
+| `animTime` | `0.3` | сколько длится её собственный переезд (анимация `border`) |
+| `animateOnChange` | `false` | линия переезжает к следующему окну |
+| `urgentColor` | `""` | рамка окна, которое просит внимания, пока оно не в фокусе (фокус снимает эту просьбу), как в Hyprland; `""`: без неё |
+| `shader` | `""` | свой GLSL-файл, `vec4 paint(vec2 at)`, перечитывается при сохранении (см. ниже) |
+| `animate` | `true` | `false`: собственное время шейдера (и вращение градиента) стоит |
+
+`color` и `urgentColor` понимают и запись цветов рамки из Hyprland: градиент
+`"rgba(33ccffee) rgba(00ff99ee) 45deg"`, `"rgb(ff5555)"`, `"0xffaabbcc"`.
+
+Шейдер рамки получает всё, что Caulis даёт любому шейдеру рамки: `at` (0..1 в прямоугольнике),
+`time`, `size`, `pixel`, `progress` (0..1 вдоль рамки, по часовой стрелке от левого верхнего
+угла), `borderWidth`, `cornerRadius`, `focused`, `urgent`, `colors[0]` (= `color`), `colors[1]`
+(= `urgentColor`). Ошибка в нём показывается уведомлением с номером строки, а рамка пока
+рисуется цветом `color`. Три примера для начала:
+
+```glsl
+// Радуга, бегущая вокруг окна
+vec4 paint(vec2 at) {
+    float hue = fract(progress + time * 0.2);
+    return vec4(clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0), 1.0);
+}
+```
+
+```glsl
+// Пульсирующее свечение заданного цвета (красное, если окно просит внимания)
+vec4 paint(vec2 at) {
+    vec3 base = urgent > 0.5 ? vec3(1.0, 0.3, 0.3) : colors[0].rgb;
+    return vec4(base * (0.55 + 0.45 * sin(time * 3.0)), 1.0);
+}
+```
+
+```glsl
+// Бегущие муравьи
+vec4 paint(vec2 at) {
+    float dash = step(0.5, fract((progress * 2.0 * (size.x + size.y) - time * 40.0) / 16.0));
+    return mix(vec4(0.1, 0.1, 0.1, 1.0), vec4(1.0, 0.85, 0.2, 1.0), dash);
+}
+```
+
+## specialWorkspace { }
+
+Особые рабочие столы из Hyprland (special): слой окон над стеной, на мониторе с фокусом, на
+месте самого экрана (камера стены его не двигает), со своей маленькой раскладкой; всё за ним
+затемнено (и размыто). Клавиши: `toggleSpecialWorkspace("name")` (`"special"` — без имени),
+`moveToSpecialWorkspace("name", silent = false)`, `moveOutOfSpecialWorkspace()`; в config.json/Lua
+действия `special-workspace toggle [name]`, `move-to-special [name] [silent]`,
+`move-out-of-special`, `move-to-workspace special:name`; из терминала `newm cmd special [name]`.
+Окно, перенесённое туда, уходит со стены; вынесенное обратно — возвращается на стену как новое.
+Обзор показывает только стену: показанный особый стол прячется, когда обзор открывается.
+Блокировка тоже его прячет.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `dim` | `0.4` | насколько темнее стена за ним |
+| `blurRadius` | `0` | насколько размыта стена за ним (0: не размыта) |
+| `blurPasses` | `2` | насколько гладкое размытие |
+| `gap` | `40` | отступ от краёв экрана, пиксели |
+| `size` | `1.0` | какую часть экрана он занимает (0.2–1) |
+| `animation` | `"scratchpads"` | анимация появления и ухода его окон (выключена, пока анимации не включены) |
+| `hideWhenEmpty` | `true` | прячется, когда закрылось или ушло последнее окно |
+| `newWindowsJoin` | `true` | окна, открытые, пока он показан, попадают в него |
+| `clickOutsideHides` | `true` | щелчок по затемнённой стене прячет его |
+| `hideInOverview` | `true` | обзор прячет его |
+
+## colors { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `source` | выбор в меню цветов, иначе `"wallpaper"` | `"wallpaper"`, `"nord"` (классические цвета) или `"#5b8cc8"` |
+| `style` | `"tonal"` | `"tonal"`, `"vibrant"`, `"expressive"`, `"neutral"`, `"monochrome"` |
+
+## panels { }
+
+### topBar { }, bottomBar { }: собственные панели newm
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `false` (стартовый `config.kts` включает верхнюю) | панель вообще |
+| `style` | `"islands"` | `"islands"` или `"classic"` (полоса текстов старого newm) |
+| `height` | `32` | высота острова |
+| `margin` | `6` | отступ от краёв экрана |
+| `cornerRadius` | `12` | скругление островов |
+| `theme` | `"auto"` | `"auto"` (светлая или тёмная, как всё), `"light"`, `"dark"` |
+| `font`, `fontSize` | системный без засечек, `13` | шрифт |
+| `left`, `center`, `right` | `["window"]`, `["clock"]`, `["tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power"]` | модули каждого острова (см. [Панели](bars.md)) |
+| `clock`, `date` | `"HH:mm"`, `"EEE d MMM"` | шаблоны java.time; `date = ""` — без даты |
+| `islandColor`, `textColor`, `accentColor` | из цветов | свои цвета |
+| `iconSize` | `16` | размер значков |
+| `showPercent` | `true` | проценты громкости и батареи |
+| `showPassive` | `false` | значки трея, которые говорят, что простаивают |
+| `titleWidth` | `360` | наибольшая ширина заголовка окна |
+| `trayHide` | `["nm-applet", "blueman"]` | значки трея, которые не показывать, по имени или заголовку |
+| `menuButton` | `true` | кнопка лаунчера первой слева (только когда `left` — список newm) |
+| `quickButton` | `true` | кнопка быстрых настроек перед кнопкой питания (только когда `right` — список newm) |
+| `notificationsButton` | `true` | колокольчик уведомлений перед кнопкой быстрых настроек (только когда `right` — список newm) |
+| `layoutNames` | `{}` | подписи раскладок: `mapOf("us" to "EN")` (остальные: `us` — EN, иначе первые две буквы кода) |
+| `outputs` | `[]` | мониторы с панелью (`["eDP-1"]`); пусто — все |
+| `clockHint` | `"EEEE, d MMMM yyyy"` | подсказка часов; `""` — без неё |
+| `hintDelayMs` | `800` | сколько держать указатель до подсказки |
+| `module("name") { }` | | свой модуль: `text { }` или `command("...")`, `everySeconds` (5), `timeoutSeconds` (5), `icon`, `onClick { }`, `onMiddle { }`, `onRight { }`, `onScroll { dy -> }` (см. [Панели](bars.md#свои-модули)) |
+| `on("module") { }` | | что делают `click`, `middle`, `right`, `scrollUp`, `scrollDown` на модуле (каждое — действие или `null`; `off()` — ничего) |
+| `wheel { }` | фокус идёт в ту сторону | колесо над пустым местом и часами: `up { }`, `down { }`, `left { }`, `right { }`; `off()` |
+| `blur` | `true` | размытие того, что под панелью |
+| `texts { listOf(...) }` | | тексты модуля `"texts"` |
+| `background`, `foreground` | `"#000000B3"`, `"#FFFFFF"` | цвета классического вида |
+
+### bar { }: своя программа-панель
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `cmd` | | программа (`"waybar"`): запускается, перезапускается, если завершилась, под неё освобождается место |
+| `cwd` | | папка, в которой она запускается |
+| `visibleNormal` | `true` | видна обычно |
+| `visibleFullscreen` | `false` | видна поверх окон на весь экран |
+
+`topBarProgram { }` и `bottomBarProgram { }` принимают те же настройки — для программы-панели
+в духе старого newm (`newm-panel-basic bar`): место под неё освобождается сверху или снизу.
+`visibleNormal` и `visibleFullscreen` там важнее, чем у `bar { }`. В Lua и JSON это
+`panels.top_bar.cmd`, `panels.top_bar.visible_normal`, ... рядом с настройками собственной
+панели newm.
+
+### lock { }, launcher { }
+
+Обе можно писать и на верхнем уровне: `lock { }` — то же, что `panels { lock { } }`,
+`launcher { }` — то же, что `panels { launcher { } }`.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `w`, `h` | блокировка `0.7`, `0.6`; лаунчер `0.8`, `0.8` | размер экрана блокировки в долях экрана; у лаунчера — только для программы-лаунчера (`cmd`) |
+| `cornerRadius` | блокировка `50.0`; лаунчер `0.0` | скругление экрана блокировки; у лаунчера — программы-лаунчера |
+| `program` (lock) | | программа блокировки вместо своей: `"swaylock -f"`, `"gtklock"`, `"hyprlock"` |
+| `cmd` | | программа-панель вместо своей (панели старого newm) |
+| `cwd` | | папка, в которой эта программа запускается |
+
+Свой экран блокировки newm:
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `background`, `text`, `accent` | цвета панели, светлые или тёмные, как всё | `"#RRGGBB"` или `"#RRGGBBAA"` |
+| `clock` | `timeFormat` верхнего уровня (`"HH:mm"`) | шаблон java.time; `""` — без часов |
+| `date` | `"EEEE, d MMMM"` | шаблон java.time; `""` — без даты |
+| `showOnLock` | `listOf("clock", "battery")` | что экран блокировки показывает кроме пароля; панель, её окошки, трей и уведомления поверх него не видны, и ввод получает только он |
+| `pamService` | `"login"` | служба PAM, которой проверяется пароль (`/etc/pam.d/<имя>`) |
+| `checkTimeout` | `60` | сколько секунд может идти проверка пароля, прежде чем экран блокировки спросит снова. Если в службе PAM pam_fprintd стоит перед pam_unix, PAM сначала ждёт палец (30 с): оставьте это время больше |
+| `sleepWait` | `3` | сколько секунд сон ждёт, пока экран блокировки (или `program`) появится (0..30) |
+
+Свой лаунчер newm:
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `width`, `height` | `720`, `560` (меньше на маленьком экране) | размер, пиксели |
+| `top` | `0.16` | где его верх, в долях высоты экрана |
+| `frequent` | `6` | сколько самых запускаемых программ идёт первыми (0: ни одной) |
+| `remember` | `true` | запоминать, что вы запускаете (`~/.local/state/newm/launcher.json`); `false`: ничего не пишется |
+| `hide` | `[]` | скрытые программы, по имени или id .desktop: `listOf("htop", "org.gnome.Extensions")` |
+| `runTyped` | `false` | Enter, когда ничего не нашлось, запускает набранное как команду |
+| `entries { "Lock"("Заблокировать экран") { ensureLocked() } }` | | свои пункты и что они делают |
+| `keys { "C-Return" { runTyped() } }` | | свои клавиши в нём: `next()`, `previous()`, `first()`, `last()`, `start()`, `runTyped()`, `close()` |
+
+Клавиши лаунчера и без `keys { }`: ↓, Tab, Ctrl+N и Ctrl+J выбирают следующую программу;
+↑, Shift+Tab, Ctrl+P и Ctrl+K — предыдущую; Enter запускает; Escape закрывает.
+
+## keyboard { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `layouts` | системные (см. [Ваша конфигурация](configuration.md#раскладки-клавиатуры)) | `"us"`, `"us,ru"` |
+| `variants` | | по одному на раскладку: `",phonetic"` |
+| `options` | `"grp:alt_shift_toggle"`, если раскладок несколько | параметры xkb: `"grp:caps_toggle,caps:escape"` |
+| `model` | `"pc105"` | модель клавиатуры |
+| `numLock` | `false` | Num Lock включён с самого начала |
+| `bindingModifiers` | `"xkb"` | модификаторы в сочетаниях клавиш — как велят раскладка и её параметры (`caps:super`), или `"physical"`: клавиши, как на них написано |
+
+## compositor { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `quitWhileLocked` | `false` | Ctrl+Alt+BackSpace завершает работу и на заблокированном экране (это обход блокировки) |
+| `lockFailure` | `"own-lock"` | блокировка не появилась: простой экран блокировки самого Caulis, пока локер не разблокирует (Enter запускает локер снова), или `"notice"`: только сообщить |
+| `lockShowMillis` | `3000` | сколько миллисекунд блокировка может появляться, прежде чем считаться неудавшейся |
+| `stopProgramsOnQuit` | `true` | при выходе из newm запущенным программам предлагается завершиться |
+
+## cursor { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `theme` | свой у Caulis | установленная тема курсора: `"Adwaita"`, `"Bibata-Modern-Ice"` |
+| `size` | как у темы | размер: `24`, `32` |
+| `hideAfter` | `0` | прятать после стольких секунд неподвижности (0: никогда) |
+
+## input { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `tapToClick` | как у тачпада (стартовый `config.kts`: `true`) | касание тачпада — щелчок |
+| `naturalScroll` | как у устройства (стартовый `config.kts`: `false`) | прокрутка двигает содержимое, как на телефоне |
+| `focusFollowsMouse` | `true` | клавиатуру получает окно под указателем (`false`: по щелчку) |
+| `xwayland` | `true` | программы X11 |
+| `titleBars` | `false` | программы рисуют свои заголовки окон |
+
+## output("имя") { }
+
+Один блок на монитор, по названию разъёма (`"eDP-1"`, `"HDMI-A-1"`; их перечисляет
+`newm cmd debug`).
+
+| Настройка | Что |
 |---|---|
-| (верхний уровень) | `animTime`, `blendTime`, `cornerRadius` (углы экрана), `lockOnWakeup` |
-| `background { }` | `path`, `anim`, `timeScale` |
-| `view { }` | `cornerRadius`, `padding`, `fullscreenPadding`, `sendFullscreen`, `acceptFullscreen`, `floatingMinSize`, `borderWsSwitch`, `fillFirst`, `fade`, `unfocusedOpacity`, `rules { }` |
-| `focus { }` | `enabled`, `color`, `distance`, `width`, `animTime`, `animateOnChange` |
-| `panels { }` | `topBar { }`, `bottomBar { }`, `bar { }`, `lock { }`, `launcher { }`: см. ниже |
-| `keyboard { }` | `layouts`, `variants`, `options`, `model`, `numLock` |
-| `cursor { }` | `theme`, `size`, `hideAfter` |
-| `input { }` | `tapToClick`, `naturalScroll`, `focusFollowsMouse`, `xwayland`, `titleBars` |
-| `output("name") { }` | `scale`, `width`, `height`, `refreshHz`, `x`, `y`, `transform`, `anim` |
-| `energy { }` | `idleTimes`, `screensOffAfter`, `suspendCommand`, `onIdle { }` |
-| `gestures { }` | `bind(GestureAction..., modifier, kinds)`, `lpInertia`, `lpFreq`, `enabled`, `scalePx` |
-| `tuning { }` | `swipe { }`, `swipeZoom { }`, `move { }`, `resize { }`, `moveResize { }`, `grid { }`: как ощущаются жесты |
-| `keys { }` | `"combination" { action }` |
-| события | `onStartup { }`, `onReconfigure { }`, `everyFrame { }` |
+| `scale` | `1.25`, `2.0` |
+| `width`, `height`, `refreshHz` | режим: `2560`, `1440`, `144.0` |
+| `x`, `y` | где он, в пикселях |
+| `transform` | поворот: 0 обычный, 1 на 90°, 2 на 180°, 3 на 270° (4–7: отражённые) |
+| `anim` | `false`: обои на нём стоят на месте |
 
-### panels
+## overview { }
 
-| Часть | Настройки |
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `input` | `false` | окна в обзоре получают щелчки (`true`: как в старом newm) |
+| `choose` | `true` | щелчок выбирает окно и заканчивает обзор |
+| `followPointer` | `true` | выбранное окно — то, что под указателем (его рамка; его двигает Logo + тянуть) |
+
+## mouse { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `superMove` | `"button"` | Logo + тянуть левой кнопкой двигает окно, правой — меняет размер; `"motion"`: Logo и простое движение мыши двигают его |
+| `moveButton` | `"left"` | кнопка, которая двигает: `"left"`, `"right"`, `"middle"`, `"side"`, `"extra"` или `"none"` |
+| `resizeButton` | `"right"` | кнопка, которая меняет размер (или `"none"`) |
+| `barWheelLines` | `1.0` | сколько строк колеса (мелкие движения тачпада складываются) дают один шаг на панели |
+
+## screenshots { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | `false`: клавиши ничего не делают |
+| `folder` | `"~/Pictures/Screenshots"` | куда сохранять |
+| `save`, `copy` | `true`, `true` | сохранять в файл, класть в буфер обмена |
+| `pointer` | `false` | курсор на снимке |
+| `toast` | `true` | короткое сообщение после снимка |
+| `start` | последний использованный | выбор начинается с `"region"`, `"window"` или `"screen"` |
+| `delay` | `0` | секунд ожидания |
+| `selection` | `"adjust"` | область: `"adjust"` (двигается и тянется потом) или `"new"` (каждый раз новая) |
+| `overviewStart` | `"windows"` | в обзоре: `"windows"` (несколько, целиком), `"region"`, `"window"`, `"screen"`, `""` (последний) |
+| `sharpWindows` | `true` | область в обзоре собирается из окон в их настоящем размере |
+| `sharpBackground` | `"wallpaper"` | за ними: `"wallpaper"`, `"none"`, `"#RRGGBB"`, `"theme"` |
+| `fileName` | `"Screenshot from {date} {time}"` | с `{date}`, `{time}`, `{kind}` |
+| `format`, `quality` | `"png"`, `92` | или `"jpg"` и его качество |
+| `then` | | команда для каждого файла, `{file}` — он сам |
+
+## clipboard { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | история вообще |
+| `size` | `50` | сколько записей хранить (закреплённые — сверх этого) |
+| `pictures`, `files` | `true`, `true` | хранить и картинки, и скопированные файлы |
+| `keepPins` | `true` | закреплённые тексты переживают перезапуск |
+| `ignore` | `["keepassxc", "bitwarden", "1password"]` | программы, копии из которых не хранятся |
+| `maxPictureMb`, `maxText` | `16`, `200000` | самая большая картинка, самый длинный текст |
+| `clearAtOnce` | `true` | «Очистить» очищает сразу; `false`: сначала спрашивает («Точно очистить?»), второй щелчок или Enter очищает |
+| `onChoose` | `"copy"` | выбор записи: `"copy"` кладёт её в буфер обмена; `"paste"` ещё и вставляет в окно, где вы были (ему посылается Ctrl+V) |
+| `pasteKey`, `terminalPasteKey` | `"C-v"`, `"C-S-v"` | клавиши, которые посылает `"paste"`, в терминал — вторые (`"S-Insert"` тоже подходит) |
+| `width`, `height` | `980`, `620` (меньше на маленьком экране) | размер окна, пиксели |
+| `top` | `0.13` | где его верх, в долях высоты экрана |
+| `pinKey` | `"C-p"` | клавиша, которая закрепляет выбранную запись |
+
+## notifications { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | newm показывает уведомления (org.freedesktop.Notifications); `false` оставляет их другому демону |
+| `seconds` | `6` | сколько держится карточка, если программа не сказала (критические — пока их не закроют) |
+| `doNotDisturb` | `false` | без карточек, только история (переключатель у колокольчика меняет это на ходу) |
+| `readAfterFocusSeconds` | `3` | окно программы в фокусе столько секунд — её уведомления прочитаны и уходят из истории |
+| `keepHours`, `keep` | `24`, `100` | сколько часов история хранит уведомления и сколько самое большее |
+| `remember` | `true` | история переживает перезапуск (`~/.local/state/newm/notifications.json`, доступен только вам) |
+| `corner` | `"top_right"` | где карточки: `"top_left"`, `"top"`, `"bottom_right"`, `"bottom_left"`, `"bottom"` (и сообщения композитора) |
+| `width`, `gap`, `maxCards` | `380`, `10`, `3` | ширина карточек, промежуток между ними и до края, сколько сразу |
+| `monitor` | `"focused"` | монитор карточек: `"focused"`, `"pointer"`, `"first"` или имя |
+| `criticalSeconds` | `0` | сколько держится карточка критического (0: пока не закроют) |
+| `showInFullscreen` | `false` | карточки и поверх окна во весь экран |
+| `rule { n -> }` | | правило (их может быть несколько, по очереди): `mute()` (только история), `hide()` (не хранить), `urgency(0..2)`, `seconds(n)`; в JSON — таблица (см. [Уведомления](configuration.md#уведомления)) |
+| `onNotification { n -> }` | | о каждом уведомлении (`n.app`, `n.summary`, `n.body`, `n.urgency`) |
+| `takeOver` | `"stale"` | уведомления держит другой демон (mako, dunst): `"stale"` закрывает оставшийся от прошлой сессии (запущенный раньше newm или на другом дисплее), `"always"` — любой, `"never"` — никого (свои у newm выключены, пока тот не завершится) |
+
+## sound { }, osd { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `sound { maxVolume }` | `150` | верх ползунка громкости, проценты |
+| `sound { wheelStep }` | `2` | процентов за щелчок колеса над громкостью на панели |
+| `sound { setVolume, getVolume }` | wpctl, иначе pactl | свои команды (`{percent}`) |
+| `osd { connections }` | `"cards"` | Wi-Fi, кабель или Bluetooth подключились или отключились: `"cards"`, `"text"`, `"off"` |
+| `osd { seconds, position, distance }` | `1.3`, `"bottom"`, `130` | сколько видна шкала громкости или яркости; где (`"top"`, `"center"`), как далеко от того края |
+| `osd { toastSeconds, cardSeconds }` | `1.6`, `2.8` | сколько видны короткое сообщение и карточка подключения |
+| `osd { inFullscreen }` | `false` | подключения и поверх окна во весь экран |
+| `osd { onConnection { e -> } }` | | о каждом подключении (`e.kind`, `e.connected`, `e.name`) |
+
+## Окошки панели: power { }, brightness { }, battery { }, calendar { }, quickSettings { }, caffeine { }, network { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `power { entries }` | `["lock", "suspend", "hibernate", "logout", "reboot", "poweroff"]` | пункты меню питания по порядку |
+| `power { confirm }` | `["logout", "reboot", "poweroff"]` | какие переспрашивают |
+| `power { lock, suspend, hibernate, logout, reboot, poweroff }` | свои у newm; `energy { suspendCommand }`; systemctl (без него loginctl) | команда для каждого; или действие `onLock { }`, `onSuspend { }`, ... |
+| `brightness { wheelStep, minimum }` | `5`, `1` | процентов за щелчок колеса над кнопкой быстрых настроек; ниже панель не ставит |
+| `brightness { device }` | первое | имя в `/sys/class/backlight` |
+| `brightness { set, get }` | brightnessctl; `/sys/class/backlight` | свои команды (`{percent}`, `{device}`) |
+| `battery { low, critical }` | `20`, `10` | ниже — цвета предупреждения и опасности |
+| `battery { onCritical { } }` | | один раз каждый раз, как заряд дошёл до `critical` без зарядки |
+| `calendar { weekend }` | `["SATURDAY", "SUNDAY"]` | бледные дни |
+| `calendar { firstDay }` | как в языке | первый день недели (`"MONDAY"`) |
+| `calendar { weekNumbers }` | `false` | номера недель |
+| `quickSettings { tiles }` | `["wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver"]` | плитки по порядку |
+| `quickSettings { tile("name", icon, label, wide) { onClick { }; isOn { } } }` | | своя плитка (`isOn("команда")`: включена, если команда успешна) |
+| `caffeine { choices }` | `[30, 60, 120, 0]` | сроки кофеина, минуты (0: пока не выключите) |
+| `network { wifiName }` | nmcli, иначе iwgetid | команда, которая говорит имя сети Wi-Fi |
+| `network { wifiNameEverySeconds }` | `15` | как часто спрашивается имя сети Wi-Fi (эфир для этого не сканируется) |
+| `network { scanOnOpen }` | `true` | открытие окошка Wi-Fi ищет сети (false: только кнопкой обновления) |
+| `tray { maxItemsPerProgram }` | `8` | сколько значков в трее может показать одна программа |
+| `tray { maxIconSize }` | `1024` | самая большая картинка (пикселей по каждой стороне), которую newm берёт у программы в трее |
+
+## energy { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `idleTimes` | `[120, 300, 600]` | секунды без действий до: «простоя» (сообщается в `onIdle`), блокировки, сна |
+| `dimAfter` | `idleTimes[0]` | секунды до «простоя» в `onIdle` (затемнить); `0`: никогда |
+| `lockAfter` | `idleTimes[1]` | секунды до блокировки экрана; `0`: никогда |
+| `suspendAfter` | `idleTimes[2]` | секунды до сна компьютера; `0`: никогда |
+| `after(900) { launch("playerctl pause") }` | | своё действие через столько секунд (один раз, пока вы не вернётесь) |
+| `screensOffAfter` | `0` | секунды до отключения экранов (0: никогда) |
+| `suspendCommand` | `"systemctl suspend"` | как усыпить компьютер |
+| `onIdle { what -> }` | | получает `"idle"`, `"idle-lock"`, `"idle-presuspend"`, `"idle-suspend"`, `"active"`, `"sleep"`, `"wakeup"` |
+
+## gestures { }
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `bind(GestureAction.SWIPE, null, "swipe-3")` | три пальца | перемещение по стене |
+| `bind(GestureAction.SWIPE_TO_ZOOM, null, "swipe-4")` | четыре пальца | масштаб |
+| `bind(GestureAction.MOVE_RESIZE, "L", "move-1", "swipe-2")` | Logo + тянуть / два пальца | двигать, менять размер |
+| `bind(GestureAction.LAUNCHER, null, "swipe-5")` | пять пальцев | лаунчер |
+| `lpInertia` | `0.8` | больше — плавнее (и медленнее), 0..1 (анимация `gestureSmoothing`: выключена — вид точно под пальцами) |
+| `lpFreq` | `60.0` | как часто опрашивается жест, раз в секунду |
+| `enabled` | `true` | жесты тачпада вообще |
+| `dbusEnabled` | `true` | жесты, которые присылает другая программа по D-Bus |
+| `scalePx` | `800.0` | сколько пикселей движения пальцев — один экран |
+| `on("swipe-4", "down") { toggleOverview() }` | | свой жест, см. ниже |
+
+`on(kind, direction, description, modifier) { действие }` выполняет действие, когда пальцы
+прошли достаточно в ту сторону: `kind` — `"swipe-3"`, `"swipe-4"` или `"swipe-5"`;
+`direction` — `"up"`, `"down"`, `"left"`, `"right"` или `null` (любая сторона); `modifier` —
+клавиша, зажатая вместе с ним (`"L"`: Logo); `"move-1"` и `"swipe-2"` без неё не работают (сами
+по себе это мышь и прокрутка двумя пальцами). Стороны, которые вы назначили, — ваши; другие
+стороны этого жеста делают то, что даёт `bind`: при `on("swipe-4", "down") { toggleOverview() }`
+четыре пальца вверх по-прежнему меняют масштаб. `description` показывается в справке по
+клавишам (Logo+/).
+
+```kotlin
+gestures {
+    on("swipe-4", "down", "Все окна") { toggleOverview() }
+    on("swipe-3", "up", "Лаунчер", modifier = "L") { enterLauncherOverlay() }
+}
+```
+
+Справка по клавишам и подсказки во время жеста называют жесты так, как они назначены
+(`bind`, `on`, `mouse { }`).
+
+`tuning { swipe { }, swipeZoom { }, move { }, resize { }, moveResize { }, grid { }, interpolation { } }`
+хранит тонкую настройку ощущения жестов (`gestureFactor`, `gridM`, `gridOvr`, `lockDist`,
+`hyst`, `minDist`, `timeScale`, `sizeAdjustment`), как это было в старом newm.
+`grid { debug = true }` пишет в журнал каждый шаг привязки к сетке.
+
+## session { }
+
+Окна открываются снова после `newm cmd restart keep`, а если хотите — и после входа в систему, —
+когда newm уже показан, после программ из `autostart`, по очереди.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `restoreAtLogin` | `false` | окна прошлой сессии открываются снова при входе (запоминаются раз в минуту и при выходе, так что и после выключения компьютера) |
+| `maxAgeMinutes` | `10` | окна, запомненные `restart keep` раньше этого, не открываются (0: без ограничения) |
+| `maxWindows` | `20` | запускается не больше стольких программ; уведомление скажет, сколько осталось, а лаунчер предложит их («Открыть ещё ... окон» или `newm cmd restore-rest`) |
+| `exclude` | `[]` | программы, которые никогда не открываются снова, по app id или имени программы: `listOf("steam", "org.telegram.desktop")` |
+| `staggerMs` | `300` | программы запускаются по очереди, через столько миллисекунд (0: все сразу) |
+| `arguments` | `"options"` | что из командной строки программы сохраняется: `"options"` (без файлов, адресов и того, что похоже на пароль), `"all"`, `"none"`; терминал всегда возвращается сам по себе, в своей папке |
+| `interpreters` | `python`, `java`, `node`, `perl`, `ruby`, `bash`, `sh`, `dash`, `zsh`, `fish`, `lua`, `luajit`, `bun`, `deno`, `php`, `electron`, `wine`, `wine64`, `mono`, `dotnet` | программы, которые запускают другую: с `"options"` сохраняется и их программа (`python3 app.py`, `electron /usr/lib/obsidian/app.asar`, `wine game.exe`); цифры версии в конце имени не считаются (`python3.12`, `electron43`) |
+| `keepValues` | `-P`, `-profile`, `--profile`, `--profile-directory`, `--user-data-dir`, `-workdir`, `--class`, `--name`, `--app-id`, `-cp`, `-classpath`, `--class-path`, `--module-path` | опции, значение которых, записанное после них, сохраняется вместе с ними (`firefox -P work`, `code --user-data-dir /x`); другие значения, записанные отдельно, считаются файлами и не сохраняются |
+| `secretWords` | `pass`, `password`, `passwd`, `passphrase`, `pwd`, `pw`, `token`, `secret`, `key`, `apikey`, `auth`, `authorization`, `cookie`, `cookies`, `cred`, `creds`, `credential`, `credentials`, `otp`, `pin` | опция не сохраняется (и её значение тоже), если слово её имени — одно из этих (`--api-key`) или имя содержит одно из них длиной от пяти букв (`--accesstoken`). Не сохраняются никогда: адрес с пользователем и паролем (`http://bob:pw@proxy`), любой адрес в опции (`--app=https://…`), значение, похожее на токен (длинное слово из букв и цифр) |
+| `secretShortOptions` | `-p` | опции со значением сразу после них (`-phunter2`, как у mysql): не сохраняются — кроме слова из букв и дефисов (`-private-window`) |
+
+## autostart { }
+
+Программы, запускаемые вместе с сессией, по очереди, когда newm уже показан, — один раз за
+сессию: сохранённая конфигурация запускает только добавленные записи (а убранные больше не
+перезапускает; они продолжают работать). См. [Запуск](startup.md).
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `stagger` | `400.milliseconds` | время между запусками двух программ (`stagger_ms` в Lua и JSON) |
+| `afterReveal` | `true` | запускать, когда newm проявился (false: сразу, пока темно) |
+| `desktopEntries` | `false` | ещё и файлы `.desktop` из `~/.config/autostart` и `/etc/xdg/autostart` (учитываются Hidden, OnlyShowIn/NotShowIn с `newm`, TryExec) |
+| `afterTimeoutMillis` | `10000` | сколько запись ждёт тех, после которых она запускается (`after`) |
+| `app("prog", "arg") { }` | | программа и её аргументы (без оболочки) |
+| `script("~/start.sh") { }` | | исполняемый файл |
+| `shell("sleep 1; notify-send hi") { }` | | кусок shell |
+
+В фигурных скобках записи: `delay = 2.seconds`, `ifNotRunning = true` (не запускать, если
+программа с таким именем уже работает), `restart = OnCrash(maxTimes = 3, within = 1.minutes)`
+(или `Always(...)`, `Never`), `after("waybar")`, `env("X", "y")`, `dir = "~"`, `name = "..."`.
+В Lua и JSON: `{ "app": ["nm-applet", "--indicator"], "delay_ms": 2000, "if_not_running": true,
+"restart": "on_crash", "after": ["waybar"], "env": { "X": "y" }, "dir": "~" }`, либо `"shell"`,
+`"script"` (с `"arguments"`) вместо `"app"`.
+
+## reveal { }
+
+Запуск: экран остаётся чёрным, пока newm не готов (первые кадры нарисованы, панели нарисованы
+один раз), затем newm плавно проявляется. У проявления своя настройка: `animations { enabled = false }`
+её не меняет (`reveal { fadeMillis = 0 }` показывает newm сразу).
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | false: newm показывается, как только рисует |
+| `fadeMillis` | `600` | сколько длится проявление (`fade_ms`) |
+| `maxWaitMillis` | `4000` | дольше этого экран тёмным не остаётся (`max_wait_ms`) |
+| `color` | `"#000000"` | цвет до тех пор |
+
+## startupSound { }
+
+Звук при запуске newm — синтезированный самим newm (не запись) или ваш файл. `newm cmd
+play-startup-sound` (или `play-startup-sound glass`) проигрывает его сейчас, чтобы послушать.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` (`false` на экране входа, когда newm — greeter для greetd) | играть |
+| `preset` | `"airy"` | `"airy"`, `"classic"`, `"glass"` или `"soft"` |
+| `file` | нет | ваш звуковой файл вместо пресета (`"~/sounds/hello.ogg"`: ogg, wav, flac — что умеет проигрыватель) |
+| `volume` | `0.8` | от 0 до 1 |
+| `delayMillis` | `0` | подождать ещё столько (`delay_ms`) |
+| `at` | `"reveal"` | `"reveal"` (когда newm проявляется) или `"start"` (сразу) |
+| `player` | pw-play, paplay, aplay | слова вашего проигрывателя: `listOf("mpv", "--no-video", "{file}")` (есть и `{volume}`, `{percent}`) |
+
+## События
+
+| Вызов | Когда |
 |---|---|
-| `topBar { }`, `bottomBar { }` | собственные панели newm: `enabled`, `style` (`"islands"`, `"classic"`), `height`, `margin`, `cornerRadius`, `theme`, `font`, `fontSize`, `left`, `center`, `right`, `clock`, `date`, `islandColor`, `textColor`, `accentColor`, `iconSize`, `showPercent`, `showPassive`, `titleWidth`, `blur`, `texts { }`; у классической ещё `background`, `foreground` (см. [Панели](bars.md)) |
-| `bar { }` | программа-панель: `cmd`, `cwd`, `visibleNormal`, `visibleFullscreen` |
-| `lock { }` | экран блокировки: `w`, `h` (доли экрана), `cornerRadius`, `program` (сторонний локер вместо своего: `"swaylock"`, `"gtklock"`, `"hyprlock"`) |
-| `launcher { }` | лаунчер: `w`, `h`, `cornerRadius`, `cmd` |
+| `onStartup { }` | когда newm запустился: здесь запускают программы |
+| `onReconfigure { }` | после того как конфигурация перечитана |
+| `everyFrame { }` | примерно 30 раз в секунду (держите коротким) |
+| `launch("команда")` | запускает программу, где угодно в конфигурации |
 
-## Что умеют клавиши
+## Всё, что может клавиша
 
 Внутри `keys { }`:
 
 | Вызов | Что делает |
 |---|---|
-| `move(di, dj)` | перейти к соседнему окну (`-1, 0` — влево, `0, 1` — вниз) |
-| `moveFocusedView(di, dj)` | переместить активное окно на несколько плиток |
-| `resizeFocusedView(di, dj)` | сделать его шире или выше на несколько плиток (отрицательные числа — меньше) |
-| `basicScale(ds)` | масштаб: `1` — отдалить, `-1` — приблизить |
+| `launch("команда")` | запустить программу |
+| `move(di, dj)` | фокус на соседнее окно (`-1, 0` слева, `0, 1` ниже) |
+| `moveFocusedView(di, dj)` | переместить окно в фокусе на плитки |
+| `resizeFocusedView(di, dj)` | сделать его шире или выше на плитки (отрицательные: меньше) |
+| `basicScale(ds)` | масштаб: `1` отдалить, `-1` приблизить |
 | `basicMove(di, dj)` | сдвинуть вид по стене |
+| `fitFocusedView()` | масштаб, при котором окно заполняет экран |
+| `sideBySide()` | окно и его сосед рядом, и обратно |
 | `toggleOverview(onlyActiveWorkspace = false)` | обзор |
-| `toggleFullscreen()` | во весь экран и обратно |
+| `toggleFullscreen()` | полный экран и обратно |
 | `toggleFocusedViewFloating()` | плавающее окно и обратно |
-| `moveInStack(1)` | следующее окно в стопке |
+| `moveInStack(1)` | следующее окно стопки |
 | `cycleViews(1)`, `cycleViews(-1)`, `gotoView(index)` | окна по очереди или по номеру |
-| `moveWorkspace(1)`, `changeFocusedViewWorkspace(1)` | рабочее пространство следующего монитора; отправить окно туда |
-| `swallowFocusedView()` | окно занимает место того окна, из которого его запустили |
+| `moveWorkspace(1)`, `changeFocusedViewWorkspace(1)` | стена следующего монитора; отправить окно туда |
+| `swallowFocusedView()` | окно занимает место того, из которого его запустили |
 | `closeFocusedView()` | закрыть окно |
 | `enterLauncherOverlay()` | лаунчер |
+| `toggleKeyHelp()` | подсказка по клавишам |
+| `toggleClipboard()` | история буфера обмена |
+| `screenshot()`, `screenshotScreen()`, `screenshotWindow()` | выбор снимка; экран; окно |
+| `restoreRest()` | окна, оставленные при возвращении сессии (больше `session { maxWindows }`) |
+| `scratchpad("имя")` | показать или спрятать scratchpad |
 | `ensureLocked(dim = true)` | заблокировать |
 | `updateConfig()` | перечитать конфигурацию |
 | `terminate()` | выйти из сеанса |
-| `launch("command")` | запустить программу |
-| `command("name")` | одна из команд `newm cmd` |
+| `command("имя", "аргумент")` | одна из команд `newm cmd`: `command("bar", "power")` |
+| `caulis.run("volume +5")` | действие Caulis: `"volume -5"`, `"volume mute"`, `"mic-mute"`, `"brightness +5"`, `"keyboard-layout next"` |
 
-В Lua и JSON действие — это текст. `"terminal"` открывает терминал, который нашёл newm (`$TERMINAL`, иначе первый установленный из alacritty, foot, kitty, ...). В остальных случаях это название вызова в snake_case и его аргументы,
-`"move -1 0"`, `"toggle_overview only_active_workspace=true"`, `"launch firefox"`. Собственные
-действия композитора тоже работают: `"volume +5"`, `"brightness -5"`, `"mic-mute"`, `"screenshot"`.
+В Lua и JSON действие — это текст. `"terminal"` открывает найденный newm терминал. Иначе это
+имя вызова в snake_case и его аргументы: `"move -1 0"`,
+`"toggle_overview only_active_workspace=true"`, `"launch firefox"`, `"screenshot"`,
+`"toggle_clipboard"`. Действия Caulis пишутся как есть: `"volume +5"`, `"brightness -5"`,
+`"mic-mute"`.
 
 ## newm cmd
 
-Из терминала, скрипта или панели внутри newm:
+Из терминала, скрипта или панели внутри newm (команда обращается к запущенному newm через
+сеансовую шину):
 
 ```sh
-newm cmd debug            # раскладка: каждое окно с его app id и местом, мониторы
-newm cmd config           # все действующие настройки и их значения по умолчанию
-newm cmd update-config    # перечитать конфигурацию
-newm cmd lock
-newm cmd open-launcher
-newm cmd inhibit-idle     # без затемнения и блокировки, пока команда работает (Ctrl+C завершает её)
-newm cmd clean            # навести порядок на стене
-newm cmd restart          # перезапустить newm (так делает dev/newm-dev)
-newm cmd bar power        # всплывающее окно панели: calendar, volume, network, battery, power, tray 0, close
+newm cmd debug                  # раскладка: каждое окно с app id и местом, мониторы
+newm cmd config                 # все действующие настройки
+newm cmd update-config          # перечитать конфигурацию
+newm cmd lock                   # заблокировать экран
+newm cmd open-launcher          # лаунчер (close-launcher закрывает)
+newm cmd launcher firefox       # запустить программу, как это делает лаунчер
+newm cmd inhibit-idle           # ни блокировки, ни сна, пока работает (Ctrl+C завершает)
+newm cmd caffeine [30|on|off]   # экран не гаснет: на минуты, пока не выключите, или выключить
+newm cmd clean                  # прибрать стену
+newm cmd bar power              # окошко панели: calendar, volume, network, bluetooth,
+                                #   battery, power, quick, colors, tray 0, close
+newm cmd colors [nord|wallpaper|#5b8cc8]   # текущие цвета или новые
+newm cmd displays extend        # второй монитор: extend, mirror, laptop, other
+newm cmd scratchpad drop        # показать или спрятать scratchpad
+newm cmd special music          # показать или спрятать особый рабочий стол ("special" без имени)
+newm cmd restart                # завершить newm, чтобы он запустился снова
+newm cmd restart keep           # то же, и ваши окна откроются снова
+newm cmd restore-rest           # окна, оставленные тогда (больше session { maxWindows })
+newm cmd autostart              # программы из autostart { } и как каждая из них
+newm cmd play-startup-sound     # звук запуска сейчас (или пресет: play-startup-sound glass)
+newm cmd log                    # области журнала
+newm cmd log input 3            # одна область журнала подробно (0..3), сразу; "log input reset": обратно
+newm cmd full-redraw on         # каждый кадр целиком (для мерцания); off: обратно
+newm cmd unlock                 # снять блокировку без пароля: выключено, пока нет enableUnlockCommand = true
 ```
 
-Другие команды `newm`: `newm help`, `newm version`, `newm install-session`.
+`newm cmd unlock` по умолчанию выключена: иначе любая запущенная вами программа могла бы
+снять блокировку без пароля. Включайте её (`enableUnlockCommand = true`,
+`enable_unlock_command` в Lua и JSON) только на компьютере для тестов; иначе она отвечает
+«Disabled».
+
+Другие команды `newm`: `newm help`, `newm --version`, `newm install-session`.

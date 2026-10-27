@@ -1,5 +1,6 @@
 package newm.bar
 
+import newm.lockShown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,9 @@ import dev.caulis.geometry.Rect
 private const val DIALOG_WIDTH = 400
 private const val DIALOG_HEIGHT = 250
 
+
+private val log = dev.caulis.log.Logger("bar")
+
 /**
  * The window that asks for a Wi-Fi network's password, in the middle of the screen. The
  * password goes to NetworkManager over D-Bus, never on a command line or into the log.
@@ -45,7 +49,7 @@ class WifiPasswordDialog(private val model: BarModel) {
     var network by mutableStateOf<WifiNetwork?>(null)
         private set
     private var shown by mutableStateOf<WifiNetwork?>(null)
-    private val fade = Fade(inMillis = 200, outMillis = 140)
+    private val fade = Fade("popups", inMillis = 200, outMillis = 140)
     private var widget: ComposeWidget? = null
     private var opened by mutableStateOf(0)
 
@@ -57,11 +61,25 @@ class WifiPasswordDialog(private val model: BarModel) {
             moving = { fade.moving },
         ) { _ -> shown?.let { Dialog(it) } }
         widget = w
-        return caulis.desktop.addWidget(w)
+        // Locked: the window goes (asked again once unlocked); never typed into over the lock screen.
+        val lockWatch = caulis.desktop.onLockChanged { locked ->
+            if (locked) {
+                network?.let { askAfterUnlock = it }
+                cancel()
+            } else {
+                askAfterUnlock?.let { askAfterUnlock = null; caulis.post { ask(it) } }
+            }
+        }
+        val added = caulis.desktop.addWidget(w)
+        return AutoCloseable {
+            lockWatch.close()
+            added.close()
+        }
     }
 
     // On the monitor with the pointer, in its middle.
     private fun placeOn(m: Monitor): Rect? {
+        if (model.wm.lockShown()) return null
         if (!fade.visible) {
             if (network == null && shown != null) model.wm.caulis.post { if (!fade.visible && network == null) shown = null }
             return null
@@ -72,17 +90,44 @@ class WifiPasswordDialog(private val model: BarModel) {
         return Rect(m.area.x + (m.area.width - DIALOG_WIDTH) / 2, m.area.y + (m.area.height - DIALOG_HEIGHT) / 2 - 40, DIALOG_WIDTH, DIALOG_HEIGHT)
     }
 
-    /** Asks for [target]'s password (the bar's popup closes meanwhile). */
+    // A network that wanted its password while the screen was locked: asked once it is unlocked.
+    private var askAfterUnlock: WifiNetwork? = null
+
+    /** Asks for [target]'s password (the bar's popup closes meanwhile); while locked, once unlocked. */
     fun ask(target: WifiNetwork) {
+        if (model.wm.lockShown()) {
+            askAfterUnlock = target
+            return log.info { "Wi-Fi password wanted while locked: asked once unlocked" }
+        }
         network = target
         shown = target
         opened++
         fade.show()
         model.close()
         widget?.let { model.wm.caulis.desktop.focusWidget(it) }
+        quietKeys()
+    }
+
+    // While the password is typed, keys are not written to the log, even with input at trace
+    // (Caulis logs each key's code then); as it was again once the window closes.
+    private var inputLevelBefore: Int? = null
+
+    private fun quietKeys() {
+        val log = dev.caulis.log.Log
+        if (inputLevelBefore != null || log.levelOf("input") < 3) return
+        inputLevelBefore = log.levelOf("input")
+        log.setLevel("input", 2)
+    }
+
+    private fun loudKeysAgain() {
+        val before = inputLevelBefore ?: return
+        inputLevelBefore = null
+        val log = dev.caulis.log.Log
+        if (before == log.level) log.clearLevel("input") else log.setLevel("input", before)
     }
 
     fun cancel() {
+        loudKeysAgain()
         network = null
         fade.hide()
         val d = model.wm.caulis.desktop

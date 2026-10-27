@@ -3,7 +3,6 @@ package newm
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -51,6 +50,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -72,6 +75,91 @@ import java.nio.file.Path
 
 private val log = Logger("launcher")
 
+// launcher { frequent = 6; remember = true; hide = listOf(...); runTyped = false; entries { }; keys { } }
+private val confFrequent = configuredValue("panels.launcher.frequent", 6)
+private val confRemember = configuredValue("panels.launcher.remember", true)
+private val confHide = configuredValue("panels.launcher.hide", emptyList<String>())
+private val confRunTyped = configuredValue("panels.launcher.run_typed", false)
+private val confEntries = configuredValue("panels.launcher.entries", emptyList<Map<String, Any?>>())
+private val confKeys = configuredValue("panels.launcher.keys", emptyMap<String, Any?>())
+
+/**
+ * What a key of `launcher { keys { "C-n" { next() } } }` can do: choose the next or the
+ * previous entry, the first or the last, start the chosen one, run what was typed as a
+ * command, close the launcher.
+ */
+class LauncherControl internal constructor(
+    private val step: (Int) -> Unit,
+    private val jump: (Boolean) -> Unit,
+    private val startChosen: () -> Unit,
+    private val runText: () -> Unit,
+    private val closeIt: () -> Unit,
+) {
+    fun next() = step(1)
+    fun previous() = step(-1)
+    fun first() = jump(true)
+    fun last() = jump(false)
+    fun start() = startChosen()
+    fun runTyped() = runText()
+    fun close() = closeIt()
+
+    companion object {
+        /** A launcher action by its name in config.json / config.lua ("next", "previous", "run_typed", ...), or null. */
+        fun byName(name: String): ((LauncherControl) -> Unit)? = when (name.trim().replace('-', '_').lowercase()) {
+            "next", "down" -> { c -> c.next() }
+            "previous", "prev", "up" -> { c -> c.previous() }
+            "first" -> { c -> c.first() }
+            "last" -> { c -> c.last() }
+            "start", "choose" -> { c -> c.start() }
+            "run_typed", "runtyped", "run" -> { c -> c.runTyped() }
+            "close", "exit" -> { c -> c.close() }
+            else -> null
+        }
+    }
+}
+
+/** Whether the key event [e] is [combo] in newm's notation ("C-n", "C-S-Tab", "A-j"; "C-N" is "C-S-n"). */
+internal fun keyEventIs(combo: String, e: androidx.compose.ui.input.key.KeyEvent): Boolean {
+    val parts = combo.trim().split('-')
+    if (parts.isEmpty() || parts.last().isEmpty()) return false
+    val mods = parts.dropLast(1).toMutableSet()
+    var name = parts.last()
+    if (name.length == 1 && name[0].isLetter() && name != name.lowercase()) {
+        mods += "S"
+        name = name.lowercase()
+    }
+    val key = composeKeyOf(name) ?: return false
+    return e.key == key && e.isCtrlPressed == ("C" in mods) && e.isShiftPressed == ("S" in mods) &&
+        e.isAltPressed == ("A" in mods || "1" in mods) && e.isMetaPressed == ("L" in mods)
+}
+
+private val LETTER_KEYS = listOf(Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M,
+    Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z)
+private val DIGIT_KEYS = listOf(Key.Zero, Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine)
+
+// A key's name (xkb's, as in keys { }) as Compose knows it.
+private fun composeKeyOf(name: String): Key? = when {
+    name.length == 1 && name[0] in 'a'..'z' -> LETTER_KEYS[name[0] - 'a']
+    name.length == 1 && name[0] in '0'..'9' -> DIGIT_KEYS[name[0] - '0']
+    else -> when (name.lowercase()) {
+        "tab" -> Key.Tab
+        "return", "enter" -> Key.Enter
+        "escape", "esc" -> Key.Escape
+        "up" -> Key.DirectionUp
+        "down" -> Key.DirectionDown
+        "left" -> Key.DirectionLeft
+        "right" -> Key.DirectionRight
+        "home" -> Key.MoveHome
+        "end" -> Key.MoveEnd
+        "prior", "page_up", "pageup" -> Key.PageUp
+        "next", "page_down", "pagedown" -> Key.PageDown
+        "delete" -> Key.Delete
+        "backspace" -> Key.Backspace
+        "space" -> Key.Spacebar
+        else -> null
+    }
+}
+
 /** How often each program was started from the launcher (~/.local/state/newm/launcher.json): the frequent ones come first. */
 internal object LaunchCounts {
     private val file: Path by lazy {
@@ -86,9 +174,11 @@ internal object LaunchCounts {
         }
     }
 
-    fun of(app: DesktopApp): Int = counts[app.id.ifEmpty { app.name }] ?: 0
+    fun of(app: DesktopApp): Int = if (!confRemember()) 0 else counts[app.id.ifEmpty { app.name }] ?: 0
 
     fun started(app: DesktopApp) {
+        // launcher { remember = false }: nothing written, nothing counted.
+        if (!confRemember()) return
         val key = app.id.ifEmpty { app.name }
         counts[key] = (counts[key] ?: 0) + 1
         try {
@@ -136,12 +226,30 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
         }
     }
 
-    // Nothing typed: the frequent ones first (then by name); else the matches, the frequent first among equals.
-    val shown = remember(apps, query) {
-        if (query.isBlank()) apps.sortedWith(compareByDescending<DesktopApp> { LaunchCounts.of(it) }.thenBy { it.name.lowercase() })
-        else DesktopApp.matching(apps, query)
+    // The programs and the entries of the configuration (launcher { entries { } }), less those
+    // left out (launcher { hide }); while windows of the last session wait, an entry for them first.
+    val all = remember(apps, opened) {
+        val hide = confHide().map { it.lowercase() }.toSet()
+        val own = confEntries().mapNotNull { e ->
+            val name = e["name"]?.toString() ?: return@mapNotNull null
+            @Suppress("UNCHECKED_CAST")
+            val action = e["action"] as? (Layout) -> Unit ?: return@mapNotNull null
+            DesktopApp(name, e["comment"]?.toString().orEmpty(), "", "", id = "entry:$name", run = action)
+        }
+        val rest = wm.session.restLeft()
+        val reopen = if (rest > 0) listOf(DesktopApp(newm.bar.tr("Reopen %s windows").replace("%s", rest.toString()), newm.bar.tr("Left out when the session came back"),
+            "", "", id = "entry:reopen", run = { l -> l.session.restoreRest() })) else emptyList()
+        reopen + own + apps.filter { it.name.lowercase() !in hide && it.id.lowercase() !in hide }
     }
-    val frequent = if (query.isBlank()) shown.takeWhile { LaunchCounts.of(it) > 0 }.take(6).size else 0
+    // Nothing typed: the frequent ones first (then by name); else the matches, the frequent first among equals.
+    val frequentMost = confFrequent().coerceAtLeast(0)
+    val shown = remember(all, query) {
+        if (query.isBlank()) {
+            if (frequentMost > 0) all.sortedWith(compareByDescending<DesktopApp> { it.id == "entry:reopen" }.thenByDescending { LaunchCounts.of(it) }.thenBy { it.name.lowercase() })
+            else all.sortedWith(compareByDescending<DesktopApp> { it.id == "entry:reopen" }.thenBy { it.name.lowercase() })
+        } else DesktopApp.matching(all, query)
+    }
+    val frequent = if (query.isBlank() && frequentMost > 0 && shown.firstOrNull()?.id != "entry:reopen") shown.takeWhile { LaunchCounts.of(it) > 0 }.take(frequentMost).size else 0
     // (Kept in the list, not read here: reading it while composing composed the whole list anew at each row the pointer passed.)
     LaunchedEffect(shown) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
     // Chosen with the keys: scrolled into sight if it is not (the pointer only chooses what it is on:
@@ -153,16 +261,40 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
         if (selected !in visible) {
             // Below: it becomes the last one in sight; above: the first.
             val target = if (selected > (visible.maxOrNull() ?: 0)) selected - visible.size + 1 else selected
-            list.animateScrollToItem(target.coerceAtLeast(0))
+            if (NewmAnimations["scroll"].on) list.animateScrollToItem(target.coerceAtLeast(0)) else list.scrollToItem(target.coerceAtLeast(0))
         }
     }
 
     fun start(app: DesktopApp) {
         LaunchCounts.started(app)
-        log.info { "Starting ${app.name}" }
         query = ""
-        wm.launchApp(app.command)
+        val run = app.run
+        if (run != null) {
+            log.info { "Launcher entry: ${app.name}" }
+            wm.exitOverlay()
+            run(wm)
+        } else {
+            log.info { "Starting ${app.name}" }
+            wm.launchApp(app.command)
+        }
     }
+
+    // launcher { runTyped = true }: what was typed, as a command.
+    fun runTyped() {
+        val command = query.trim()
+        if (command.isEmpty()) return
+        log.info { "Running what was typed: $command" }
+        query = ""
+        wm.launchApp(command)
+    }
+
+    val control = LauncherControl(
+        step = { by -> if (shown.isNotEmpty()) { selected = (selected + by).coerceIn(0, shown.size - 1); byKeys++ } },
+        jump = { toFirst -> if (shown.isNotEmpty()) { selected = if (toFirst) 0 else shown.size - 1; byKeys++ } },
+        startChosen = { shown.getOrNull(selected)?.let(::start) },
+        runText = ::runTyped,
+        closeIt = { wm.exitOverlay() },
+    )
 
     val text = TextStyle(color = colors.text, fontSize = 14.sp)
     val shape = RoundedCornerShape(20.dp)
@@ -188,11 +320,23 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                         query, { query = it; selected = 0; byKeys++ },
                         Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
                             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                            when (e.key) {
-                                Key.DirectionDown, Key.Tab -> { selected = (selected + 1).coerceAtMost(shown.size - 1); byKeys++; true }
-                                Key.DirectionUp -> { selected = (selected - 1).coerceAtLeast(0); byKeys++; true }
-                                Key.Enter, Key.NumPadEnter -> { shown.getOrNull(selected)?.let(::start); true }
-                                Key.Escape -> { wm.exitOverlay(); true }
+                            // The configuration's keys first (launcher { keys { "C-n" { next() } } }).
+                            for ((combo, action) in confKeys()) {
+                                if (!keyEventIs(combo, e)) continue
+                                @Suppress("UNCHECKED_CAST")
+                                (action as? (LauncherControl) -> Unit)?.invoke(control)
+                                return@onPreviewKeyEvent true
+                            }
+                            val ctrl = e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
+                            when {
+                                e.key == Key.Tab && e.isShiftPressed -> { control.previous(); true }
+                                e.key == Key.DirectionDown || e.key == Key.Tab || ctrl && (e.key == Key.N || e.key == Key.J) -> { control.next(); true }
+                                e.key == Key.DirectionUp || ctrl && (e.key == Key.P || e.key == Key.K) -> { control.previous(); true }
+                                e.key == Key.Enter || e.key == Key.NumPadEnter -> {
+                                    if (shown.isEmpty() && confRunTyped()) runTyped() else control.start()
+                                    true
+                                }
+                                e.key == Key.Escape -> { control.close(); true }
                                 else -> false
                             }
                         },
@@ -204,7 +348,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             }
             Spacer(Modifier.height(10.dp))
             if (shown.isEmpty()) {
-                BasicText(if (apps.isEmpty()) newm.bar.tr("Looking for programs…") else newm.bar.tr("Nothing called “%s”").replace("%s", query), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
+                BasicText(if (apps.isEmpty()) newm.bar.tr("Looking for programs…") else newm.bar.tr(if (confRunTyped()) "Nothing called “%s” — Enter runs it" else "Nothing called “%s”").replace("%s", query), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
             }
             LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(opened) {
                 awaitPointerEventScope {
@@ -237,11 +381,13 @@ private fun Label(title: String, colors: BarColors) {
 @Composable
 private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, intro: Int, onHover: () -> Unit, onClick: () -> Unit) {
     // The first rows come in one after another ([intro]: its place; -1: shown at once).
-    val come = remember { Animatable(if (intro >= 0) 0f else 1f) }
+    // (Without the animation "launcherList": all there at once.)
+    val coming = intro >= 0 && NewmAnimations["launcherList"].on
+    val come = remember { Animatable(if (coming) 0f else 1f) }
     LaunchedEffect(Unit) {
-        if (intro >= 0) {
+        if (coming) {
             kotlinx.coroutines.delay(40L + intro * 22L)
-            come.animateTo(1f, tween(220))
+            come.animateTo(1f, NewmAnimations.spec("launcherList"))
         }
     }
     val source = remember { MutableInteractionSource() }

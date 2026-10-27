@@ -33,7 +33,6 @@ private val confPanelLauncherH = configuredValue("panels.launcher.h", 0.8)
 private val confPanelLauncherW = configuredValue("panels.launcher.w", 0.8)
 private val confPanelLauncherCornerRadius = configuredValue("panels.launcher.corner_radius", 0.0)
 
-private val confAnimT = configuredValue("anim_time", .3)
 
 /**
  * Wait this long before accepting that view won't accept our requested size (newm's
@@ -114,21 +113,42 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
     fun isPanel(): Boolean = panel != null
 
+    // A rule's [value] as two numbers ([1, 2]), or null (told once per window when it is something else).
+    private var badRuleTold = false
+
+    private fun numberPair(value: Any?, name: String): Pair<Double, Double>? {
+        if (value == null) return null
+        val list = value as? List<*>
+        val a = (list?.getOrNull(0) as? Number)?.toDouble()
+        val b = (list?.getOrNull(1) as? Number)?.toDouble()
+        if (a == null || b == null) {
+            if (!badRuleTold) log.warn("Rule: $name is two numbers ([800, 600]), not $value: left out for $appId")
+            badRuleTold = true
+            return null
+        }
+        return a to b
+    }
+
     private data class Floating(val floats: Boolean, val sizeHint: Pair<Int, Int>?, val posHint: Pair<Double, Double>?)
 
     @Suppress("UNCHECKED_CAST")
     private fun decideFloating(): Floating {
         val up = upState
         var floats = up != null && up.isFloating
-        rules["float"]?.let { floats = it as Boolean }
-        val sizeHint = (rules["float_size"] as? List<Number>)?.let { it[0].toInt() to it[1].toInt() }
-        val posHint = (rules["float_pos"] as? List<Number>)?.let { it[0].toDouble() to it[1].toDouble() }
+        // (Two numbers each; anything else in a rule is not taken: a typo never breaks the window's place.)
+        val sizeHint = numberPair(rules["float_size"], "float_size")?.let { it.first.toInt() to it.second.toInt() }
+        val posHint = numberPair(rules["float_pos"], "float_pos")
 
         if (up != null) {
             val c = up.sizeConstraints
             if (c[0] > 0 && c[2] > 0 && c[0] == c[1] && c[2] == c[3]) floats = true
         }
         if (parent != null) floats = true
+        // A rule says last (view.rules: float = false tiles a dialog or a fixed-size window too).
+        (rules["float"] as? Boolean)?.let { rule ->
+            if (rule != floats) log.info { "Rule: ${if (rule) "floating" else "tiled"} although ${if (parent != null) "a child window" else "it would ${if (floats) "float" else "tile"}"}: $this" }
+            floats = rule
+        }
         return Floating(floats, sizeHint, posHint)
     }
 
@@ -703,7 +723,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         }
 
         if (up.isMapped && !waitingForShow) {
-            wm.animateTo({ s -> show(s) }, confAnimT(), null, initialKind <= 1) // overlay_safe for panel and layer
+            wm.animateTo({ s -> show(s) }, "windowsIn", null, initialKind <= 1) // overlay_safe for panel and layer
             waitingForShow = true
         }
         return initial
@@ -729,11 +749,11 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         }
     }
 
-    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double) {
+    override fun animate(oldState: LayoutState, newState: LayoutState, dt: Double, curve: dev.caulis.core.Curve) {
         val up = upState ?: return
         val cur = reducer(up, oldState)
         val nxt = reducer(up, newState)
-        startAnimation(ViewDownInterpolation(wm, cur, nxt), dt)
+        startAnimation(ViewDownInterpolation(wm, cur, nxt), dt, curve)
     }
 
     override fun flushAnimation() = flushAnimationOwn()

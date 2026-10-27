@@ -5,8 +5,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,7 +71,7 @@ fun BarModel.showPopups(): AutoCloseable {
                 null
             } else shownPopup?.takeIf { it.bar.monitor === m }?.let(::popupRect)
         }, takesKeyboard = true,
-            sceneSize = { _ -> POPUP_WIDEST + 2 * POPUP_SHADOW to POPUP_TALLEST + 2 * POPUP_SHADOW },
+            sceneSize = { _ -> dev.caulis.compose.SceneSize(POPUP_WIDEST + 2 * POPUP_SHADOW, POPUP_TALLEST + 2 * POPUP_SHADOW) },
             // (Not shown until its height is measured: else its top came first, the rest after.)
             appearance = { _ ->
                 if (shownPopup?.measured == 0) dev.caulis.compose.WidgetLook(alpha = 0f)
@@ -112,7 +110,7 @@ internal fun PopupContent(model: BarModel, popup: Popup) {
             .softShadow(14.dp, 10.dp)
             .background(surface, shape)
             .border(1.dp, colors.edge, shape)
-            .animateContentSize(androidx.compose.animation.core.spring(stiffness = 700f, dampingRatio = 0.9f))
+            .animateContentSize(newm.NewmAnimations.spec("popupsResize", null, newm.NewmAnimations.POPUP_SPRING))
             .padding(if (popup.kind == PopupKind.TOOLTIP) 9.dp else 12.dp),
     ) {
         when (popup.kind) {
@@ -123,6 +121,7 @@ internal fun PopupContent(model: BarModel, popup: Popup) {
             PopupKind.BATTERY -> BatteryAndPowerPopup(model, popup, colors, text)
             PopupKind.POWER -> PowerPopup(model, popup, colors, text)
             PopupKind.QUICK -> QuickPopup(model, popup, colors, text)
+            PopupKind.NOTIFICATIONS -> NotificationsPopup(model, colors, text)
             PopupKind.COLORS -> ColorsPopup(model, colors, text)
             PopupKind.TRAY_MENU -> TrayMenu(model, popup, colors, text)
             PopupKind.TOOLTIP -> BasicText(popup.text, style = text.copy(fontSize = 12.sp))
@@ -136,7 +135,7 @@ internal fun PopupContent(model: BarModel, popup: Popup) {
 private fun MenuRow(colors: BarColors, enabled: Boolean = true, onClick: () -> Unit, content: @Composable () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
-    val bg by animateColorAsState(if (hovered && enabled) colors.hover else Color.Transparent, tween(100))
+    val bg by animateColorAsState(if (hovered && enabled) colors.hover else Color.Transparent, newm.NewmAnimations.spec("hover", 100))
     Box(
         Modifier.fillMaxWidth().height(30.dp)
             .background(bg, RoundedCornerShape(8.dp))
@@ -160,8 +159,11 @@ private fun MenuRow(colors: BarColors, enabled: Boolean = true, onClick: () -> U
 private fun Calendar(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val today = model.now.toLocalDate()
     val month = today.withDayOfMonth(1).plusMonths(popup.monthOffset.toLong())
-    val locale = if (language() == "ru") Locale.forLanguageTag("ru") else Locale.getDefault()
-    val firstDay = WeekFields.of(locale).firstDayOfWeek
+    val locale = dateLocale()
+    // calendar { firstDay = "MONDAY" } (unset: the language's), weekend = [...], weekNumbers.
+    val firstDay = confFirstDay()?.let { day -> runCatching { DayOfWeek.valueOf(day.trim().uppercase()) }.getOrNull() } ?: WeekFields.of(locale).firstDayOfWeek
+    val weekendDays = confWeekend().mapNotNull { day -> runCatching { DayOfWeek.valueOf(day.trim().uppercase()) }.getOrNull() }.toSet()
+    val weekNumbers = confWeekNumbers()
     Column {
         androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().height(30.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(colors, Glyph.CHEVRON_LEFT) { popup.monthOffset -= 1 }
@@ -175,6 +177,7 @@ private fun Calendar(model: BarModel, popup: Popup, colors: BarColors, text: Tex
         Spacer(Modifier.height(6.dp))
         val days = (0 until 7).map { firstDay.plus(it.toLong()) }
         androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth()) {
+            if (weekNumbers) Box(Modifier.weight(0.8f).height(24.dp))
             for (d in days) Box(Modifier.weight(1f).height(24.dp), contentAlignment = Alignment.Center) {
                 BasicText(d.getDisplayName(DateTextStyle.SHORT_STANDALONE, locale).take(2), style = text.copy(color = colors.dim, fontSize = 11.sp))
             }
@@ -183,11 +186,16 @@ private fun Calendar(model: BarModel, popup: Popup, colors: BarColors, text: Tex
         val lead = Math.floorMod(month.dayOfWeek.value - firstDay.value, 7)
         val start: LocalDate = month.minusDays(lead.toLong())
         for (week in 0 until 6) androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth()) {
+            // The week's number (ISO's: the one with its Thursday).
+            if (weekNumbers) Box(Modifier.weight(0.8f).height(32.dp), contentAlignment = Alignment.Center) {
+                val thursday = start.plusDays((week * 7).toLong()).let { it.plusDays(Math.floorMod(DayOfWeek.THURSDAY.value - it.dayOfWeek.value, 7).toLong()) }
+                BasicText("${thursday.get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR)}", style = text.copy(color = colors.dim.copy(alpha = 0.6f), fontSize = 10.sp))
+            }
             for (d in 0 until 7) {
                 val day = start.plusDays((week * 7 + d).toLong())
                 val inMonth = day.month == month.month
                 val isToday = day == today
-                val weekend = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
+                val weekend = day.dayOfWeek in weekendDays
                 Box(Modifier.weight(1f).height(32.dp), contentAlignment = Alignment.Center) {
                     Box(
                         Modifier.size(28.dp).background(if (isToday) colors.accent else Color.Transparent, CircleShape),
@@ -197,7 +205,7 @@ private fun Calendar(model: BarModel, popup: Popup, colors: BarColors, text: Tex
                             "${day.dayOfMonth}",
                             style = text.copy(
                                 color = when {
-                                    isToday -> Color.White
+                                    isToday -> onAccent(colors)
                                     !inMonth -> colors.dim.copy(alpha = 0.45f)
                                     weekend -> colors.dim
                                     else -> colors.text
@@ -277,13 +285,21 @@ private val brightnessWorker = java.util.concurrent.Executors.newSingleThreadExe
 private val brightnessWanted = java.util.concurrent.atomic.AtomicInteger(-1)
 
 internal fun setBrightness(model: BarModel, level: Float) {
-    val percent = (level * 100).toInt().coerceIn(1, 100)
+    val percent = (level * 100).toInt().coerceIn(brightnessMinimum(), 100)
     // (A worker already waiting takes the new value; none waiting: one is started.)
     if (brightnessWanted.getAndSet(percent) != -1) return
     brightnessWorker.execute {
         val target = brightnessWanted.getAndSet(-1)
         if (target == -1) return@execute
-        if (!runQuietly("brightnessctl", "-q", "set", "$target%")) log.warn("brightnessctl is not installed or did not answer: the brightness cannot be set")
+        // brightness { set = "..." } ({percent}), else brightnessctl (of brightness.device, if given).
+        val own = confSetBrightness()
+        val device = confBrightnessDevice()?.takeIf { it.isNotBlank() }
+        val done = when {
+            own != null -> commandSucceeds(fillIn(own, "percent" to target, "device" to (device ?: "")))
+            device != null -> runQuietly("brightnessctl", "-q", "--device=$device", "set", "$target%")
+            else -> runQuietly("brightnessctl", "-q", "set", "$target%")
+        }
+        if (!done) log.warn(if (own != null) "The brightness cannot be set: \"$own\" failed" else "brightnessctl is not installed or did not answer: the brightness cannot be set")
         else log.trace { "Brightness $target%" }
         model.status.refreshSoon()
     }
@@ -313,44 +329,20 @@ private fun firstInstalled(vararg programs: String): String? = programs.firstOrN
 @Composable
 private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val wm = model.wm
-    // (Those that end the session ask once more.)
-    val entries = listOf(
-        Triple("lock", Glyph.LOCK, "Lock"),
-        Triple("suspend", Glyph.MOON, "Suspend"),
-        Triple("hibernate", Glyph.HIBERNATE, "Hibernate"),
-        Triple("logout", Glyph.LOGOUT, "Log out"),
-        Triple("reboot", Glyph.RESTART, "Restart"),
-        Triple("poweroff", Glyph.POWER, "Shut down"),
-    ).filter { it.first != "hibernate" || model.canHibernate }
+    // power { entries; confirm }: which, in which order; those in confirm ask once more (by default those that end the session).
+    val confirm = confPowerConfirm()
+    val entries = confPowerEntries().mapNotNull { id -> POWER_ENTRIES[id]?.let { (glyph, label) -> Triple(id, glyph, label) } }
+        .filter { it.first != "hibernate" || model.canHibernate }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((id, glyph, label) in entries) {
             val asking = popup.confirming == id
             MenuRow(colors, onClick = {
-                if (id == "screenshot") {
-                    model.close()
-                    // (A moment later: not the menu in the picture.)
-                    wm.caulis.after(250) { wm.screenshot() }
-                    return@MenuRow
-                }
-                if (id == "colors") {
-                    model.toggle(PopupKind.COLORS, popup.bar, popup.anchorX)
-                    return@MenuRow
-                }
-                val final = id == "lock" || id == "suspend" || id == "hibernate" || asking
-                if (!final) {
+                if (id in confirm && !asking) {
                     popup.confirming = id
                     return@MenuRow
                 }
                 model.close()
-                log.info { "Power menu: $id" }
-                when (id) {
-                    "lock" -> wm.ensureLocked()
-                    "suspend" -> wm.caulis.launch("systemctl suspend")
-                    "hibernate" -> wm.caulis.launch("systemctl hibernate")
-                    "logout" -> wm.terminate()
-                    "reboot" -> wm.caulis.launch("systemctl reboot")
-                    "poweroff" -> wm.caulis.launch("systemctl poweroff")
-                }
+                runPowerEntry(id, wm)
             }) {
                 androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                     GlyphIcon(glyph, if (asking) colors.danger else colors.text, 16.dp)
@@ -361,6 +353,16 @@ private fun PowerPopup(model: BarModel, popup: Popup, colors: BarColors, text: T
         }
     }
 }
+
+// The power menu's entries: their pictures and words.
+private val POWER_ENTRIES = mapOf(
+    "lock" to (Glyph.LOCK to "Lock"),
+    "suspend" to (Glyph.MOON to "Suspend"),
+    "hibernate" to (Glyph.HIBERNATE to "Hibernate"),
+    "logout" to (Glyph.LOGOUT to "Log out"),
+    "reboot" to (Glyph.RESTART to "Restart"),
+    "poweroff" to (Glyph.POWER to "Shut down"),
+)
 
 // --- a tray icon's menu --------------------------------------------------------------------------
 

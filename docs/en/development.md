@@ -8,7 +8,7 @@ library.
 ```
 src/main/kotlin/newm/   newm itself: the layout, gestures, overlays, bar, lock screen, launcher
 templates/              what newm writes to ~/.config/newm (config.kts, examples, bars)
-nix/                    the NixOS and home-manager modules
+nix/                    the package (package.nix, deps.json), the NixOS and home-manager modules
 docs/                   this documentation (en, ru)
 dev/newm-dev            newm from its sources, for working on newm inside newm
 legacy/                 the original Python newm, for reference
@@ -26,6 +26,10 @@ against them. `./install.sh` and `dev/newm-dev` do this by themselves.
 
 To try newm without leaving your desktop, run `build/install/newm/bin/newm` in a terminal.
 It opens as a window.
+
+The Nix package builds offline from the dependencies listed in `nix/deps.json`. After a
+change to the dependencies (a new Caulis version in `gradle/libs.versions.toml`), make it
+again: `nix build .#default.mitmCache.updateScript && ./result`.
 
 ## Working on newm inside newm
 
@@ -59,4 +63,9 @@ Log in to "newm (dev)", or run `dev/newm-dev` from a text console. Then, inside:
 The builds are kept in `~/.cache/newm-dev`: `good` is the one running, `good.prev` the one
 before. The script's own log is `~/.cache/newm-dev/newm-dev.log`.
 
-A restart closes the programs that were open, as logging out does. Hot swap keeps them.
+A restart closes the programs that were open, as logging out does; `newm cmd restart keep`
+opens them again afterwards, each in its place. Hot swap keeps them.
+
+To see a change of newm's at work, `newm cmd debug` prints the layout, and `newm cmd log
+<area> 3` puts one area of the log in detail while newm runs (see
+[Testing newm](testing.md#more-detail-in-the-log)).

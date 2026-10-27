@@ -25,7 +25,61 @@ private fun properties(iface: String, props: () -> Map<String, Variant>) = mapOf
 /** A request to the lock screen panel (newm's AuthRequest): its data, and the panel's reply. */
 class AuthRequest(val data: Map<String, Any?>, val callback: (Map<String, Any?>) -> Unit) {
     var replied = false
+
+    /**
+     * True if [reply] answers this request: a password (a text, not too long) for a password
+     * request, one of the users offered for a user request. Anything else is not taken.
+     */
+    fun accepts(reply: Map<String, Any?>): Boolean = when (data["kind"]) {
+        "auth_request_cred" -> (reply["cred"] as? String)?.let { it.length <= MAX_CRED_LENGTH } == true
+        "auth_request_user" -> reply["user"] is String && (data["users"] as? List<*>)?.contains(reply["user"]) == true
+        else -> false
+    }
+
+    companion object {
+        /** The longest password taken (characters); a reply longer is not one. */
+        const val MAX_CRED_LENGTH = 4096
+    }
 }
+
+/**
+ * True if the process [pid] is [root] or was started by it (at any depth: a panel program run
+ * through a shell or python); [parentOf] tells a process's parent (null: gone).
+ */
+internal fun isInProcessTree(pid: Long, root: Long, parentOf: (Long) -> Long?): Boolean =
+    isInProcessTree(pid, root, null, parentOf) { null }
+
+/**
+ * The same, [root] being also the process started at [rootStart] (/proc's start time, see
+ * [processStartTime]; null: not checked): a process that got [root]'s number after it ended
+ * is not it. [startOf] tells a process's start time.
+ */
+internal fun isInProcessTree(pid: Long, root: Long, rootStart: Long?, parentOf: (Long) -> Long?, startOf: (Long) -> Long?): Boolean {
+    var now: Long? = pid
+    // (Deep enough for any wrapper; a loop in what /proc says ends here too.)
+    repeat(64) {
+        val p = now ?: return false
+        if (p == root) return rootStart == null || startOf(p) == rootStart
+        if (p <= 1L) return false
+        now = parentOf(p)
+    }
+    return false
+}
+
+/** The parent of process [pid], or null (gone, or not to be seen). */
+internal fun parentPid(pid: Long): Long? = ProcessHandle.of(pid).flatMap { it.parent() }.map { it.pid() }.orElse(null)
+
+/**
+ * When process [pid] started (field 22 of /proc/<pid>/stat, in clock ticks since boot), or null
+ * (gone, or not to be read): with the PID it names one process, a PID used again later is not it.
+ */
+internal fun processStartTime(pid: Long): Long? = runCatching {
+    startTimeOfStat(java.nio.file.Files.readString(java.nio.file.Path.of("/proc/$pid/stat")))
+}.getOrNull()
+
+// (The program's name, field 2, is in parentheses and may hold spaces or ")": the fields are counted after the last ")".)
+internal fun startTimeOfStat(stat: String): Long? =
+    stat.substringAfterLast(')', "").trim().split(' ').getOrNull(22 - 3)?.toLongOrNull()
 
 /**
  * newm's dbus/endpoint.py: newm on the session bus — org.newm.Command (newm-cmd), org.newm.Auth
@@ -34,7 +88,7 @@ class AuthRequest(val data: Map<String, Any?>, val callback: (Map<String, Any?>)
  */
 class DBusEndpoint(private val layout: Layout) {
     var gestureProvider: DBusGestureProvider? = null
-    private var bus: DBusConnection? = null
+    private var bus: dev.caulis.core.dbus.DBusScope? = null
     private val exported = ArrayList<AutoCloseable>()
     private var latest = ""
     private var nextRequest = 1
@@ -92,12 +146,27 @@ class DBusEndpoint(private val layout: Layout) {
         objects += bus.export(
             path, "org.newm.Auth.Request",
             mapOf(
+                // Only the lock panel program (panels.lock.cmd, or a program it started) may answer,
+                // and only with what the request asks: any other program of the session could
+                // otherwise answer first — a wrong password each time, or nonsense that jams it.
                 "Reply" to DBusMethod("s", "") { call ->
-                    if (!req.replied) {
-                        req.replied = true
-                        req.callback(Json.parseObject(call.body[0] as String))
-                        // Answered: its objects go, after this reply has been sent.
-                        layout.caulis.post { if (request === objects) closeRequest() }
+                    val text = call.body[0] as String
+                    val data = if (text.length > 2 * AuthRequest.MAX_CRED_LENGTH + 256) null else runCatching { Json.parseObject(text) }.getOrNull()
+                    val sender = call.sender
+                    when {
+                        req.replied -> {}
+                        data == null || !req.accepts(data) -> log.warn("A reply to the lock screen that is not one (from $sender): ignored")
+                        sender == null -> log.warn("A reply to the lock screen from no one: ignored")
+                        else -> fromLockPanel(bus, sender) { ok ->
+                            if (!ok) {
+                                log.warn("A reply to the lock screen from $sender, not the lock panel program: ignored")
+                            } else if (!req.replied && request === objects) {
+                                req.replied = true
+                                req.callback(data)
+                                // Answered: its objects go.
+                                closeRequest()
+                            }
+                        }
                     }
                     emptyList()
                 },
@@ -109,6 +178,18 @@ class DBusEndpoint(private val layout: Layout) {
         request = objects
         latest = path
         bus.emitSignal("/org/newm/Auth", "org.newm.Auth", "Request", "s", listOf(path))
+    }
+
+    // Whether the bus connection [sender] belongs to the lock panel program's process (asked of the bus: its PID).
+    private fun fromLockPanel(bus: dev.caulis.core.dbus.DBusScope, sender: String, then: (Boolean) -> Unit) {
+        val panel = layout.panelLauncher.pidOf("lock") ?: return then(false)
+        val panelStart = layout.panelLauncher.startTimeOf("lock")
+        bus.call(
+            "org.freedesktop.DBus", ObjectPath("/org/freedesktop/DBus"), "org.freedesktop.DBus", "GetConnectionUnixProcessID", "s", listOf(sender),
+        ) { reply ->
+            val pid = if (reply.isError) null else (reply.body.firstOrNull() as? Number)?.toLong()?.and(0xFFFF_FFFFL)
+            then(pid != null && isInProcessTree(pid, panel, panelStart, ::parentPid, ::processStartTime))
+        }
     }
 
     private fun closeRequest() {

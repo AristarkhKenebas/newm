@@ -81,7 +81,36 @@ abstract class GestureProvider(protected val onGesture: (NewmGesture) -> Boolean
 private val confScale = configuredValue("gestures.c.scale_px", 800.0)
 
 // mouse { superMove = "button" (Super+left drag moves, Super+right drag resizes) | "motion" (Super and a move alone moves, as newm) }
-private val confSuperMove = configuredValue("mouse.super_move", "button")
+internal val confSuperMove = configuredValue("mouse.super_move", "button")
+
+// mouse { moveButton = "left"; resizeButton = "right" } ("middle", "side", "extra"; "none" or "": not at all).
+internal val confMoveButton = configuredValue("mouse.move_button", "left")
+internal val confResizeButton = configuredValue("mouse.resize_button", "right")
+
+private val warnedButtons = HashSet<String>()
+
+/** A mouse button's evdev code by its name ("left" 272, "right" 273, "middle" 274, "side" 275, "extra" 276), or null for "none" (or a name not known: told once). */
+internal fun mouseButtonCode(name: String?): Int? = when (name?.trim()?.lowercase()) {
+    null, "", "none", "off" -> null
+    "left" -> 272
+    "right" -> 273
+    "middle" -> 274
+    "side", "back" -> 275
+    "extra", "forward" -> 276
+    else -> name.orEmpty().trim().toIntOrNull()?.takeIf { it in 272..287 } ?: null.also {
+        if (warnedButtons.add(name.orEmpty())) log.warn("mouse: \"$name\" is no mouse button (left, right, middle, side, extra, none)")
+    }
+}
+
+/** A mouse button's name, in words ("left"). */
+internal fun mouseButtonName(code: Int): String = when (code) {
+    272 -> "left"
+    273 -> "right"
+    274 -> "middle"
+    275 -> "side"
+    276 -> "extra"
+    else -> "button $code"
+}
 
 /**
  * newm's CGestureProvider (gestures/provider/c_gestures.py): the touchpad's swipes as the
@@ -173,10 +202,14 @@ class CGestureProvider(
     override fun onButton(timeMillis: Int, button: Int, pressed: Boolean): Int {
         if (confSuperMove() == "motion") return 0
         if (pressed) {
-            if (captured != null || button != BTN_LEFT && button != BTN_RIGHT) return 0
-            // Left: moving ("move-1"); right: resizing ("swipe-2", as two fingers do). Taken
-            // only when the layout wants it (Super held): else the program gets the click.
-            if (start(if (button == BTN_LEFT) 1 else 2) != 2) return 0
+            // mouse { moveButton (left): moving ("move-1"); resizeButton (right): resizing
+            // ("swipe-2", as two fingers do) }. Taken only when the layout wants it (Super
+            // held): else the program gets the click.
+            val move = mouseButtonCode(confMoveButton())
+            val resize = mouseButtonCode(confResizeButton())
+            if (captured != null || button != move && button != resize) return 0
+            if (start(if (button == move) 1 else 2) != 2) return 0
+            log.trace { "Super + ${mouseButtonName(button)} drag: ${if (button == move) "moving" else "resizing"}" }
             heldButton = button
             active = true
             return 2
@@ -200,8 +233,4 @@ class CGestureProvider(
         finish()
     }
 
-    private companion object {
-        const val BTN_LEFT = 272
-        const val BTN_RIGHT = 273
-    }
 }

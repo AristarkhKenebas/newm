@@ -51,8 +51,9 @@ abstract class Overlay(protected val layout: Layout) {
 
     open fun postInit() {}
     open fun preDestroy() {}
-    protected open fun enterTransition(): Pair<LayoutState?, Double?> = null to 0.0
-    protected open fun exitTransition(): Pair<LayoutState?, Double?> = null to 0.0
+    // Where the layout goes when it comes and goes, and as which animation (see NewmAnimations).
+    protected open fun enterTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> = null to null
+    protected open fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> = null to null
 
     open fun onKey(timeMillis: Int, keycode: Int, pressed: Boolean, keysyms: String): Boolean = true
     open fun onModifiers(modifiers: Int, lastModifiers: Int): Boolean = false

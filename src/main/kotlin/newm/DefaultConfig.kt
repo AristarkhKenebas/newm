@@ -1,87 +1,71 @@
 package newm
 
+import dev.caulis.log.Logger
+
+private val log = Logger("config")
+
 /**
- * newm's default_config.py: what newm does without a configuration of your own — its keys,
- * the lock screen and launcher panels, brightness and volume with a bar shown by wob.
+ * What newm does without a configuration of its own and without its shipped config.kts (a
+ * build without the templates, or one that failed to compile): newm's own lock screen,
+ * launcher, bar, volume and brightness slider (no wob, pactl or newm-panel-basic needed) and
+ * the keys of the starting config.kts, each with its words for the keys' help.
  */
 fun defaultConfig(layout: Layout): Map<String, Any?> {
-    val wobRunner = WobRunner("wob -a bottom -M 100") { command -> layout.caulis.spawn(command) }
-    val backlightManager = BacklightManager(animTime = 1.0, barDisplay = wobRunner)
-    val kbdlightManager = BacklightManager(args = "--device='*::kbd_backlight'", animTime = 1.0, barDisplay = wobRunner)
-    val pactl = PaCtl(0, wobRunner)
+    log.warn("No configuration and no shipped config.kts: newm's built-in defaults")
+    val keys: List<Triple<String, String, Layout.() -> Unit>> = listOf(
+        Triple("L-Return", "Open a terminal") { caulis.launch(defaultTerminal()) },
+        Triple("L-d", "Find and start a program") { enterLauncherOverlay() },
 
-    val keyBindings: (Layout) -> List<Pair<String, () -> Unit>> = { l ->
-        listOf(
-            "L-h" to { l.move(-1, 0) },
-            "L-j" to { l.move(0, 1) },
-            "L-k" to { l.move(0, -1) },
-            "L-l" to { l.move(1, 0) },
-            "L-u" to { l.basicScale(1) },
-            "L-n" to { l.basicScale(-1) },
-            "L-t" to { l.moveInStack(1) },
+        Triple("L-h", "Window to the left") { move(-1, 0) },
+        Triple("L-j", "Window below") { move(0, 1) },
+        Triple("L-k", "Window above") { move(0, -1) },
+        Triple("L-l", "Window to the right") { move(1, 0) },
+        Triple("L-Tab", "Next window") { cycleViews(1) },
+        Triple("L-t", "Next window of a stack") { moveInStack(1) },
 
-            "L-H" to { l.moveFocusedView(-1, 0) },
-            "L-J" to { l.moveFocusedView(0, 1) },
-            "L-K" to { l.moveFocusedView(0, -1) },
-            "L-L" to { l.moveFocusedView(1, 0) },
+        Triple("L-", "All windows (tap Super alone)") { toggleOverview() },
+        Triple("L-u", "Zoom out") { basicScale(1) },
+        Triple("L-n", "Zoom in") { basicScale(-1) },
+        Triple("L-s", "Two windows side by side, and back") { sideBySide() },
 
-            "L-C-h" to { l.resizeFocusedView(-1, 0) },
-            "L-C-j" to { l.resizeFocusedView(0, 1) },
-            "L-C-k" to { l.resizeFocusedView(0, -1) },
-            "L-C-l" to { l.resizeFocusedView(1, 0) },
+        Triple("L-S-h", "Move the window left") { moveFocusedView(-1, 0) },
+        Triple("L-S-j", "Move the window down") { moveFocusedView(0, 1) },
+        Triple("L-S-k", "Move the window up") { moveFocusedView(0, -1) },
+        Triple("L-S-l", "Move the window right") { moveFocusedView(1, 0) },
 
-            "L-Return" to { l.caulis.launch(defaultTerminal()) },
-            "L-q" to { l.closeFocusedView() },
+        Triple("L-C-h", "Window narrower") { resizeFocusedView(-1, 0) },
+        Triple("L-C-l", "Window wider") { resizeFocusedView(1, 0) },
+        Triple("L-C-k", "Window shorter") { resizeFocusedView(0, -1) },
+        Triple("L-C-j", "Window taller") { resizeFocusedView(0, 1) },
 
-            "L-p" to { l.ensureLocked(dim = true) },
-            "L-P" to { l.terminate() },
-            "L-C" to { l.updateConfig() },
+        Triple("L-q", "Close the window") { closeFocusedView() },
+        Triple("L-f", "Fullscreen, and back") { toggleFullscreen() },
+        Triple("L-v", "Clipboard history") { toggleClipboard() },
+        Triple("L-S-v", "Float, and back") { toggleFocusedViewFloating() },
 
-            "L-f" to { l.toggleFullscreen() },
+        Triple("L-slash", "These keys") { toggleKeyHelp() },
+        Triple("L-p", "Lock the screen") { ensureLocked(dim = true) },
+        Triple("L-C", "Reload this configuration") { updateConfig() },
+        Triple("L-S-Escape", "Log out") { terminate() },
 
-            "L-" to { l.toggleOverview() },
+        // newm's own slider shows the volume and the brightness (Caulis' actions).
+        Triple("XF86MonBrightnessUp", "Brighter") { caulis.run("brightness +5") },
+        Triple("XF86MonBrightnessDown", "Darker") { caulis.run("brightness -5") },
+        Triple("XF86AudioRaiseVolume", "Louder") { caulis.run("volume +5") },
+        Triple("XF86AudioLowerVolume", "Quieter") { caulis.run("volume -5") },
+        Triple("XF86AudioMute", "Sound off, and on") { caulis.run("volume mute") },
+        Triple("XF86AudioMicMute", "Microphone off, and on") { caulis.run("mic-mute") },
 
-            "XF86MonBrightnessUp" to { backlightManager.set(backlightManager.get() + 0.1) },
-            "XF86MonBrightnessDown" to { backlightManager.set(backlightManager.get() - 0.1) },
-            "XF86KbdBrightnessUp" to { kbdlightManager.set(kbdlightManager.get() + 0.1) },
-            "XF86KbdBrightnessDown" to { kbdlightManager.set(kbdlightManager.get() - 0.1) },
-            "XF86AudioRaiseVolume" to { pactl.volumeAdj(5) },
-            "XF86AudioLowerVolume" to { pactl.volumeAdj(-5) },
-            "XF86AudioMute" to { pactl.mute() },
-        )
-    }
-
-    // (Typed: a lambda as a map's value would not know its parameters.)
-    val synchronousUpdate: () -> Unit = {
-        backlightManager.update()
-        kbdlightManager.update()
-    }
-    val topBarTexts: () -> List<String> = {
-        listOf(System.getProperty("user.name"), java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("EEE MMM d HH:mm:ss yyyy")))
-    }
-    val bottomBarTexts: () -> List<String> = { listOf("newm", "powered by Caulis") }
-    val idleCallback: (String) -> Unit = { code -> backlightManager.callback(code) }
+        Triple("Print", "Screenshot: choose") { screenshot() },
+        Triple("L-S-s", "Screenshot: choose a part") { screenshot() },
+    )
+    val keyBindings: (Layout) -> List<Pair<String, () -> Unit>> = { l -> keys.map { (combo, _, action) -> combo to { l.action() } } }
 
     return mapOf(
         "background" to mapOf("path" to "resource:wallpaper.jpg", "anim" to true),
-        "synchronous_update" to synchronousUpdate,
         "key_bindings" to keyBindings,
-        "panels" to mapOf(
-            "lock" to mapOf("cmd" to "${defaultTerminal()} -e newm-panel-basic lock"),
-            "launcher" to mapOf("cmd" to "${defaultTerminal()} -e newm-panel-basic launcher"),
-            "top_bar" to mapOf(
-                "native" to mapOf(
-                    "enabled" to true,
-                    "texts" to topBarTexts,
-                ),
-            ),
-            "bottom_bar" to mapOf(
-                "native" to mapOf(
-                    "enabled" to true,
-                    "texts" to bottomBarTexts,
-                ),
-            ),
-        ),
-        "energy" to mapOf("idle_callback" to idleCallback),
+        "key_help" to keys.map { (combo, words, _) -> combo to words },
+        // newm's own lock screen and launcher (no panels.lock.cmd / panels.launcher.cmd), and its bar.
+        "panels" to mapOf("top_bar" to mapOf("native" to mapOf("enabled" to true))),
     )
 }

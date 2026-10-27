@@ -1,7 +1,7 @@
 package newm.bar
 
+import newm.lockShown
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,6 +59,25 @@ data class OsdCard(val glyph: Glyph, val slash: Boolean, val title: String, val 
 // osd { connections = "cards" (a card in the middle) | "text" (a short line) | "off" }
 private val confConnections = newm.configuredValue("osd.connections", "cards")
 
+// osd { seconds = 1.3; position = "bottom"; distance = 130 }: how long a level (volume, brightness) shows, and where
+// ("bottom", "top" or "center"; distance: from that edge, in pixels).
+private val confSeconds = newm.configuredValue("osd.seconds", 1.3)
+private val confPosition = newm.configuredValue("osd.position", "bottom")
+private val confDistance = newm.configuredValue("osd.distance", 130)
+
+// osd { toastSeconds = 1.6; cardSeconds = 2.8 }: how long a toast (words in the middle) and a connection's card show.
+private val confToastSeconds = newm.configuredValue("osd.toast_seconds", 1.6)
+private val confCardSeconds = newm.configuredValue("osd.card_seconds", 2.8)
+
+// osd { inFullscreen = false }: connections shown over a fullscreen window too.
+private val confInFullscreen = newm.configuredValue("osd.in_fullscreen", false)
+
+// osd { onConnection { e -> } }: told of each connection that came or went (whatever is shown).
+private val confOnConnection = newm.configuredValue<Any?>("osd.on_connection", null)
+
+// Seconds of the configuration as milliseconds (at least a tenth of a second).
+private fun millis(seconds: Double): Long = (seconds.coerceAtLeast(0.1) * 1000).toLong()
+
 /** A network or device came or went: a card, a line or nothing, as osd.connections says. */
 fun BarModel.connectionChanged(e: ConnectionEvent) {
     val (glyph, slash, title) = when (e.kind) {
@@ -70,10 +89,13 @@ fun BarModel.connectionChanged(e: ConnectionEvent) {
         ConnectionEvent.Kind.WIRED -> Triple(if (e.connected) Glyph.WIRED else Glyph.UNPLUGGED, false, if (e.connected) "Cable connected" else "Cable disconnected")
         ConnectionEvent.Kind.BLUETOOTH -> Triple(if (e.connected) e.icon?.let(::glyphOfDevice) ?: Glyph.BLUETOOTH else Glyph.BLUETOOTH, !e.connected, if (e.connected) "Connected" else "Disconnected")
     }
-    // A window fills the screen (a film, a game): nobody would see it, and it would only be in the way.
+    confOnConnection()?.let { hook ->
+        runHook(hook, e, { mapOf("kind" to e.kind.name.lowercase(), "connected" to e.connected, "name" to e.name, "connecting" to e.connecting) }, "osd.on_connection")
+    }
+    // A window fills the screen (a film, a game): nobody would see it, and it would only be in the way (unless osd.in_fullscreen).
     val fullscreen = runCatching { wm.state.workspaceState(wm.activeWorkspace()).isFullscreen() }.getOrDefault(false) ||
         wm.caulis.desktop.focusedWindow?.fullscreen == true
-    if (fullscreen) return
+    if (fullscreen && !confInFullscreen()) return
     when (confConnections()) {
         "off", "none", "false" -> {}
         "text" -> toast(when {
@@ -96,15 +118,23 @@ fun BarModel.showOsd(): AutoCloseable {
         val pointed = d.monitors.firstOrNull { it.area.contains(Rect(d.pointerX.toInt(), d.pointerY.toInt(), 1, 1)) } ?: d.monitors.firstOrNull()
         return m === pointed
     }
+    // (None of them over the lock screen.)
     val levels = caulis.compose(place = { m ->
-        if (osd == null || !target(m)) null else Rect(m.area.x + (m.area.width - 340) / 2, m.area.y + m.area.height - 130, 340, 84)
+        if (osd == null || !target(m) || wm.lockShown()) null else {
+            val y = when (confPosition().lowercase()) {
+                "top" -> m.area.y + confDistance() - 84
+                "center", "middle" -> m.area.y + (m.area.height - 84) / 2
+                else -> m.area.y + m.area.height - confDistance()
+            }
+            Rect(m.area.x + (m.area.width - 340) / 2, y.coerceIn(m.area.y, m.area.bottom - 84), 340, 84)
+        }
     }) { _ -> osd?.let { OsdPill(this, it) } }
     val toasts = caulis.compose(place = { m ->
-        if (toast == null || !target(m)) null else Rect(m.area.x + (m.area.width - 460) / 2, m.area.y + (m.area.height * 0.42).toInt(), 460, 96)
+        if (toast == null || !target(m) || wm.lockShown()) null else Rect(m.area.x + (m.area.width - 460) / 2, m.area.y + (m.area.height * 0.42).toInt(), 460, 96)
     }) { _ -> toast?.let { ToastCard(this, it) } }
     // The connections' cards: in the middle, a little below; coming and going done by the compositor.
     val cards = caulis.compose(place = { m ->
-        if (card == null || !cardFade.visible || !target(m)) null
+        if (card == null || !cardFade.visible || !target(m) || wm.lockShown()) null
         else Rect(m.area.x + (m.area.width - CARD) / 2, m.area.y + (m.area.height - CARD) / 2 + m.area.height / 8, CARD, CARD)
     }, appearance = { _ -> cardFade.appearance(rise = 0f, smallest = 0.9f) }, moving = { cardFade.moving }) { _ -> card?.let { ConnectionCard(this, it) } }
     // Caulis's own pill (the laptop's keys) is newm's now.
@@ -130,9 +160,9 @@ private fun OsdPill(model: BarModel, show: OsdShow) {
     val colors = model.colorsNow()
     val appear = remember { Animatable(0f) }
     LaunchedEffect(show.serial) {
-        appear.animateTo(1f, tween(140))
-        delay(1300)
-        appear.animateTo(0f, tween(220))
+        appear.animateTo(1f, newm.NewmAnimations.spec("osdIn", 140))
+        delay(millis(confSeconds()))
+        appear.animateTo(0f, newm.NewmAnimations.spec("osdOut", 220))
         if (model.osd?.serial == show.serial) model.osd = null
     }
     val shape = RoundedCornerShape(22.dp)
@@ -171,9 +201,9 @@ private fun ToastCard(model: BarModel, show: OsdShow) {
     val colors = model.colorsNow()
     val appear = remember { Animatable(0f) }
     LaunchedEffect(show.serial) {
-        appear.animateTo(1f, tween(180))
-        delay(1600)
-        appear.animateTo(0f, tween(260))
+        appear.animateTo(1f, newm.NewmAnimations.spec("osdIn", 180))
+        delay(millis(confToastSeconds()))
+        appear.animateTo(0f, newm.NewmAnimations.spec("osdOut", 260))
         if (model.toast?.serial == show.serial) model.toast = null
     }
     val shape = RoundedCornerShape(18.dp)
@@ -197,9 +227,9 @@ private fun ConnectionCard(model: BarModel, show: OsdCard) {
     val colors = model.colorsNow()
     val fade = model.cardFade
     LaunchedEffect(show.serial) {
-        delay(2800)
+        delay(millis(confCardSeconds()))
         fade.hide()
-        delay(300)
+        delay(newm.NewmAnimations.resolve("osdOut", 300, dev.caulis.core.Curve.SMOOTH).effectiveMillis) // (its fading out)
         if (model.card?.serial == show.serial && !fade.shown) model.card = null
     }
     val shape = RoundedCornerShape(32.dp)

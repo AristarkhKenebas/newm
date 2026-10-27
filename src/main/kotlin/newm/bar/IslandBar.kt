@@ -1,7 +1,7 @@
 package newm.bar
 
+import newm.lockShown
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,6 +62,16 @@ import java.util.Locale
 
 private val log = Logger("bar")
 
+// topBar { wheel { up { ... }; down { ... }; left { ... }; right { ... } } }: what the wheel over the
+// clock and the bar's empty space does, each way (by default the focus goes to the next window
+// that way, as Super+H/J/K/L). A way without an action does nothing.
+private val defaultWheel: Map<String, Any?> = mapOf<String, (newm.Layout) -> Unit>(
+    "up" to { l -> l.move(0, -1) }, "down" to { l -> l.move(0, 1) },
+    "left" to { l -> l.move(-1, 0) }, "right" to { l -> l.move(1, 0) },
+)
+private val confWheelTop = newm.configuredValue("panels.top_bar.native.wheel", defaultWheel)
+private val confWheelBottom = newm.configuredValue("panels.bottom_bar.native.wheel", defaultWheel)
+
 /** The bar's colours: its islands, text, faint text, accent, hover, the islands' edge, warnings. */
 data class BarColors(
     val island: Color,
@@ -100,7 +111,7 @@ data class WallMap(val tiles: List<Tile>, val view: Tile?, val width: Float, val
 data class Focused(val title: String, val appId: String)
 
 /** What a bar's popup shows. */
-enum class PopupKind { CALENDAR, VOLUME, NETWORK, BLUETOOTH, BATTERY, POWER, COLORS, QUICK, TRAY_MENU, TOOLTIP }
+enum class PopupKind { CALENDAR, VOLUME, NETWORK, BLUETOOTH, BATTERY, POWER, COLORS, QUICK, NOTIFICATIONS, TRAY_MENU, TOOLTIP }
 
 /** An open popup: below [anchorX] (desktop units) of [bar]. */
 class Popup(val kind: PopupKind, val bar: Bar, val anchorX: Double, val item: TrayItem? = null) {
@@ -141,6 +152,9 @@ class BarModel(val wm: Layout) {
     val sound = Sound(wm.caulis)
     val powerProfiles = PowerProfiles(wm.caulis)
 
+    /** newm's notifications: their cards and the bell's history (started by the layout, with or without this bar). */
+    val notifications = NotificationCenter(this)
+
     /** The popups' part of the screen (a click on it gives it the keyboard: a password). */
     internal var popupWidget: dev.caulis.compose.ComposeWidget? = null
 
@@ -178,7 +192,7 @@ class BarModel(val wm: Layout) {
     var card by mutableStateOf<OsdCard?>(null)
 
     /** The card's coming and going (done by the compositor). */
-    val cardFade = Fade(inMillis = 260, outMillis = 300)
+    val cardFade = Fade("osd", inMillis = 260, outMillis = 300)
 
     // The brightness asked for last and when (quick wheel steps add up before the system says it back).
     private var brightnessWanted = 0
@@ -188,7 +202,7 @@ class BarModel(val wm: Layout) {
     fun stepBrightness(by: Int) {
         val now = System.currentTimeMillis()
         val base = if (now - brightnessAt < 1500) brightnessWanted else status.brightness ?: return
-        val next = (base + by).coerceIn(1, 100)
+        val next = (base + by).coerceIn(brightnessMinimum(), 100)
         brightnessWanted = next
         brightnessAt = now
         setBrightness(this, next / 100f)
@@ -210,7 +224,7 @@ class BarModel(val wm: Layout) {
     }
 
     /** The popups' coming and going (done by the compositor). */
-    val popupFade = Fade(inMillis = 280, outMillis = 180)
+    val popupFade = Fade("popups", inMillis = 280, outMillis = 180)
 
     /** The colours made from the wallpaper (or a colour of yours); null: the classic Nord ones. */
     var palette by mutableStateOf<dev.caulis.core.appearance.Palette?>(null)
@@ -236,11 +250,14 @@ class BarModel(val wm: Layout) {
         val c = colorsNow()
         fun of(x: Color, alpha: Float = x.alpha) = dev.caulis.render.Color(x.red, x.green, x.blue, alpha)
         val dark = wm.caulis.colorSchemeNow == ColorScheme.DARK
-        // (Below the bar, at the right, as a phone's or a desktop's notifications.)
-        val cards = dev.caulis.core.NoticeStyle.cards(width = 380, dark = dark)
+        // (Where the notifications' cards are — below the bar, at the right, by default — as wide.)
+        val corner = cardsCorner()
+        val width = cardsWidth()
+        noticePlace = Triple(corner, width, cardsGap())
+        val cards = dev.caulis.core.NoticeStyle.cards(width = width, dark = dark)
+        val reach = if (corner.top) wm.topBarReach() else wm.barsNow().filter { !it.top }.mapNotNull { b -> b.place()?.let { b.monitor.area.bottom - it.y } }.maxOrNull() ?: 0
         wm.caulis.noticeStyle = cards.copy(
-            placement = dev.caulis.core.NoticePlacement.Toast(dev.caulis.core.NoticePlacement.Toast.Corner.TOP_RIGHT, width = 380,
-                margin = (wm.topBarReach() + 10).coerceIn(14, 500)),
+            placement = dev.caulis.core.NoticePlacement.Toast(corner.notices, width = width, margin = (reach + cardsGap()).coerceIn(14, 500)),
             radius = 18,
             padding = 14,
             info = dev.caulis.core.NoticeColors(of(c.accent, 1f), of(c.text, 1f)),
@@ -249,6 +266,9 @@ class BarModel(val wm: Layout) {
             painter = dev.caulis.core.CardNoticePainter(of(c.island, 0.97f), of(c.text, 1f)),
         )
     }
+
+    // Where the notices were put last (notifications { corner; width; gap }): a reload changing it puts them anew.
+    private var noticePlace: Triple<CardsCorner, Int, Int>? = null
 
     // The part of the bar the pointer is on, waiting for its hint.
     internal var hintWanted: Any? = null
@@ -287,7 +307,7 @@ class BarModel(val wm: Layout) {
         // (UPower's own signals only: another program could send the same ones.)
         wm.caulis.systemBus?.let { bus ->
             val upower = NameWatch(bus, "org.freedesktop.UPower") { owner -> log.trace { "UPower ${if (owner != null) "is running" else "is not running"}" } }
-            bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m ->
+            bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged", sender = "org.freedesktop.UPower") { m ->
                 if (upower.sent(m) && m.path?.startsWith("/org/freedesktop/UPower") == true) status.refreshSoon()
             }
         }
@@ -297,6 +317,9 @@ class BarModel(val wm: Layout) {
         wm.every(1000) {
             val t = LocalDateTime.now()
             if (t.minute != now.minute || t.second != now.second) now = t
+            refreshModules()
+            watchBattery()
+            if (noticePlace != Triple(cardsCorner(), cardsWidth(), cardsGap())) applyNoticeStyle()
         }
         // A click anywhere else closes the popup.
         wm.caulis.onPointerButton { _, pressed ->
@@ -330,13 +353,13 @@ class BarModel(val wm: Layout) {
     private val volumeNext = java.util.concurrent.atomic.AtomicInteger(-1)
     private val volumeWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "newm-volume").apply { isDaemon = true } }
 
-    /** The wheel over the volume: [dy] lines (up: louder), two percent a notch. */
+    /** The wheel over the volume: [dy] lines (up: louder), sound.wheel_step percent a notch (2). */
     fun scrollVolume(dy: Float) {
         wheel -= dy
         val steps = wheel.toInt()
         if (steps == 0) return
         wheel -= steps
-        changeVolume(steps * 2)
+        changeVolume(steps * confVolumeStep())
     }
 
     /** The volume by [delta] percent: shown at once, set by one command for all the steps that came meanwhile. */
@@ -354,9 +377,13 @@ class BarModel(val wm: Layout) {
         volumeWorker.execute {
             val target = volumeNext.getAndSet(-1)
             if (target == -1) return@execute
-            runQuietly("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0")
-            val done = runQuietly("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$target%") || runQuietly("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$target%")
-            if (done) log.trace { "Volume $target%" } else log.warn("The volume cannot be set (neither wpctl nor pactl answered)")
+            // sound { setVolume = "..." }: the configuration's command; else wpctl, else pactl.
+            val own = confSetVolume()
+            val done = if (own != null) commandSucceeds(fillIn(own, "percent" to target)) else {
+                runQuietly("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0")
+                runQuietly("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$target%") || runQuietly("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$target%")
+            }
+            if (done) log.trace { "Volume $target%" } else log.warn(if (own != null) "The volume cannot be set: \"$own\" failed" else "The volume cannot be set (neither wpctl nor pactl answered)")
             Thread.sleep(40)
             status.refreshSoon()
         }
@@ -378,6 +405,8 @@ class BarModel(val wm: Layout) {
 
     /** Opens [kind] below [anchorX] of [bar], or closes it when it is open already. */
     fun toggle(kind: PopupKind, bar: Bar, anchorX: Double, item: TrayItem? = null) {
+        // (Nothing of the bar opens over the lock screen.)
+        if (wm.lockShown()) return close()
         val open = popup
         if (open != null && open.kind == kind && open.item === item && open.bar === bar) return close()
         close()
@@ -419,7 +448,8 @@ class BarModel(val wm: Layout) {
         val w = w0.coerceAtMost(POPUP_WIDEST)
         val h = (popup.measured.takeIf { it > 0 } ?: h0).coerceAtMost(POPUP_TALLEST)
         val area = bar.monitor.area
-        val x = (popup.anchorX - w / 2.0).coerceIn(area.x + 8.0, area.right - 8.0 - w).toInt()
+        // (A screen narrower than the popup: at its left edge, never an error.)
+        val x = (popup.anchorX - w / 2.0).coerceIn(area.x + 8.0, maxOf(area.x + 8.0, area.right - 8.0 - w)).toInt()
         val y = if (bar.top) place.y + place.height - bar.margin + 6 else place.y - h - 6 + bar.margin
         // (With room around it for its shadow.)
         return Rect(x - POPUP_SHADOW, y - POPUP_SHADOW, w + 2 * POPUP_SHADOW, h + 2 * POPUP_SHADOW)
@@ -443,9 +473,12 @@ class BarModel(val wm: Layout) {
         }) + (if (popup.expanded != null) 34 else 0) + 28).coerceAtMost(520)
         PopupKind.BATTERY -> 310 to ((if (status.battery != null) 56 + 8 else 0) + (if (status.brightness != null) 26 + 36 + 8 else 0) +
             (if (powerProfiles.profiles.isNotEmpty()) 26 + 8 + powerProfiles.profiles.size * (34 + 8) else 0) + 26).coerceAtLeast(60)
-        PopupKind.POWER -> 240 to 228
+        PopupKind.POWER -> 240 to (confPowerEntries().size.coerceAtLeast(1) * 34 + 24)
         PopupKind.QUICK -> 296 to (if (status.brightness != null) 280 else 230)
         PopupKind.COLORS -> 340 to (34 + 6 * 42 + 28)
+        PopupKind.NOTIFICATIONS -> 380 to (34 + 38 + 26 + notifications.history.items.let { items ->
+            if (items.isEmpty()) 80 else (items.size * 50 + items.map { it.entry.ifBlank { it.app }.lowercase() }.distinct().size * 26).coerceAtMost(7 * 56 + 28)
+        }).coerceAtMost(POPUP_TALLEST)
         PopupKind.TOOLTIP -> (popup.text.lines().maxOfOrNull { it.length } ?: 10).coerceIn(4, 60) * 7 + 28 to popup.text.lines().size * 18 + 18
         PopupKind.TRAY_MENU -> {
             val shown = (popup.path.lastOrNull()?.children ?: popup.entries).orEmpty()
@@ -455,11 +488,85 @@ class BarModel(val wm: Layout) {
         }
     }
 
-    /** The bar's text of the clock ([pattern], java.time's). */
+    /** The bar's text of the clock ([pattern], java.time's), in the language of newm's words. */
     fun clock(pattern: String): String = try {
-        now.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        now.format(DateTimeFormats.of(pattern))
     } catch (_: IllegalArgumentException) {
         now.format(DateTimeFormatter.ofPattern("HH:mm"))
+    }
+
+    // --- modules of the configuration's own (topBar { module("name") { } }) ---
+
+    /** Their texts now, by name. */
+    val moduleTexts = androidx.compose.runtime.mutableStateMapOf<String, String>()
+
+    // When each is due next (ms), and those whose command runs now.
+    private val moduleDue = HashMap<String, Long>()
+    private val moduleRunning = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    // Each second: the modules whose time has come ask their text again (a command away from the compositor's thread).
+    private fun refreshModules() {
+        val now = System.currentTimeMillis()
+        val all = wm.barsNow().flatMap { it.modules.entries }.distinctBy { it.key }
+        for ((name, spec) in all) {
+            val m = spec as? Map<*, *> ?: continue
+            if (now < (moduleDue[name] ?: 0L)) continue
+            val every = ((m["every_seconds"] as? Number)?.toDouble() ?: 5.0).coerceAtLeast(0.5)
+            moduleDue[name] = now + (every * 1000).toLong()
+            val text = m["text"]
+            val command = m["command"] as? String
+            when {
+                text is Function0<*> -> {
+                    val shown = try { text()?.toString().orEmpty() } catch (e: Exception) { log.warn("The module $name's text failed: $e"); continue }
+                    if (moduleTexts[name] != shown) moduleTexts[name] = shown
+                }
+                text != null -> if (moduleTexts[name] != text.toString()) moduleTexts[name] = text.toString()
+                command != null -> {
+                    if (!moduleRunning.add(name)) continue
+                    val timeout = (m["timeout_seconds"] as? Number)?.toLong() ?: 5L
+                    inBackground {
+                        try {
+                            // Its first line (a failed command's output too: a script may say something and end with 1); nothing on a timeout.
+                            val out = commandOutput(command, timeout.coerceAtLeast(1), needSuccess = false)?.lines()?.firstOrNull { it.isNotBlank() }?.trim()
+                            log.trace { "Module $name: \"$out\"" }
+                            if (out != null) wm.caulis.post { if (moduleTexts[name] != out) moduleTexts[name] = out }
+                        } finally {
+                            moduleRunning.remove(name)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- the battery nearly empty: battery { onCritical { } }, once each time ---
+
+    private var criticalDone = false
+
+    private fun watchBattery() {
+        val b = status.battery ?: return
+        val critical = !b.charging && !b.plugged && b.percent <= confBatteryCritical()
+        if (critical && !criticalDone) {
+            criticalDone = true
+            log.warn("The battery is nearly empty: ${b.percent}%")
+            runAction(confBatteryOnCritical(), wm, "battery.on_critical")
+        } else if (!critical) criticalDone = false
+    }
+
+    // Sums of the wheel over modules whose wheel the configuration chose (by bar and module): a notch at a time.
+    internal val wheelSums = HashMap<String, Float>()
+
+    /**
+     * The whole steps the wheel made over [key] with [dy] lines more (mouse { barWheelLines }
+     * lines a step, 1): a hi-res wheel's and a touchpad's small moves add up to one; the rest is kept.
+     */
+    internal fun notches(key: String, dy: Float): Int {
+        val lines = confBarWheelLines().toFloat().coerceIn(0.1f, 20f)
+        val sum = (wheelSums[key] ?: 0f) + dy / lines
+        val steps = sum.toInt()
+        wheelSums[key] = sum - steps
+        // (A fling of a touchpad: a few steps at most.)
+        return steps.coerceIn(-5, 5)
     }
 }
 
@@ -507,13 +614,93 @@ private fun Modifier.buttons(
                     pressed = null
                 }
                 PointerEventType.Scroll -> {
-                    val dy = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                    if (dy != 0f) onScroll?.invoke(dy)
+                    val change = event.changes.firstOrNull()
+                    val dy = change?.scrollDelta?.y ?: 0f
+                    if (dy != 0f && onScroll != null) {
+                        onScroll.invoke(dy)
+                        change?.consume() // (its own wheel: not the bar's as well)
+                    }
                 }
                 else -> {}
             }
         }
     }
+}
+
+/**
+ * The wheel over the bar where nothing has a wheel of its own (the clock, the empty space):
+ * what the configuration says for each way (topBar { wheel { } }) — by default the focus goes to
+ * the next window that way, a horizontal wheel left and right, the usual one up and down.
+ */
+private fun Modifier.wheelMovesFocus(model: BarModel, top: Boolean): Modifier = pointerInput(model, top) {
+    var x = 0f
+    var y = 0f
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+            if (event.type != PointerEventType.Scroll) continue
+            val change = event.changes.firstOrNull() ?: continue
+            if (change.isConsumed) continue
+            // Added up: a mouse's notch is one step, a touchpad's small moves make one together.
+            x += change.scrollDelta.x
+            y += change.scrollDelta.y
+            val sx = x.toInt()
+            val sy = y.toInt()
+            if (sx == 0 && sy == 0) continue
+            x -= sx
+            y -= sy
+            val way = when {
+                sx > 0 -> "right"
+                sx < 0 -> "left"
+                sy > 0 -> "down"
+                else -> "up"
+            }
+            @Suppress("UNCHECKED_CAST")
+            val action = (if (top) confWheelTop() else confWheelBottom())[way] as? (newm.Layout) -> Unit ?: continue
+            log.trace { "The wheel on the bar: $way" }
+            runCatching { action(model.wm) }.onFailure { log.warn("The bar's wheel ($way) failed: $it") }
+            change.consume()
+        }
+    }
+}
+
+/** What a module does on a click of each button and on the wheel ([scroll] gets the wheel's lines: down is more). */
+private class Clicks(
+    val click: (() -> Unit)? = null,
+    val right: (() -> Unit)? = null,
+    val middle: (() -> Unit)? = null,
+    val scroll: ((Float) -> Unit)? = null,
+) {
+    /** A slot the configuration changed (topBar { on(name) { } }): the hint does not tell newm's own any more. */
+    var changed: Set<String> = emptySet()
+}
+
+/**
+ * newm's [defaults] for module [name], with what the configuration says instead
+ * (topBar { on(name) { middle { ... } } }; "on": { name: { "middle": "..." } }): each of click,
+ * middle, right, scroll_up and scroll_down an action, or null for nothing. A slot not given
+ * stays newm's (the right button: as a click, unless it has its own).
+ */
+private fun BarModel.clicksOf(bar: Bar, name: String, defaults: Clicks): Clicks {
+    val conf = bar.clicks[name] as? Map<*, *> ?: return defaults
+    val where = "${if (bar.top) "top" else "bottom"}_bar.on.$name"
+    fun slot(key: String, default: (() -> Unit)?): (() -> Unit)? =
+        if (key !in conf) default else actionOf(conf[key], wm, "$where.$key")?.let { run -> { log.trace { "$where.$key" }; runAction(run, wm, "$where.$key") } }
+    // The wheel: a notch at a time (a touchpad's small moves add up), up or down.
+    val up = conf["scroll_up"]
+    val down = conf["scroll_down"]
+    val scroll: ((Float) -> Unit)? = if ("scroll_up" !in conf && "scroll_down" !in conf) defaults.scroll else { dy ->
+        val steps = notches("${bar.top}/$name", dy)
+        val action = if (steps > 0) down else up
+        repeat(Math.abs(steps)) { runAction(action, wm, "$where.${if (steps > 0) "scroll_down" else "scroll_up"}") }
+    }
+    return Clicks(
+        click = slot("click", defaults.click),
+        // (Nothing given for the right button: an empty action, not the click's.)
+        right = slot("right", defaults.right ?: defaults.click) ?: {},
+        middle = slot("middle", defaults.middle),
+        scroll = scroll,
+    ).also { it.changed = conf.keys.map { k -> k.toString() }.toSet() }
 }
 
 /** A part of an island that lights up under the pointer. */
@@ -533,7 +720,7 @@ private fun Chip(
 ) {
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
-    val bg by animateColorAsState(if (hovered && (onPrimary != null || onScroll != null)) colors.hover else Color.Transparent, tween(120))
+    val bg by animateColorAsState(if (hovered && (onPrimary != null || onScroll != null)) colors.hover else Color.Transparent, newm.NewmAnimations.spec("hover", 120))
     var middle by remember { mutableStateOf(0.0) }
     LaunchedEffect(hovered) {
         onHover?.invoke(hovered)
@@ -552,6 +739,11 @@ private fun Chip(
         contentAlignment = Alignment.Center,
     ) { content() }
 }
+
+/** A chip whose buttons and wheel do what [clicks] says. */
+@Composable
+private fun Chip(colors: BarColors, clicks: Clicks, onX: (Double) -> Unit = {}, onHint: ((Boolean, Double) -> Unit)? = null, content: @Composable () -> Unit) =
+    Chip(colors, onX = onX, onPrimary = clicks.click, onSecondary = clicks.right, onMiddle = clicks.middle, onScroll = clicks.scroll, onHint = onHint, content = content)
 
 /** An island: a rounded, see-through piece of the bar (what is behind it is blurred). */
 @Composable
@@ -585,7 +777,7 @@ fun IslandBar(bar: Bar, model: BarModel) {
     val family = bar.fontFamily
     val text = TextStyle(color = colors.text, fontSize = bar.fontSize.sp, fontFamily = family, fontWeight = FontWeight.Medium)
     val pad = bar.margin.dp
-    Box(Modifier.fillMaxSize().padding(start = pad, end = pad, top = if (bar.top) pad else 0.dp, bottom = if (bar.top) 0.dp else pad)) {
+    Box(Modifier.fillMaxSize().wheelMovesFocus(model, bar.top).padding(start = pad, end = pad, top = if (bar.top) pad else 0.dp, bottom = if (bar.top) 0.dp else pad)) {
         Box(Modifier.fillMaxWidth().height(bar.height.dp)) {
             Row(Modifier.align(Alignment.CenterStart).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (bar.left.isNotEmpty()) Island(bar, colors, 0) { Modules(bar.left, bar, model, colors, text) }
@@ -615,8 +807,10 @@ private fun Modules(names: List<String>, bar: Bar, model: BarModel, colors: BarC
         "power" -> PowerModule(bar, model, colors)
         "menu" -> MenuModule(bar, model, colors)
         "quick" -> QuickModule(bar, model, colors)
+        "notifications" -> NotificationsModule(bar, model, colors)
         "texts" -> TextsModule(bar, colors, text)
-        else -> Chip(colors) { BasicText(name, style = text) }
+        // A module of the configuration's own, else the name as it is.
+        else -> if (name in bar.modules) CustomModule(name, bar, model, colors, text) else Chip(colors) { BasicText(name, style = text) }
     }
 }
 
@@ -627,7 +821,8 @@ private fun WallModule(bar: Bar, model: BarModel, colors: BarColors) {
     val mapH = (bar.height - 16).coerceAtLeast(10).toFloat()
     val unit = mapH / wall.height
     val mapW = (wall.width * unit * wall.aspect).coerceIn(mapH * 0.8f, mapH * 5f)
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "wall") { "All windows · the wheel goes through them" } }, onPrimary = { model.wm.toggleOverview() }, onScroll = { dy -> model.wm.cycleViews(if (dy > 0) 1 else -1) }) {
+    val clicks = model.clicksOf(bar, "wall", Clicks(click = { model.wm.toggleOverview() }, scroll = { dy -> val n = model.notches("${bar.top}/wall", dy); repeat(Math.abs(n)) { model.wm.cycleViews(if (n > 0) 1 else -1) } }))
+    Chip(colors, clicks, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "wall") { if (clicks.changed.isEmpty()) "All windows · the wheel goes through them" else "All windows" } }) {
         Canvas(Modifier.width(mapW.dp).height(mapH.dp)) {
             val sx = size.width / wall.width
             val sy = size.height / wall.height
@@ -661,7 +856,8 @@ private fun WindowModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
             if (shownFor.get() == appId) icon = picture else log.trace { "The icon of $appId came late: not shown" }
         }
     }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "window") { focused.title.takeIf { it.isNotEmpty() }?.let(::verbatim) ?: "No window" } }, onPrimary = { model.wm.toggleOverview() }, onMiddle = { model.wm.closeFocusedView() }) {
+    val clicks = model.clicksOf(bar, "window", Clicks(click = { model.wm.toggleOverview() }, middle = { model.wm.closeFocusedView() }))
+    Chip(colors, clicks, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "window") { focused.title.takeIf { it.isNotEmpty() }?.let(::verbatim) ?: "No window" } }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             icon?.let {
                 Image(it, null, Modifier.size(16.dp), filterQuality = FilterQuality.High)
@@ -681,7 +877,8 @@ private fun WindowModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
 @Composable
 private fun ClockModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
     var x by remember { mutableStateOf(0.0) }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "clock") { verbatim(model.clock("EEEE, d MMMM yyyy")) } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.CALENDAR, bar, bar.originX + x) }) {
+    val clicks = model.clicksOf(bar, "clock", Clicks(click = { model.toggle(PopupKind.CALENDAR, bar, bar.originX + x) }))
+    Chip(colors, clicks, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "clock") { bar.clockHint.takeIf { it.isNotBlank() }?.let { verbatim(model.clock(it)) } ?: "" } }, onX = { x = it }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BasicText(model.clock(bar.clockPattern), style = text.copy(fontWeight = FontWeight.SemiBold))
             if (bar.datePattern.isNotEmpty()) {
@@ -710,7 +907,7 @@ private fun TrayModule(bar: Bar, model: BarModel, colors: BarColors) {
             onPrimary = { model.close(); model.tray.activate(item, screenX(), screenY(), showMenu) },
             onSecondary = { if (model.tray.hasMenu(item)) showMenu() else model.tray.contextMenu(item, screenX(), screenY()) },
             onMiddle = { model.tray.secondaryActivate(item, screenX(), screenY()) },
-            onScroll = { dy -> model.tray.scroll(item, if (dy > 0) 1 else -1) },
+            onScroll = { dy -> val n = model.notches("tray/${item.key}", dy); if (n != 0) model.tray.scroll(item, n) },
             onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, item) { verbatim(item.tooltip.ifBlank { item.title }) } },
         ) {
             val picture = item.icon
@@ -737,7 +934,7 @@ internal fun BarModel.hint(on: Boolean, bar: Bar, x: Double, key: Any, text: () 
     hintWanted = key
     if (open != null && open.kind != PopupKind.TOOLTIP) return
     // (A moment later: not for a pointer passing by.)
-    wm.caulis.after(800) {
+    wm.caulis.after(bar.hintDelayMs.toLong()) {
         if (hintWanted !== key) return@after
         val current = popup
         if (current != null && current.kind != PopupKind.TOOLTIP) return@after
@@ -772,8 +969,18 @@ private fun LayoutModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
     val name = bar.keyboardLayout
     if (name.isEmpty()) return
     val caulis = model.wm.caulis
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "layout") { "Keyboard: " + verbatim(caulis.keyboardLayoutNames.joinToString(" · ")) + " (a click switches)" } }, onPrimary = { caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + 1); bar.look() },
-        onScroll = { dy -> caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + if (dy > 0) 1 else -1); bar.look() }) {
+    val clicks = model.clicksOf(bar, "layout", Clicks(click = { caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + 1); bar.look() },
+        scroll = { dy ->
+            val n = model.notches("${bar.top}/layout", dy)
+            if (n != 0) {
+                caulis.switchKeyboardLayout(caulis.keyboardLayoutNow + n)
+                bar.look()
+            }
+        }))
+    Chip(colors, clicks, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "layout") {
+        val names = verbatim(caulis.keyboardLayoutNames.joinToString(" · "))
+        if ("click" in clicks.changed) "Keyboard: $names" else "Keyboard: $names (a click switches)"
+    } }) {
         BasicText(name, style = text.copy(fontWeight = FontWeight.SemiBold, fontSize = (bar.fontSize - 1).sp))
     }
 }
@@ -784,7 +991,7 @@ private fun BluetoothModule(bar: Bar, model: BarModel, colors: BarColors) {
     if (!bt.available) return
     var x by remember { mutableStateOf(0.0) }
     val connected = bt.devices.any { it.connected }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "bluetooth") { when { !bt.powered -> "Bluetooth is off"; else -> bt.devices.filter { it.connected }.joinToString("\n") { d -> verbatim(d.name + (d.battery?.let { " · $it%" } ?: "")) }.ifEmpty { "Bluetooth is on, nothing connected" } } } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.BLUETOOTH, bar, bar.originX + x) }) {
+    Chip(colors, model.clicksOf(bar, "bluetooth", Clicks(click = { model.toggle(PopupKind.BLUETOOTH, bar, bar.originX + x) })), onX = { x = it }, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "bluetooth") { when { !bt.powered -> "Bluetooth is off"; else -> bt.devices.filter { it.connected }.joinToString("\n") { d -> verbatim(d.name + (d.battery?.let { " · $it%" } ?: "")) }.ifEmpty { "Bluetooth is on, nothing connected" } } } }) {
         GlyphIcon(Glyph.BLUETOOTH, if (connected) colors.accent else if (bt.powered) colors.text else colors.dim, bar.iconSize.dp, slash = !bt.powered)
     }
 }
@@ -793,7 +1000,8 @@ private fun BluetoothModule(bar: Bar, model: BarModel, colors: BarColors) {
 private fun NetworkModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
     val n = model.status.network
     var x by remember { mutableStateOf(0.0) }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "network") { networkHint(model) } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.NETWORK, bar, bar.originX + x) }) {
+    Chip(colors, model.clicksOf(bar, "network", Clicks(click = { model.toggle(PopupKind.NETWORK, bar, bar.originX + x) })), onX = { x = it },
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "network") { networkHint(model) } }) {
         when (if (model.network.wired) Network.Kind.WIRED else n.kind) {
             Network.Kind.WIFI -> GlyphIcon(Glyph.WIFI, colors.text, bar.iconSize.dp, level = n.strength / 100f)
             Network.Kind.WIRED -> GlyphIcon(Glyph.WIRED, colors.text, bar.iconSize.dp)
@@ -806,13 +1014,16 @@ private fun NetworkModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
 private fun VolumeModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
     val v = model.status.volume ?: return
     var x by remember { mutableStateOf(0.0) }
+    val clicks = model.clicksOf(bar, "volume", Clicks(
+        click = { model.toggle(PopupKind.VOLUME, bar, bar.originX + x) },
+        middle = { model.wm.caulis.run("volume mute"); model.status.refreshSoon() },
+        scroll = { dy -> model.scrollVolume(dy) },
+    ))
     Chip(
         colors,
+        clicks,
         onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "volume") { model.status.volume?.let { v -> if (v.muted) "Sound is off" else "Volume ${v.percent}%" } + (model.sound.outputs.firstOrNull { it.isDefault }?.let { "\n" + verbatim(it.description) } ?: "") } },
         onX = { x = it },
-        onPrimary = { model.toggle(PopupKind.VOLUME, bar, bar.originX + x) },
-        onMiddle = { model.wm.caulis.run("volume mute"); model.status.refreshSoon() },
-        onScroll = { dy -> model.scrollVolume(dy) },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             GlyphIcon(Glyph.SPEAKER, if (v.muted) colors.dim else colors.text, bar.iconSize.dp, level = v.percent / 100f, slash = v.muted)
@@ -830,11 +1041,12 @@ private fun BatteryModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
     var x by remember { mutableStateOf(0.0) }
     val fill = when {
         b.charging || b.full || b.plugged -> colors.accent
-        b.percent <= 10 -> colors.danger
-        b.percent <= 20 -> colors.warning
+        b.percent <= confBatteryCritical() -> colors.danger
+        b.percent <= confBatteryLow() -> colors.warning
         else -> colors.text
     }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "battery") { batteryHint(b) + if (model.wm.caffeineOn) "\n" + tr("Caffeine: the screen stays on") else "" } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.BATTERY, bar, bar.originX + x) }) {
+    Chip(colors, model.clicksOf(bar, "battery", Clicks(click = { model.toggle(PopupKind.BATTERY, bar, bar.originX + x) })), onX = { x = it },
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "battery") { batteryHint(b) + if (model.wm.caffeineOn) "\n" + tr("Caffeine: the screen stays on") else "" } }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (model.wm.caffeineUntil != null) {
                 GlyphIcon(Glyph.COFFEE, colors.accent, bar.iconSize.dp)
@@ -843,7 +1055,7 @@ private fun BatteryModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
             GlyphIcon(Glyph.BATTERY, colors.text, (bar.iconSize + 4).dp, level = b.percent / 100f, bolt = b.plugged, accent = fill)
             if (model.batteryPercent ?: bar.showPercent) {
                 Spacer(Modifier.width(4.dp))
-                BasicText("${b.percent}%", style = text.copy(color = if (b.percent <= 10 && !b.charging) colors.danger else colors.text))
+                BasicText("${b.percent}%", style = text.copy(color = if (b.percent <= confBatteryCritical() && !b.charging) colors.danger else colors.text))
             }
         }
     }
@@ -852,7 +1064,8 @@ private fun BatteryModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
 @Composable
 private fun PowerModule(bar: Bar, model: BarModel, colors: BarColors) {
     var x by remember { mutableStateOf(0.0) }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "power") { "Lock, sleep, log out, restart, shut down" } }, onX = { x = it }, onPrimary = { model.toggle(PopupKind.POWER, bar, bar.originX + x) }) {
+    Chip(colors, model.clicksOf(bar, "power", Clicks(click = { model.toggle(PopupKind.POWER, bar, bar.originX + x) })), onX = { x = it },
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "power") { "Lock, sleep, log out, restart, shut down" } }) {
         GlyphIcon(Glyph.POWER, colors.text, bar.iconSize.dp)
     }
 }
@@ -861,20 +1074,59 @@ private fun PowerModule(bar: Bar, model: BarModel, colors: BarColors) {
 @Composable
 private fun QuickModule(bar: Bar, model: BarModel, colors: BarColors) {
     var x by remember { mutableStateOf(0.0) }
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "quick") { "Quick actions" + (model.status.brightness?.let { "\n" + tr("Brightness %s").replace("%s", "$it%") + " · " + tr("the wheel changes it") } ?: "") } },
-        onX = { x = it }, onPrimary = { model.toggle(PopupKind.QUICK, bar, bar.originX + x) },
-        // The wheel: the screen's brightness.
-        onScroll = { dy -> model.stepBrightness(if (dy < 0) 5 else -5) }) {
+    // The wheel: the screen's brightness (brightness.wheel_step a notch).
+    val clicks = model.clicksOf(bar, "quick", Clicks(click = { model.toggle(PopupKind.QUICK, bar, bar.originX + x) },
+        scroll = { dy -> val n = model.notches("${bar.top}/quick", dy); if (n != 0) model.stepBrightness(-n * confBrightnessStep()) }))
+    val wheelHint = clicks.changed.none { it.startsWith("scroll") }
+    Chip(colors, clicks, onX = { x = it }, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "quick") {
+        "Quick actions" + (model.status.brightness?.let { "\n" + tr("Brightness %s").replace("%s", "$it%") + if (wheelHint) " · " + tr("the wheel changes it") else "" } ?: "")
+    } }) {
         // Its own picture: caffeine shows beside the battery (here only on a computer without one).
         val cup = model.wm.caffeineOn && model.status.battery == null
         GlyphIcon(if (cup) Glyph.COFFEE else Glyph.GRID, if (cup) colors.accent else colors.text, bar.iconSize.dp)
     }
 }
 
+// The bell: the notifications' history (a click), do not disturb (the middle button); a badge counts the new ones.
+@Composable
+private fun NotificationsModule(bar: Bar, model: BarModel, colors: BarColors) {
+    val center = model.notifications
+    var x by remember { mutableStateOf(0.0) }
+    val unread = center.history.unread
+    val quiet = center.doNotDisturb
+    val clicks = model.clicksOf(bar, "notifications", Clicks(click = { model.toggle(PopupKind.NOTIFICATIONS, bar, bar.originX + x) }, middle = { center.setDoNotDisturb(!quiet) }))
+    Chip(colors, clicks, onHint = { on, mx ->
+        model.hint(on, bar, bar.originX + mx, "notifications") {
+            val other = center.otherDaemon?.takeIf { !center.serving }
+            listOfNotNull(
+                when {
+                    other != null -> tr("Notifications go to %s — newm's own are off").replace("%s", verbatim(other))
+                    unread > 0 -> tr("New notifications: %s").replace("%s", "$unread")
+                    else -> "No new notifications"
+                },
+                if (quiet) "Do not disturb is on" else null,
+                if ("middle" !in clicks.changed) "The middle button: do not disturb" else null,
+            ).joinToString("\n")
+        }
+    }, onX = { x = it }) {
+        Box {
+            GlyphIcon(if (quiet) Glyph.BELL_OFF else Glyph.BELL, if (quiet) colors.dim else colors.text, bar.iconSize.dp)
+            if (unread > 0 && !quiet) Box(
+                Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-5).dp).height(14.dp).widthIn(min = 14.dp)
+                    .background(colors.accent, RoundedCornerShape(7.dp)).border(1.5.dp, colors.island.copy(alpha = 1f), RoundedCornerShape(7.dp))
+                    .padding(horizontal = 3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText(if (unread > 9) "9+" else "$unread", style = TextStyle(color = onAccent(colors), fontSize = 8.5.sp, fontWeight = FontWeight.Bold))
+            }
+        }
+    }
+}
+
 // The menu's button: three lines; a click opens the launcher (again: closes it).
 @Composable
 private fun MenuModule(bar: Bar, model: BarModel, colors: BarColors) {
-    Chip(colors, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "menu") { tr("Programs") } }, onPrimary = { model.wm.enterLauncherOverlay() }) {
+    Chip(colors, model.clicksOf(bar, "menu", Clicks(click = { model.wm.enterLauncherOverlay() })), onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "menu") { tr("Programs") } }) {
         GlyphIcon(Glyph.MENU, colors.text, (bar.iconSize + 1).dp)
     }
 }
@@ -883,6 +1135,65 @@ private fun MenuModule(bar: Bar, model: BarModel, colors: BarColors) {
 @Composable
 private fun TextsModule(bar: Bar, colors: BarColors, text: TextStyle) {
     for (t in bar.texts.filter { it.isNotBlank() }) Chip(colors) { BasicText(t, style = text, maxLines = 1) }
+}
+
+/**
+ * A module of the configuration's own (topBar { module("name") { } }): its icon and its text
+ * (asked every few seconds), and what its clicks and wheel do. Nothing to show: not there.
+ */
+@Composable
+private fun CustomModule(name: String, bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
+    val spec = bar.modules[name] as? Map<*, *> ?: return
+    val shown = model.moduleTexts[name].orEmpty()
+    val icon = spec["icon"] as? String
+    if (shown.isEmpty() && icon.isNullOrBlank()) return
+    val wm = model.wm
+    val where = "${if (bar.top) "top" else "bottom"}_bar.modules.$name"
+    fun action(key: String): (() -> Unit)? = spec[key]?.let { a -> { runAction(a, wm, "$where.$key") } }
+    // The wheel: on_scroll gets the notches (down: more), else on_scroll_up / on_scroll_down.
+    val onScroll = spec["on_scroll"]
+    val up = spec["on_scroll_up"]
+    val down = spec["on_scroll_down"]
+    val scroll: ((Float) -> Unit)? = if (onScroll == null && up == null && down == null) null else { dy ->
+        val steps = model.notches("${bar.top}/$name/own", dy)
+        if (steps != 0) {
+            @Suppress("UNCHECKED_CAST")
+            when (onScroll) {
+                null -> repeat(Math.abs(steps).coerceAtMost(5)) { runAction(if (steps > 0) down else up, wm, "$where.scroll") }
+                is newm.LuaCallable -> runCatching { onScroll(steps) }.onFailure { log.warn("$where.on_scroll failed: $it") }
+                is Function2<*, *, *> -> runCatching { (onScroll as (newm.Layout, Int) -> Unit)(wm, steps) }.onFailure { log.warn("$where.on_scroll failed: $it") }
+                else -> log.warn("$where.on_scroll: a function of the notches is wanted")
+            }
+        }
+    }
+    val clicks = model.clicksOf(bar, name, Clicks(click = action("on_click"), right = action("on_right"), middle = action("on_middle"), scroll = scroll))
+    Chip(colors, clicks) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (!icon.isNullOrBlank()) {
+                NamedIcon(icon, colors.text, bar.iconSize.dp, model)
+                if (shown.isNotEmpty()) Spacer(Modifier.width(6.dp))
+            }
+            if (shown.isNotEmpty()) BasicText(shown, style = text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = bar.titleWidth.dp))
+        }
+    }
+}
+
+/**
+ * An icon by its name: a Material symbol or an icon newm carries ("wifi", "coffee", "bell"),
+ * else one of the icon theme ("firefox", "audio-volume-high") or a picture's file.
+ */
+@Composable
+internal fun NamedIcon(name: String, color: Color, size: androidx.compose.ui.unit.Dp, model: BarModel) {
+    if (carriesIcon("material/$name")) return SymbolIcon(name, color, size)
+    if (carriesIcon(name)) return OwnIcon(name, color, size)
+    var picture by remember(name) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(name) {
+        IconTheme.load(name.removePrefix("file://"), TRAY_ICON_PIXELS, null, post = { model.wm.caulis.post { it() } }) { p ->
+            if (p == null) log.warn("No icon \"$name\" (newm's own, the icon theme's, or a file)")
+            picture = p
+        }
+    }
+    picture?.let { Image(it, null, Modifier.size(size), filterQuality = FilterQuality.High) } ?: Spacer(Modifier.size(size))
 }
 
 /** The fonts of the bar: the configured one, else the system's sans-serif. */

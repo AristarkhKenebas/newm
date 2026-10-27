@@ -84,7 +84,8 @@ quick_crashes=0
 while :; do
     started=$(date +%s)
     # (What newm says before its own log is open — a Java that will not start — is kept too.)
-    NEWM_NOTICE="$notice" "$good/bin/newm" 2> "$cache/newm.stderr"
+    # (NEWM_SUPERVISED: a restart (code 3) comes back here, to start the new build.)
+    NEWM_SUPERVISED=1 NEWM_NOTICE="$notice" "$good/bin/newm" 2> "$cache/newm.stderr"
     code=$?
     notice=""
     ran=$(( $(date +%s) - started ))

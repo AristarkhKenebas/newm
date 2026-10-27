@@ -2,6 +2,7 @@
   "background": { "path": "resource:wallpaper.jpg", "anim": true },
   "corner_radius": 24,
   "anim_time": 0.3,
+  "animations": { "preset": "none", "windows": { "millis": 300, "curve": "linear" }, "popupsIn": { "style": "popin 96%" } },
   "view": { "corner_radius": 14, "padding": 8 },
   "rules": [
     { "app_id": "pavucontrol", "float": true },
@@ -13,7 +14,7 @@
   "focus": { "enabled": true, "color": "#E5E9F0AA", "distance": 4, "width": 2 },
   "panels": {
     "top_bar": { "enabled": true, "height": 32, "margin": 6, "corner_radius": 12, "theme": "auto",
-                 "left": ["window"], "center": ["clock"], "right": ["tray", "layout", "bluetooth", "network", "volume", "battery", "power"],
+                 "left": ["window"], "center": ["clock"], "right": ["tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power"],
                  "clock": "HH:mm", "date": "EEE d MMM" },
     "lock": { "w": 0.6, "h": 0.6, "corner_radius": 32 },
     "launcher": { "w": 0.7, "h": 0.7, "corner_radius": 24 }
@@ -32,7 +33,8 @@
     "L-": "toggle_overview",
     "L-q": "close_focused_view",
     "L-f": "toggle_fullscreen",
-    "L-v": "toggle_focused_view_floating",
+    "L-v": "toggle_clipboard",
+    "L-S-v": "toggle_focused_view_floating",
     "L-0": "fit_focused_view", "L-s": "side_by_side",
     "L-minus": "basic_scale 1", "L-equal": "basic_scale -1",
     "L-slash": "toggle_key_help",
@@ -42,8 +44,14 @@
     "XF86MonBrightnessUp": "brightness +5", "XF86MonBrightnessDown": "brightness -5",
     "XF86AudioRaiseVolume": "volume +5", "XF86AudioLowerVolume": "volume -5",
     "XF86AudioMute": "volume mute", "XF86AudioMicMute": "mic-mute",
-    "Print": "launch grim"
+    "L-S-s": "screenshot",
+    "Print": "screenshot",
+    "L-Print": "screenshot_screen",
+    "A-Print": "screenshot_window"
   },
   "startup": [],
+  "autostart": { "stagger_ms": 400, "entries": [] },
+  "reveal": { "enabled": true, "fade_ms": 600 },
+  "startup_sound": { "enabled": true, "preset": "airy", "volume": 0.8 },
   "energy": { "idle_times": [120, 300, 600] }
 }

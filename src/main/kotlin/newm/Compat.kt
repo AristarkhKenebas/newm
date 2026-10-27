@@ -33,9 +33,21 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
                 caulis.input.pointers.naturalScroll = it
             }
             "focus_follows_mouse" -> flag { caulis.focusFollowsMouse = it }
+            // input { tablet { } }: Caulis' settings of every drawing tablet.
+            "tablet" -> (value as? Map<*, *>)?.let { applyTablet(caulis, it) } ?: wrong("a table")
             // newm's own (not pywm's): from keyboard { numLock } and cursor { hideAfter }.
             "numlock" -> flag { caulis.numLock = it }
             "hide_cursor_after" -> number { caulis.hideCursorAfterSeconds = it }
+            // newm's own: keyboard { bindingModifiers } and compositor { }.
+            "binding_modifiers" -> text { v ->
+                dev.caulis.wm.BindingModifiers.entries.firstOrNull { it.name.equals(v, ignoreCase = true) }?.let { caulis.bindingModifiers = it } ?: wrong("\"xkb\" or \"physical\"")
+            }
+            "quit_while_locked" -> flag { caulis.keys.quitWhileLocked = it }
+            "lock_failure" -> text { v ->
+                dev.caulis.wm.LockFailure.entries.firstOrNull { it.name.equals(v.replace('-', '_'), ignoreCase = true) }?.let { caulis.lockFailure = it } ?: wrong("\"own-lock\" or \"notice\"")
+            }
+            "lock_show_millis" -> number { caulis.lockShowMillis = it.toLong().coerceIn(100, 60_000) }
+            "stop_programs_on_quit" -> flag { caulis.stopProgramsOnQuit = it }
             // pywm's: programs draw their own title bars (true), or none are drawn at all.
             "encourage_csd" -> flag { caulis.titleBars = if (it) dev.caulis.core.TitleBars.PROGRAM else dev.caulis.core.TitleBars.NONE }
             else -> log.info { "pywm.$key: pywm's own (Caulis draws here), left out" }
@@ -97,6 +109,7 @@ class LayoutApi(private val layout: Layout) : PyConfig.Handler {
             "toggle_overview" -> layout.toggleOverview(bool(0, "only_active_workspace", false))
             "fit_focused_view" -> layout.fitFocusedView()
             "side_by_side" -> layout.sideBySide()
+            "restore_rest" -> layout.restoreRest()
             "screenshot" -> layout.screenshot()
             "screenshot_screen" -> layout.screenshotScreen()
             "screenshot_window" -> layout.screenshotWindow()
@@ -166,4 +179,37 @@ class LayoutApi(private val layout: Layout) : PyConfig.Handler {
     )
 
     override fun viewOf(handle: Int): View? = layout.viewByHandle(handle)
+}
+
+// A pen button's name ("right", "none") as Linux' button code (0: none), or null if it is none of them.
+private fun penButton(name: Any?): Int? = when (name?.toString()?.trim()?.lowercase()) {
+    "left" -> 0x110
+    "right" -> 0x111
+    "middle" -> 0x112
+    "side" -> 0x113
+    "extra" -> 0x114
+    "none", "" -> 0
+    else -> null
+}
+
+// input { tablet { } } onto Caulis' tablet settings; what is wrong is said and left out.
+private fun applyTablet(caulis: dev.caulis.wm.Caulis, tablet: Map<*, *>) {
+    val t = caulis.input.tablets
+    for ((key, value) in tablet) {
+        fun wrong(kind: String) = log.warn("input.tablet.$key: $kind wanted, ${value?.let { it::class.simpleName }} given ($value): left out")
+        when (key) {
+            "monitor" -> (value as? String)?.let { t.monitor = it.ifBlank { null } } ?: wrong("a monitor's name")
+            "keep_aspect" -> (value as? Boolean)?.let { t.keepAspect = it } ?: wrong("true or false")
+            "left_handed" -> (value as? Boolean)?.let { t.leftHanded = it } ?: wrong("true or false")
+            "pointer_only" -> (value as? Boolean)?.let { t.pointerOnly = it } ?: wrong("true or false")
+            "tip_pressure" -> (value as? Number)?.let { t.tipPressure = it.toDouble().coerceIn(0.01, 1.0) } ?: wrong("a number 0.01..1")
+            "lower_button" -> penButton(value)?.let { t.lowerButton = it } ?: wrong("left, right, middle, side, extra or none")
+            "upper_button" -> penButton(value)?.let { t.upperButton = it } ?: wrong("left, right, middle, side, extra or none")
+            "third_button" -> penButton(value)?.let { t.thirdButton = it } ?: wrong("left, right, middle, side, extra or none")
+            "area" -> (value as? List<*>)?.mapNotNull { (it as? Number)?.toDouble() }?.takeIf { it.size == 4 }
+                ?.let { (x, y, w, h) -> runCatching { t.area = dev.caulis.core.input.TabletArea(x, y, w, h) }.onFailure { e -> log.warn("input.tablet.area: ${e.message}") } } ?: wrong("four numbers [x, y, width, height]")
+            else -> log.info { "input.tablet.$key: not a tablet setting, left out" }
+        }
+    }
+    log.info { "Drawing tablets: ${tablet.keys.joinToString()} set" }
 }

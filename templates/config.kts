@@ -15,12 +15,70 @@
 background {
     path = "resource:wallpaper.jpg"         // newm's own; or "~/Pictures/wallpaper.jpg"
     mode = "follow"                         // "follow": moves and zooms with the view; "static": stands still
-    // timeScale = 0.15                     // how quickly it follows (seconds)
+    // timeScale = 0.15                     // how quickly it follows (seconds; with the animation "backgroundMove" on)
 }
 
 cornerRadius = 24                           // the screen's own corners rounded (0: square)
-animTime = 0.3                              // how long moving and zooming take (seconds)
-// blendTime = 1.0                          // fading in at the start, out at the end
+
+// --- Animations ------------------------------------------------------------------------------
+//
+// Off: every change is there at once (fingers are still followed exactly — only what comes after
+// they lift is at once). One line turns on newm's usual animations, as newm always looked:
+//
+//     animations { preset = "newm" }
+//
+// Or, as in Hyprland, all of them (`enabled = true`) or each by name. A setting for a name is
+// for those under it too ("windows" for windowsIn, windowsOut, ...), unless they say otherwise.
+// Each takes: enabled, millis (its time; or speed = Hyprland's tenths of a second), curve (by
+// name) and, for the menus and cards, a look (style): "fade", "popin 90%", "slide up 20".
+// Curves: "linear" (newm's own), "ease-out" (fast, then gently), "ease-in-out", "smooth",
+// "overshoot" (a little past and back), or your own: curve("name", x1, y1, x2, y2) is a
+// Bézier curve with Hyprland's (and CSS's) numbers, spring("name", stiffness, damping) a spring.
+animations {
+    // preset = "newm"                      // all of newm's usual animations on
+    // enabled = true                       // all on (as preset = "newm"); false: all off
+    // millis = 300                         // the global time (ms) of those without their own
+    // curve = "linear"                     // the global curve
+    // curve("snappy", 0.05, 0.9, 0.1, 1.05)   // a curve of your own, used below by its name
+    // spring("bouncy", stiffness = 300.0, damping = 14.0)
+
+    // Windows (time: the global one, 300 ms; curve: linear)
+    // animation("windows", millis = 250, curve = "snappy")   // all window animations below
+    // on("windowsIn")                      // a window appearing: it takes its place, the others make room
+    // on("windowsOut")                     // a window closing: the others take its place
+    // on("windowsMove")                    // moved, resized, floating/tiled, side by side, onto another workspace, swallowed
+    // on("fullscreen")                     // going fullscreen and back
+    // on("moveResize")                     // moved or resized with mouse or fingers: settling on the grid when let go
+
+    // The view and gestures
+    // on("camera")                         // the view moving: to the next window, zooming in and out (Logo+u/n), a bar coming
+    // on("overview")                       // the overview opening and closing (Logo alone)
+    // on("gestureSnap")                    // after a swipe or pinch: gliding on to where it settles (time from the fingers' speed)
+    // on("gestureSmoothing")               // fingers smoothed: the view follows softly (75 ms); off: exactly under them
+
+    // newm's own parts
+    // on("border")                         // the focus border gliding to the focused window (focus.animTime, 300 ms)
+    // on("lock")                           // the lock screen sliding in (the screen is locked before) and out
+    // on("launcher")                       // the launcher coming and going (ease-out)
+    // on("launcherList")                   // its first rows coming in one after another (220 ms)
+    // on("backgroundMove")                 // the wallpaper gliding behind the view (background.timeScale, 150 ms)
+    // on("backgroundIn")                   // the wallpaper fading in the first time (600 ms)
+    // on("startup"); on("quit")            // newm fading in after it started and out when it quits (blendTime, 1 s)
+    // on("sessionRestore")                 // windows of the last session going back to their places
+    // on("brightness")                     // the screen's brightness gliding to a new level (config.py's BacklightManager)
+
+    // The bar, menus and cards: each "...In" and "...Out" on its own too (times: in / out)
+    // on("popups")                         // the bar's menus (280 / 180 ms); popupsResize: growing as they change
+    // animation("popupsIn", style = "popin 90%")   // a look: "fade", "popin 90%", "slide up 20", "slide down 8"
+    // on("notifications")                  // notification cards (260 / 220 ms)
+    // on("osd")                            // the volume and brightness slider and toasts (140 / 220 ms)
+    // on("clipboard")                      // the clipboard's history, Logo+V (260 / 180 ms)
+    // on("keyHelp")                        // the keys' help, Logo+/ (260 / 180 ms)
+    // on("widgets")                        // small motions: hover (colours under the pointer, 100–140 ms),
+    //                                      // toggles (switches and sliders, 160 ms), scroll (lists to the chosen entry),
+    //                                      // spinner (the refresh icon turning, 900 ms a turn)
+}
+// blendTime = 1.0                          // fading in at the start, out at the end (with startup and quit on)
 
 view {
     cornerRadius = 14.0                     // windows' corners (bigger cuts into what programs draw at their edges)
@@ -47,12 +105,33 @@ focus {
     color = "auto"                          // "auto": the colours' accent; or "#RRGGBB" / "#RRGGBBAA" (see-through)
     distance = 4.0                          // how far outside the window
     width = 2.0
-    // animTime = 0.3
+    // animTime = 0.3                      // its glide (with the animation "border" on)
     // animateOnChange = false              // the line glides to the next window
+    // color = "rgba(33ccffee) rgba(00ff99ee) 45deg"   // a gradient, written as Hyprland's col.active_border
+    // urgentColor = "rgb(ff5555)"          // a window wanting attention, not focused
+    // shader = "border.glsl"               // your own GLSL (next to this file), read again when saved;
+    //                                      // see Caulis's border shaders: rainbow, pulsing glow, marching ants:
+    //   vec4 paint(vec2 at) { float h = fract(progress + time * 0.2);
+    //       return vec4(clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0), 1.0); }
+    //   vec4 paint(vec2 at) { return vec4(colors[0].rgb * (0.55 + 0.45 * sin(time * 3.0)), 1.0); }
+    //   vec4 paint(vec2 at) { float d = step(0.5, fract((progress * 2.0 * (size.x + size.y) - time * 40.0) / 16.0));
+    //       return mix(vec4(0.1, 0.1, 0.1, 1.0), vec4(1.0, 0.85, 0.2, 1.0), d); }
+    // animate = true                       // false: the shader's own time stands still
 }
 
+// Special workspaces (Hyprland's "special"): above the wall on the focused monitor, at the
+// screen's own place, with a small layout of their own; the overview hides them.
+// specialWorkspace {
+//     dim = 0.4                            // the wall behind darker
+//     blurRadius = 0                       // and blurred (0: not)
+//     gap = 40                             // room to the screen's edges
+//     size = 1.0                           // how much of the screen
+//     hideWhenEmpty = true
+//     newWindowsJoin = true                // windows opening while it is shown go into it
+// }
+
 // The colours of the bar, the menus and the focus border: made from the wallpaper, as phones do.
-// The bar's power menu has "Colors…" to choose among them; set them here to keep them fixed.
+// The quick settings (the bar's grid button) have a palette tile to choose among them; set them here to keep them fixed.
 // colors {
 //     source = "wallpaper"                // "wallpaper", "nord" (the classic ones) or "#5b8cc8"
 //     style = "tonal"                     // "tonal", "vibrant", "expressive", "neutral", "monochrome"
@@ -72,7 +151,7 @@ panels {
         // font = "Inter"
         left = listOf("window")             // also "wall": a small map of your wall
         center = listOf("clock")
-        right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "power")
+        right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power")
         clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"                  // "" for none
         // accentColor = "#BF616A"          // and islandColor, textColor: your own colours
@@ -181,6 +260,14 @@ keys {
     "L-v"("Clipboard history") { toggleClipboard() }
     "L-S-v"("Float, and back") { toggleFocusedViewFloating() }
 
+    // Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own
+    // (L-s and L-S-s are taken above: change them if you want Hyprland's Super+S / Super+Shift+S)
+    // "L-grave"("Special workspace, and back") { toggleSpecialWorkspace() }
+    // "L-S-grave"("Window into the special workspace") { moveToSpecialWorkspace() }
+    // "L-C-grave"("Window back onto the wall") { moveOutOfSpecialWorkspace() }
+    // "L-m"("Music, and back") { toggleSpecialWorkspace("music") }
+    // "L-S-m"("Window into music, unseen") { moveToSpecialWorkspace("music", silent = true) }
+
     // The session
     "L-slash"("These keys") { toggleKeyHelp() }
     "L-p"("Lock the screen") { ensureLocked(dim = true) }
@@ -211,10 +298,35 @@ gestures {
     // lpInertia = 0.8                                               // smoother (and slower) feel
 }
 
+// --- The start ------------------------------------------------------------------------------------
+
+// Programs started with the session: one after another once newm is shown, once per session
+// (saving this file starts only what you added). `newm cmd autostart` lists them.
+autostart {
+    // app("waybar")                                          // a bar of your own
+    // app("nm-applet", "--indicator") { delay = 2.seconds; ifNotRunning = true; restart = OnCrash(maxTimes = 3, within = 1.minutes) }
+    // shell("sleep 1; notify-send 'Hello'")                  // a piece of shell
+    // desktopEntries = true                                  // also ~/.config/autostart's programs
+}
+
+// Dark until newm is ready, then it fades in (on by default).
+reveal {
+    // enabled = true
+    // fadeMillis = 600
+}
+
+// A sound as newm fades in (on by default): "airy", "classic", "glass", "soft", or a file of yours.
+startupSound {
+    // preset = "airy"
+    // volume = 0.8
+    // file = "~/sounds/hello.ogg"
+    // enabled = false                                        // silent
+}
+
 // --- When things happen --------------------------------------------------------------------------
 
 onStartup {
-    // launch("mako")                       // notifications
+    // launch("mako")                       // notifications (or in autostart { } above)
     // launch("nm-applet --indicator")
 }
 

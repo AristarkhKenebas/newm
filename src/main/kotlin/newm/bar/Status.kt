@@ -106,9 +106,11 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
             (type == "Mains" || type?.startsWith("USB") == true) && read(s.toPath().resolve("online")) == "1"
         }
         // Energy (µWh) and power (µW), or charge (µAh) and current (µA).
-        val now = (read(dir.resolve("energy_now")) ?: read(dir.resolve("charge_now")))?.toLongOrNull()
-        val whenFull = (read(dir.resolve("energy_full")) ?: read(dir.resolve("charge_full")))?.toLongOrNull()
-        val rate = (read(dir.resolve("power_now")) ?: read(dir.resolve("current_now")))?.toLongOrNull()?.let { Math.abs(it) }
+        // (A pair of the same kind: energy with power, else charge with current — never mixed.)
+        val energy = read(dir.resolve("energy_now")) != null && read(dir.resolve("power_now")) != null
+        val now = read(dir.resolve(if (energy) "energy_now" else "charge_now"))?.toLongOrNull()
+        val whenFull = read(dir.resolve(if (energy) "energy_full" else "charge_full"))?.toLongOrNull()
+        val rate = read(dir.resolve(if (energy) "power_now" else "current_now"))?.toLongOrNull()?.let { Math.abs(it) }
         val minutes = if (now != null && rate != null && rate > 0) {
             if (charging && whenFull != null) ((whenFull - now) * 60 / rate).toInt() else if (!charging) (now * 60 / rate).toInt() else null
         } else null
@@ -121,9 +123,14 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
         if (wireless != null) {
             val quality = wireless.trim().split(Regex("\\s+")).getOrNull(2)?.trimEnd('.')?.toDoubleOrNull() ?: 0.0
             val now = System.nanoTime()
-            if (now - wifiNameAt > 15_000_000_000L || wifiName.isEmpty()) {
+            // (Every network.wifi_name_every_seconds, also when the name came empty: never every tick.)
+            if (wifiNameAt == 0L || now - wifiNameAt > confWifiNameEvery().coerceAtLeast(2) * 1_000_000_000L) {
                 wifiNameAt = now
-                wifiName = run("nmcli", "-t", "-f", "active,ssid", "dev", "wifi")?.lines()?.firstOrNull { it.startsWith("yes:") }?.substringAfter(':')
+                // network { wifiName = "..." }: the configuration's command; else nmcli (what NetworkManager
+                // knows already: "--rescan no", the air is never scanned for it), else iwgetid.
+                val own = confWifiName()
+                wifiName = if (own != null) commandOutput(own, 2)?.lines()?.firstOrNull { it.isNotBlank() }?.trim() ?: ""
+                else run("nmcli", "-t", "-f", "active,ssid", "dev", "wifi", "list", "--rescan", "no")?.lines()?.firstOrNull { it.startsWith("yes:") }?.substringAfter(':')
                     ?: run("iwgetid", "-r")?.trim() ?: ""
             }
             return Network(Network.Kind.WIFI, wifiName, (quality / 70 * 100).toInt().coerceIn(0, 100))
@@ -138,10 +145,18 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
     }
 
     private fun readVolume(): Volume? {
+        // sound { getVolume = "..." }: the configuration's command — a percent ("45%", "45") or wpctl's
+        // "Volume: 0.45"; muted when it says MUTED, [off] or yes.
+        confGetVolume()?.let { own ->
+            val out = commandOutput(own, 2) ?: return null
+            val percent = Regex("Volume:\\s*([0-9.]+)").find(out)?.groupValues?.get(1)?.toDoubleOrNull()?.let { Math.round(it * 100).toInt() }
+                ?: Regex("(\\d+)").find(out)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+            return Volume(percent, Regex("MUTED|\\[off]|\\byes\\b", RegexOption.IGNORE_CASE).containsMatchIn(out))
+        }
         // "Volume: 0.45" or "Volume: 0.45 [MUTED]" (PipeWire's wpctl), else pactl.
         run("wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@")?.let { out ->
             val level = Regex("Volume:\\s*([0-9.]+)").find(out)?.groupValues?.get(1)?.toDoubleOrNull() ?: return@let
-            return Volume((level * 100).toInt(), "MUTED" in out)
+            return Volume(Math.round(level * 100).toInt(), "MUTED" in out)
         }
         val percent = run("pactl", "get-sink-volume", "@DEFAULT_SINK@")?.let { Regex("(\\d+)%").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: return null
         val muted = run("pactl", "get-sink-mute", "@DEFAULT_SINK@")?.contains("yes") == true
@@ -158,10 +173,14 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
     }
 
     private fun readBrightness(): Int? {
-        val dev = File("/sys/class/backlight").listFiles()?.firstOrNull() ?: return null
+        // brightness { get = "..." }: the configuration's command, saying a percent.
+        confGetBrightness()?.let { own -> return commandOutput(own, 2)?.let { Regex("(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() }?.coerceIn(0, 100) }
+        // brightness { device = "intel_backlight" }: that one; else the first there is.
+        val dir = File("/sys/class/backlight")
+        val dev = confBrightnessDevice()?.takeIf { it.isNotBlank() }?.let { File(dir, it) }?.takeIf { it.isDirectory } ?: dir.listFiles()?.firstOrNull() ?: return null
         val now = read(dev.toPath().resolve("brightness"))?.toDoubleOrNull() ?: return null
         val max = read(dev.toPath().resolve("max_brightness"))?.toDoubleOrNull()?.takeIf { it > 0 } ?: return null
-        return (now / max * 100).toInt()
+        return Math.round(now / max * 100).toInt()
     }
 
     // A program's output (null if it is not there or fails), waiting at most two seconds.

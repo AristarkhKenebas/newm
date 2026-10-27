@@ -13,7 +13,6 @@ private val confGestureFactor = configuredValue("move_resize.gesture_factor", 2.
 
 /** How far a gesture's 1 moves a window (in tiles, times the view's size). */
 internal fun moveResizeFactor(): Double = confGestureFactor()
-private val confAnimT = configuredValue("anim_time", .3)
 internal val confLpFreq = configuredValue("gestures.lp_freq", 60.0)
 internal val confLpInertia = configuredValue("gestures.lp_inertia", .8)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
@@ -260,6 +259,21 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
     private var targetViewSize: DoubleArray? = null
     private var targetLayoutPos: DoubleArray? = null
 
+    // The curves of the glides: after the fingers (gestureSnap), and of the view keeping the window in sight (camera).
+    private var snap = NewmAnimations["gestureSnap"]
+    private var follow = NewmAnimations["camera"]
+
+    // How far along a glide from [start] to [end] is at [t] (0..1, along [animation]'s curve; 1 when it has no time).
+    private fun along(t: Double, start: Double, end: Double, animation: dev.caulis.core.ResolvedAnimation): Double {
+        if (end <= start) return 1.0
+        val time = ((t - start) / (end - start)).coerceIn(0.0, 1.0)
+        return try {
+            animation.curve.at(time)
+        } catch (e: Exception) {
+            time
+        }
+    }
+
     private var running = true
     private var wantsClose = false
     private var ticker: AutoCloseable? = null
@@ -285,22 +299,22 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         var inProgress = false
         targetViewPos?.let { (ii, ij, fi, fj, it0, ft) ->
             inProgress = true
-            if (t > ft) {
+            if (t >= ft) {
                 layout.state.updateViewState(view) { i = fi; j = fj }
                 targetViewPos = null
             } else {
-                val perc = (t - it0) / (ft - it0)
+                val perc = along(t, it0, ft, snap)
                 layout.state.updateViewState(view) { i = ii + perc * (fi - ii); j = ij + perc * (fj - ij) }
             }
             layout.damage()
         }
         targetViewSize?.let { (iw, ih, fw, fh, it0, ft) ->
             inProgress = true
-            if (t > ft) {
+            if (t >= ft) {
                 layout.state.updateViewState(view) { w = fw; h = fh; scaleOrigin = null }
                 targetViewSize = null
             } else {
-                val perc = (t - it0) / (ft - it0)
+                val perc = along(t, it0, ft, snap)
                 layout.state.updateViewState(view) { w = iw + perc * (fw - iw); h = ih + perc * (fh - ih) }
             }
             layout.damage()
@@ -313,12 +327,12 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
             val wsState = runCatching { layout.state.workspaceState(panWorkspace) }.getOrNull()
             if (wsState == null) {
                 targetLayoutPos = null
-            } else if (t > ft) {
+            } else if (t >= ft) {
                 wsState.i = fi
                 wsState.j = fj
                 targetLayoutPos = null
             } else {
-                val perc = (t - it0) / (ft - it0)
+                val perc = along(t, it0, ft, follow)
                 wsState.i = ii + perc * (fi - ii)
                 wsState.j = ij + perc * (fj - ij)
             }
@@ -343,7 +357,8 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
                 if (fi != wsState.i || fj != wsState.j) {
                     log.trace { "MoveResizeOverlay: Adjusting viewpoint (${wsState.i} ${wsState.j}) -> ($fi $fj)" }
                     layout.workspaces.firstOrNull { it.handle == wsHandle }?.let { panWorkspace = it }
-                    targetLayoutPos = doubleArrayOf(wsState.i, wsState.j, fi, fj, t, t + confAnimT())
+                    follow = NewmAnimations["camera"]
+                    targetLayoutPos = doubleArrayOf(wsState.i, wsState.j, fi, fj, t, t + follow.seconds)
                 }
             }
         }
@@ -376,7 +391,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
             else -> return false
         }
         part = next
-        LowpassGesture(gesture, confLpInertia(), confLpFreq(), layout::every).listener(GestureListener(next::onGesture, ::finish))
+        LowpassGesture(gesture, NewmAnimations.gestureInertia(confLpInertia(), confLpFreq()), confLpFreq(), layout::every).listener(GestureListener(next::onGesture, ::finish))
         return true
     }
 
@@ -386,8 +401,10 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
             val r = p.close()
             part = null
             workspace = r.workspace
-            if (r.i != r.fi || r.j != r.fj) targetViewPos = doubleArrayOf(r.i, r.j, r.fi, r.fj, now(), now() + r.t)
-            if (r.w != r.fw || r.h != r.fh) targetViewSize = doubleArrayOf(r.w, r.h, r.fw, r.fh, now(), now() + r.t)
+            // (Gliding on as the fingers threw it: gestureSnap, its time from their speed unless it says one.)
+            snap = NewmAnimations.resolveSeconds("gestureSnap", r.t)
+            if (r.i != r.fi || r.j != r.fj) targetViewPos = doubleArrayOf(r.i, r.j, r.fi, r.fj, now(), now() + snap.seconds)
+            if (r.w != r.fw || r.h != r.fh) targetViewSize = doubleArrayOf(r.w, r.h, r.fw, r.fh, now(), now() + snap.seconds)
         }
         if (!layout.hasModifier(confGestureBindingMoveResize()[0])) {
             log.trace { "MoveResizeOverlay: Requesting close after gesture finish" }
@@ -420,11 +437,11 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         ticker?.close()
     }
 
-    override fun exitTransition(): Pair<LayoutState?, Double?> {
+    override fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
         // Clean up any possible mishaps (should not be necessary).
         val vs = layout.state.findViewOrNull(view)?.first ?: run {
             log.warn("Unexpected: Error accessing view $view state")
-            return null to 0.0
+            return null to null
         }
         val i = pyRound(vs.i).toDouble()
         val j = pyRound(vs.j).toDouble()
@@ -440,7 +457,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
             }.coarsened().focusingView(view),
         )
         state.validateStackIndices(view)
-        return state to confAnimT()
+        return state to NewmAnimations["moveResize"]
     }
 }
 

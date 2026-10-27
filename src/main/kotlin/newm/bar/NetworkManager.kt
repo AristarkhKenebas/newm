@@ -3,7 +3,7 @@ package newm.bar
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import dev.caulis.core.dbus.DBusConnection
+import dev.caulis.core.dbus.DBusScope
 import dev.caulis.core.dbus.ObjectPath
 import dev.caulis.core.dbus.Variant
 import dev.caulis.log.Logger
@@ -112,7 +112,7 @@ class NetworkManager(private val caulis: Caulis) {
     private var lookedOnce = false
     private var wiredBefore = false
 
-    private var bus: DBusConnection? = null
+    private var bus: DBusScope? = null
     private var nm: NameWatch? = null
     private var wifiDevice: String? = null
     private var knownSsids = emptyMap<String, String>()
@@ -126,7 +126,7 @@ class NetworkManager(private val caulis: Caulis) {
         val bus = caulis.systemBus ?: return log.warn("No system bus: Wi-Fi only as /proc says")
         this.bus = bus
         // Only NetworkManager's own signals; of its access points' changes (strengths, many a second) only while they are shown.
-        bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged") { m ->
+        bus.onSignal(PROPERTIES_IFACE, "PropertiesChanged", sender = NM) { m ->
             if (nm?.sent(m) != true || m.path?.startsWith(NM_PATH) != true) return@onSignal
             val iface = m.body.getOrNull(0) as? String
             val names = dictOf(m.body.getOrNull(1)).keys
@@ -134,7 +134,7 @@ class NetworkManager(private val caulis: Caulis) {
             if (inReachOnly && !networksShown()) return@onSignal
             refreshSoon()
         }
-        bus.onSignal(DEVICE, "StateChanged") { m -> if (nm?.sent(m) == true && m.path == wifiDevice) deviceState(m.body) }
+        bus.onSignal(DEVICE, "StateChanged", sender = NM) { m -> if (nm?.sent(m) == true && m.path == wifiDevice) deviceState(m.body) }
         // NetworkManager may start later than newm, or start again: the bar follows it.
         nm = NameWatch(bus, NM) { owner ->
             available = owner != null
@@ -295,11 +295,14 @@ class NetworkManager(private val caulis: Caulis) {
             problem = "Enterprise (802.1X) networks are not supported here"
             return
         }
-        // A password given for a saved network (its saved one was wrong or none): its profile goes, a new one comes.
+        // A password given for a saved network (its saved one was wrong or none): only the password
+        // in its profile changes — the rest you set up for it (addresses, DNS, priority) stays.
         if (known != null && password != null) {
-            bus.call(NM, ObjectPath(known), "$SETTINGS.Connection", "Delete") { _ ->
-                knownSsids = knownSsids - network.ssid
-                connect(network.copy(known = false), password)
+            updatePassword(known, network, password) { error ->
+                if (error != null) failed(error)
+                else bus.call(NM, ObjectPath(NM_PATH), NM, "ActivateConnection", "ooo", listOf(ObjectPath(known), ObjectPath(device), ObjectPath(network.path))) { reply ->
+                    errorOf(reply)?.let { failed(it) }
+                }
             }
             return
         }
@@ -317,14 +320,25 @@ class NetworkManager(private val caulis: Caulis) {
         }
     }
 
-    // The security part of a new profile, as the access point's flags ask (the password only here, in the D-Bus call's body).
-    private fun securitySettings(security: WifiSecurity, password: String?): Map<String, Variant>? = when (security) {
-        WifiSecurity.OPEN -> null
-        WifiSecurity.OWE -> mapOf("key-mgmt" to Variant("s", "owe"))
-        WifiSecurity.WEP -> password?.let { mapOf("key-mgmt" to Variant("s", "none"), "wep-key0" to Variant("s", it), "wep-key-type" to Variant("u", 1)) }
-        WifiSecurity.PSK -> password?.let { mapOf("key-mgmt" to Variant("s", "wpa-psk"), "psk" to Variant("s", it)) }
-        WifiSecurity.SAE -> password?.let { mapOf("key-mgmt" to Variant("s", "sae"), "psk" to Variant("s", it)) }
-        WifiSecurity.ENTERPRISE -> null
+    // Puts [password] into the saved profile [profile] (its security part; the rest as it is), then [done] (an error or null).
+    private fun updatePassword(profile: String, network: WifiNetwork, password: String, done: (String?) -> Unit) {
+        val bus = bus ?: return done("NetworkManager is not there")
+        bus.call(NM, ObjectPath(profile), "$SETTINGS.Connection", "GetSettings") { reply ->
+            errorOf(reply)?.let { return@call done(it) }
+            // a{sa{sv}}: each section's values kept as they came (their D-Bus types too).
+            val sections = LinkedHashMap<String, MutableMap<String, Variant>>()
+            for (entry in reply.body.firstOrNull() as? List<*> ?: emptyList<Any?>()) {
+                val pair = entry as? List<*> ?: continue
+                val values = LinkedHashMap<String, Variant>()
+                for (v in pair.getOrNull(1) as? List<*> ?: emptyList<Any?>()) {
+                    val kv = v as? List<*> ?: continue
+                    (kv.getOrNull(1) as? Variant)?.let { values[kv[0].toString()] = it }
+                }
+                sections[pair[0].toString()] = values
+            }
+            if (!withPassword(sections, network.security, password)) return@call done("This network's password cannot be changed here")
+            bus.call(NM, ObjectPath(profile), "$SETTINGS.Connection", "Update", "a{sa{sv}}", listOf(sections)) { r -> done(errorOf(r)) }
+        }
     }
 
     /** Leaves the Wi-Fi network in use. */
@@ -354,6 +368,11 @@ class NetworkManager(private val caulis: Caulis) {
                 newProfile = null
                 problem = null
             }
+            // Given up on the way (cancelled, another network, the device gone): "Connecting…" ends.
+            state < 40 && before in 40..90 && connecting != null -> {
+                log.info { "Wi-Fi \"$connecting\": not connected (state $state)" }
+                connecting = null
+            }
             // On the way (said once, as it starts): a card says "Connecting".
             state in 40..90 && before !in 40..90 -> connecting?.let { onConnection(ConnectionEvent(ConnectionEvent.Kind.WIFI, false, it, connecting = true)) }
             state == 120 -> {
@@ -375,4 +394,37 @@ class NetworkManager(private val caulis: Caulis) {
         newProfile = null
         refreshSoon()
     }
+}
+
+/**
+ * [sections] (a profile's settings, as GetSettings gave them) given [password] for the
+ * network, to Update the profile with; false: a profile whose password cannot be set here.
+ */
+internal fun withPassword(sections: MutableMap<String, MutableMap<String, Variant>>, security: WifiSecurity, password: String): Boolean {
+    val part = sections["802-11-wireless-security"]
+    // (The password stored by NetworkManager itself, its flags 0 (NMSettingSecretFlags NONE): a
+    // profile made by nm-applet, plasma-nm or GNOME may say a secret agent keeps it (psk-flags
+    // 1), and newm has none — NetworkManager would ask for it and fail, "no secrets".)
+    fun stored(key: String, flags: String) {
+        if ((part!![flags]?.value as? Number)?.toLong()?.let { it != 0L } == true) log.info { "The profile's password was kept by a secret agent: NetworkManager keeps it now" }
+        part[key] = Variant("s", password)
+        part[flags] = Variant("u", 0)
+    }
+    when (part?.get("key-mgmt")?.value) {
+        "wpa-psk", "sae" -> stored("psk", "psk-flags")
+        "none" -> stored("wep-key0", "wep-key-flags")
+        // (No security part, or one the bar does not set: made as for a new profile.)
+        else -> sections["802-11-wireless-security"] = securitySettings(security, password)?.toMutableMap() ?: return false
+    }
+    return true
+}
+
+// The security part of a new profile, as the access point's flags ask (the password only here, in the D-Bus call's body).
+internal fun securitySettings(security: WifiSecurity, password: String?): Map<String, Variant>? = when (security) {
+    WifiSecurity.OPEN -> null
+    WifiSecurity.OWE -> mapOf("key-mgmt" to Variant("s", "owe"))
+    WifiSecurity.WEP -> password?.let { mapOf("key-mgmt" to Variant("s", "none"), "wep-key0" to Variant("s", it), "wep-key-type" to Variant("u", 1)) }
+    WifiSecurity.PSK -> password?.let { mapOf("key-mgmt" to Variant("s", "wpa-psk"), "psk" to Variant("s", it)) }
+    WifiSecurity.SAE -> password?.let { mapOf("key-mgmt" to Variant("s", "sae"), "psk" to Variant("s", it)) }
+    WifiSecurity.ENTERPRISE -> null
 }

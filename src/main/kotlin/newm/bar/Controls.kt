@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -107,8 +106,8 @@ internal fun Modifier.onClick(enabled: Boolean = true, onClick: () -> Unit): Mod
 /** An on/off switch. */
 @Composable
 internal fun Switch(on: Boolean, colors: BarColors, onChange: (Boolean) -> Unit) {
-    val knob by animateFloatAsState(if (on) 1f else 0f, tween(160))
-    val track by animateColorAsState(if (on) colors.accent else colors.text.copy(alpha = 0.22f), tween(160))
+    val knob by animateFloatAsState(if (on) 1f else 0f, newm.NewmAnimations.spec("toggles", 160))
+    val track by animateColorAsState(if (on) colors.accent else colors.text.copy(alpha = 0.22f), newm.NewmAnimations.spec("toggles", 160))
     Box(Modifier.width(38.dp).height(22.dp).background(track, CircleShape).onClick { onChange(!on) }) {
         Canvas(Modifier.size(38.dp, 22.dp)) {
             val r = size.height / 2 - 3.dp.toPx()
@@ -157,7 +156,7 @@ internal fun ListRow(
             selected -> colors.accent.copy(alpha = 0.16f)
             hovered && onClick != null && enabled -> colors.hover
             else -> Color.Transparent
-        }, tween(100),
+        }, newm.NewmAnimations.spec("hover", 100),
     )
     Row(
         Modifier.fillMaxWidth().height(if (subtitle != null) 42.dp else 34.dp)
@@ -247,7 +246,7 @@ internal fun LevelSlider(
     onChange: (Float) -> Unit,
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
-    val animated by animateFloatAsState((value / max).coerceIn(0f, 1f), tween(160))
+    val animated by animateFloatAsState((value / max).coerceIn(0f, 1f), newm.NewmAnimations.spec("toggles", 160))
     val shown = dragging ?: animated
     var lastSent by remember { mutableFloatStateOf(-1f) }
     val fill = if (dim) colors.text.copy(alpha = 0.32f) else colors.accent
@@ -349,7 +348,7 @@ internal fun ChoiceTile(glyph: Glyph, label: String, chosen: Boolean, colors: Ba
             chosen -> colors.accent
             hovered -> colors.accent.copy(alpha = 0.22f)
             else -> colors.accent.copy(alpha = 0.10f)
-        }, tween(140),
+        }, newm.NewmAnimations.spec("hover", 140),
     )
     Column(
         modifier.height(62.dp).clip(RoundedCornerShape(14.dp)).background(bg).hoverable(source).onClick(onClick = onClick).padding(horizontal = 4.dp),
@@ -410,12 +409,12 @@ internal fun TileRow(
             expanded -> colors.text.copy(alpha = 0.07f)
             hovered && onClick != null -> colors.hover
             else -> Color.Transparent
-        }, tween(120),
+        }, newm.NewmAnimations.spec("hover", 120),
     )
-    val badge by animateColorAsState(if (active) colors.accent else colors.text.copy(alpha = 0.09f), tween(160))
+    val badge by animateColorAsState(if (active) colors.accent else colors.text.copy(alpha = 0.09f), newm.NewmAnimations.spec("toggles", 160))
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg)
-            .animateContentSize(androidx.compose.animation.core.spring(stiffness = 800f, dampingRatio = 0.9f)),
+            .animateContentSize(newm.NewmAnimations.spec("popupsResize", null, newm.NewmAnimations.CONTROL_SPRING)),
     ) {
         Row(
             Modifier.fillMaxWidth().height(50.dp).hoverable(source)
@@ -469,8 +468,9 @@ internal fun IconButton(glyph: Glyph, colors: BarColors, size: Dp = 30.dp, spinn
     val hovered by source.collectIsHoveredAsState()
     val turn = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(spinning) {
-        while (spinning) {
-            turn.animateTo(turn.value + 360f, tween(900, easing = androidx.compose.animation.core.LinearEasing))
+        // (Off: the icon stays still — never a loop of turns that take no time.)
+        while (spinning && newm.NewmAnimations.resolve("spinner", 900, dev.caulis.core.Curve.LINEAR).on) {
+            turn.animateTo(turn.value + 360f, newm.NewmAnimations.spec("spinner", 900, dev.caulis.core.Curve.LINEAR))
         }
     }
     Box(
@@ -496,7 +496,7 @@ internal fun ScrollingRows(colors: BarColors, count: Int, rows: Int = 5, rowHeig
             androidx.compose.foundation.rememberScrollbarAdapter(scroll),
             Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
             style = androidx.compose.foundation.ScrollbarStyle(
-                minimalHeight = 28.dp, thickness = 5.dp, shape = RoundedCornerShape(3.dp), hoverDurationMillis = 150,
+                minimalHeight = 28.dp, thickness = 5.dp, shape = RoundedCornerShape(3.dp), hoverDurationMillis = newm.NewmAnimations.resolve("hover", 150).effectiveMillis.toInt(),
                 unhoverColor = colors.text.copy(alpha = 0.22f), hoverColor = colors.text.copy(alpha = 0.4f),
             ),
         )
@@ -522,11 +522,11 @@ internal fun <T> DevicePicker(
     var open by remember { mutableStateOf(false) }
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
-    val turn by animateFloatAsState(if (open) 180f else 0f, tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    val turn by animateFloatAsState(if (open) 180f else 0f, newm.NewmAnimations.spec("spinner", 260, newm.NewmAnimations.FAST_OUT_SLOW_IN))
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(if (open) colors.text.copy(alpha = 0.06f) else Color.Transparent)
-            .animateContentSize(tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
+            .animateContentSize(newm.NewmAnimations.spec("popupsResize", 260, newm.NewmAnimations.FAST_OUT_SLOW_IN)),
     ) {
         Row(
             Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(12.dp)).background(if (hovered) colors.hover else Color.Transparent)

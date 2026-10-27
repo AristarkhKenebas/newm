@@ -17,24 +17,34 @@ view {
 - Settings that take fractions are written with a dot: `8.0`.
 - Texts go in quotes: `"alacritty"`. Colours are `"#RRGGBB"`, or `"#RRGGBBAA"`, where the
   last two digits make the colour see-through (`00` invisible, `FF` solid).
+- A setting you leave out keeps newm's default. [Every setting](settings.md) lists them all,
+  with their defaults; `newm cmd config` prints the ones in use.
 
 ## Saving, and mistakes
 
 - **Saving** applies the file at once. You never need to log out to try a change.
-- **A mistake** (a typo, a missing quote) shows as a card at the top of the screen, with the
+  **Logo+Shift+C** loads it again by hand.
+- **A mistake** (a typo, a missing quote) shows as a card in the top right corner, with the
   file and the line: `config.kts:42: Unresolved reference ...`. newm keeps the settings that
-  worked until you save the file again without the mistake.
+  worked until you save the file again without the mistake. A value of the wrong kind (a
+  word where a number goes) is left out, and a card says which.
 - **A broken file at the start** never gives a black screen. newm starts with its own
-  defaults and shows what is wrong.
-- **Lost track?** Delete the folder `~/.config/newm`. The next start writes a fresh one.
+  starting configuration and shows what is wrong.
+- **Lost track?** Rename or delete the folder `~/.config/newm`. The next start writes a fresh
+  one.
 
-The first save after a start takes a few seconds (Kotlin is compiled once); later saves are
-quick.
+The first load after a start takes a few seconds (Kotlin is compiled); later saves are
+quicker.
 
-For everyone on the computer, `/etc/newm/` holds the starting configuration: new users get
-a copy of it.
+### Which file
 
-Do you prefer Lua, JSON or Nix? See [other formats](other-formats.md).
+newm reads **one** file of `~/.config/newm/`, the first it finds: `config.kts`, `config.lua`,
+`config.json`, `config.py` (see [other formats](other-formats.md)).
+
+With none there, newm makes the folder: a copy of `/etc/newm/` if the system has one (its
+`config.kts`, `config.lua` or `config.json`; NixOS's `programs.newm.settings` writes
+`config.json` there), else newm's own `config.kts`. This happens once: after that the folder
+is yours, and changes to `/etc/newm` do not reach it.
 
 ## Recipes
 
@@ -44,8 +54,14 @@ Do you prefer Lua, JSON or Nix? See [other formats](other-formats.md).
 background { path = "~/Pictures/wallpaper.jpg" }
 ```
 
-`anim = false` keeps it still (by default it moves a little with the view).
 An SVG works too (`wallpaper.svg`): it stays sharp when the view zooms in.
+
+By default the wallpaper moves and zooms with the view, and the overview shows more of it.
+To keep it still:
+
+```kotlin
+background { mode = "static" }   // "follow" (the default)
+```
 
 ### Keyboard layouts
 
@@ -56,7 +72,9 @@ switches. The bar shows the layout in use (EN, RU); a click on it switches too. 
 ```kotlin
 keyboard {
     layouts = "us,ru"
-    options = "grp:alt_shift_toggle"    // or "grp:win_space_toggle": Super+Space, "grp:caps_toggle": Caps Lock
+    options = "grp:alt_shift_toggle"    // or "grp:win_space_toggle": Logo+Space, "grp:caps_toggle": Caps Lock
+    // variants = ",phonetic"           // one per layout
+    // numLock = true                   // Num Lock on from the start
 }
 ```
 
@@ -67,8 +85,8 @@ A change applies as soon as you save. A key of your own can switch too:
 
 ```kotlin
 keys {
-    "L-b" { launch("firefox") }
-    "L-S-s" { launch("grim -g \"$(slurp)\" ~/shot.png") }
+    "L-b"("Open the browser") { launch("firefox") }
+    "L-e" { launch("nautilus") }
 }
 ```
 
@@ -77,10 +95,19 @@ Keys are written as newm has always written them:
 - `L` is Logo, `S` Shift, `C` Ctrl, `A` Alt;
 - `"L-S-s"` is Logo+Shift+s, and a capital letter means Shift too (`"L-S"` is the same);
 - `"L-"` is Logo tapped alone;
-- `"L-a L-b"` is Logo+a, then Logo+b.
+- `"L-a L-b"` is Logo+a, then Logo+b;
+- key names are those of xkb: `Return`, `Escape`, `space`, `Tab`, `minus`, `equal`, `slash`,
+  `grave`, `Print`, `Left`, `F5`, `XF86AudioMute`, ...
 
-Inside `{ }` you can use everything the layout can do (`move(-1, 0)`, `toggleOverview()`, ...):
-the list is in [Every setting](settings.md#everything-a-key-can-do).
+The words in `"L-b"("Open the browser")` are what the keys' help (Logo+/) shows; a key
+without words is left out of it. Keys starting with `XF86` (the laptop's) also work on the
+lock screen.
+
+**`keys { }` is your whole list.** A key you leave out of it does nothing; the starting
+`config.kts` lists all of newm's keys, so change them there.
+
+Inside `{ }` you can use everything the layout can do (`move(-1, 0)`, `toggleOverview()`,
+`screenshot()`, ...): the list is in [Every setting](settings.md#everything-a-key-can-do).
 
 ### Some windows float, some get blur
 
@@ -89,8 +116,9 @@ view {
     rules { view ->
         when (view.appId) {
             "mpv", "pavucontrol" -> rule(float = true)
-            "wlogout" -> rule(float = true, floatSize = 1920 to 1080)
+            "wlogout" -> rule(float = true, floatSize = 1920 to 1080, floatPos = 0.5 to 0.5)
             "Alacritty" -> rule(blur = Blur(radius = 6, passes = 4))
+            "catapult" -> rule(focus = false)     // no focus border around it
             else -> null
         }
     }
@@ -98,10 +126,10 @@ view {
 ```
 
 To find a window's app id, open the window, then run `newm cmd debug` in a terminal. It lists
-each window with its id.
+each window with its id. `view.title` is the window's title, if you need it.
 
 Blur shows only behind see-through windows. Make the terminal's background see-through in
-its own settings (in alacritty: `window.opacity = 0.8`).
+its own settings (in alacritty: `window.opacity = 0.85`).
 
 ### Programs at the start
 
@@ -122,21 +150,57 @@ bar at all. See [Bars](bars.md).
 ```kotlin
 output("eDP-1") { scale = 1.25 }
 output("HDMI-A-1") { width = 2560; height = 1440; refreshHz = 144.0; x = 1920; y = 0 }
+output("DP-2") { transform = 1 }   // turned by 90°
 ```
 
-To see the monitors' names, run `newm cmd debug`.
+To see the monitors' names, run `newm cmd debug` (they are in the "Outputs" of each
+workspace).
 
-### Dim, lock and sleep when idle
+### Lock and sleep when idle
 
 ```kotlin
 energy {
-    idleTimes = listOf(120, 300, 600)   // dim after 2 minutes, lock after 5, sleep after 10
-    screensOffAfter = 330               // the screens go dark; a key or the mouse brings them back
+    idleTimes = listOf(120, 300, 600)   // seconds: "idle", lock, sleep (see below)
+    screensOffAfter = 330               // the screens go dark; a key or the mouse brings them back (0: never)
+    suspendCommand = "systemctl suspend"
+}
+lockOnWakeup = true                     // locked after a suspend
+```
+
+The first time is only told to `onIdle` (newm itself shows nothing then; a script of yours
+can dim the screen), the second locks, the third suspends. Each step happens once; when you
+come back, it all starts over. Programs that keep the screen on (a video player) hold it
+off. A shorter list leaves the last steps out: `idleTimes = listOf(120, 300)` locks but never
+puts the computer to sleep.
+
+The same one by one, with 0 for never, and steps of your own:
+
+```kotlin
+energy {
+    dimAfter = 120          // "idle" told to onIdle
+    lockAfter = 0           // never locks by itself
+    suspendAfter = 1800     // sleeps after half an hour
+    after(900) { launch("playerctl pause") }   // your own, once, until you are back
 }
 ```
 
-Each step happens once; when you come back, it all starts over. Programs that keep the screen
-on (a video player) hold it off.
+```kotlin
+val brightness = { how: String -> launch("brightnessctl $how") }
+energy {
+    onIdle { what ->            // "idle", "idle-lock", "idle-presuspend", "idle-suspend", "active", "sleep", "wakeup"
+        if (what == "idle") brightness("-s set 30%")     // dim, and remember the brightness
+        if (what == "active") brightness("-r")          // back as it was
+    }
+}
+```
+
+### Caffeine
+
+The quick settings have Caffeine: its square keeps the screen on (no locking, going dark or
+sleeping) until you turn it off; its words offer 30 minutes, an hour or two. A cup shows in the bar
+meanwhile. From a terminal: `newm cmd caffeine 45`, `newm cmd caffeine on`,
+`newm cmd caffeine off`. While `newm cmd inhibit-idle` runs, the same. Other times:
+`caffeine { choices = listOf(15, 45, 90, 0) }` (minutes; 0 is until turned off).
 
 ### A screen locker of your own
 
@@ -148,65 +212,129 @@ panels {
 }
 ```
 
-Logo+p and the idle lock then start it.
+Logo+P and the idle lock then start it.
 
-### The cursor and the touchpad
+newm's own lock screen takes the bar's colours (light or dark, as everything); its own, and
+its clock:
+
+```kotlin
+lock {
+    background = "#2E3440EE"; text = "#ECEFF4"; accent = "#88C0D0"   // the old Nord look
+    clock = "HH:mm:ss"          // unset: timeFormat ("HH:mm")
+    date = "EEEE, d MMMM"       // "" for none
+}
+```
+
+### The launcher
+
+```kotlin
+launcher {
+    width = 720; height = 560; top = 0.16   // pixels; its top as a part of the screen
+    frequent = 6                // the programs you start most, first (0: none)
+    remember = true             // false: nothing is written about what you start
+    hide = listOf("htop", "org.gnome.Extensions")   // by name or .desktop id
+    runTyped = true             // Enter with nothing found runs what you typed
+    entries {
+        "Lock"("Lock the screen") { ensureLocked() }
+        "Log out" { terminate() }
+    }
+    keys { "C-Return" { runTyped() } }   // next(), previous(), first(), last(), start(), runTyped(), close()
+}
+terminal = "foot"               // the terminal for programs that run in one, and for "terminal"
+```
+
+Ctrl+N / Ctrl+P, Ctrl+J / Ctrl+K and Tab / Shift+Tab choose, besides the arrows.
+
+### The cursor, the touchpad and the mouse
 
 ```kotlin
 cursor { theme = "Adwaita"; size = 24; hideAfter = 5 }   // hidden after 5 s without moving
-input { tapToClick = true; naturalScroll = true }
-keyboard { numLock = true }                              // Num Lock on from the start
+input {
+    tapToClick = true
+    naturalScroll = true
+    focusFollowsMouse = true    // the window under the pointer gets the keys (false: a click)
+}
+mouse { superMove = "button" }  // Logo + left drag moves, + right drag resizes;
+                                // "motion": Logo and the mouse alone move it, as newm had it
 ```
 
-### How windows look
+### A drawing tablet
+
+A tablet works out of the box: its pen is the pointer everywhere (the tip clicks, its buttons
+are the right and middle buttons), and programs that know tablets — Krita, GIMP, Inkscape —
+get the pen's pressure, tilt and the rest. To change how it lies on the screens:
 
 ```kotlin
-view {
-    unfocusedOpacity = 0.9      // windows without the focus a little see-through
-    fade = true                 // windows fade in and out (on by default)
-    fillFirst = true            // the first window takes the whole screen (on by default)
-    rules { view ->
-        if (view.appId == "catapult") rule(focus = false) else null   // no focus border around it
+input {
+    tablet {
+        monitor = "eDP-1"           // the monitor it covers (unset: a pen screen its own, others all as one)
+        keepAspect = true           // the monitor's shape kept: a strip of the tablet goes unused
+        area(0.0, 0.0, 0.8, 0.8)    // only a part of it used (fractions, from its top left)
+        leftHanded = false          // turned around
+        pointerOnly = false         // true: no pressure or tilt for programs, the pen is a mouse
+        tipPressure = 0.05          // how hard for a touch (unset: as libinput decides)
+        lowerButton = "right"; upperButton = "middle"; thirdButton = "side"   // or "left", "extra", "none"
     }
 }
 ```
 
-### Light or dark programs
+The tablet's own buttons (a pad) go to the program with the keyboard.
+
+### The overview
 
 ```kotlin
-caulis.colorScheme = dev.caulis.core.appearance.ColorScheme.DARK
-```
-
-`caulis` is the compositor library newm is built on ([Caulis](https://github.com/AristarkhKenebas/caulis)).
-Everything its guide describes works here too, for example a scheme that follows the time of
-day.
-
-### The clipboard's history
-
-Super+V shows what you copied lately, texts and pictures, newest first. Type to search; Enter
-or a click copies one again; Delete or its ✕ takes one away; "Clear all" empties it. It is kept
-in memory only, never on disk, and what password managers mark as secret is not kept.
-
-```kotlin
-clipboard {
-    enabled = true      // false: nothing is kept, Super+V does nothing
-    size = 50           // how many things are kept
-}
-keys {
-    "L-v"("Clipboard history") { toggleClipboard() }   // or another key
+overview {
+    input = false          // true: the windows take clicks there, as newm had it
+    choose = true          // a click chooses a window and ends the overview
+    followPointer = true   // the window under the pointer is the chosen one (its border, Logo + drag)
 }
 ```
 
-### Caffeine
+### How windows look and behave
 
-The battery's popup has Caffeine: the screen stays on (no dimming, locking or sleeping) for
-30 minutes, an hour, two, or until you turn it off. A cup shows in the bar meanwhile. From a
-terminal: `newm cmd caffeine 45`, `newm cmd caffeine on`, `newm cmd caffeine off`.
+```kotlin
+view {
+    cornerRadius = 14.0
+    padding = 8.0
+    unfocusedOpacity = 0.9       // windows without the focus a little see-through
+    fade = true                  // windows fade in and out
+    fillFirst = true             // the first window takes the whole screen
+    placeBesideFocused = true    // a new window goes right of yours (false: the first free tile in view)
+    resizePushes = true          // a window made bigger pushes its neighbours (false: stacks on them)
+    crispResize = true           // a window being resized is drawn at its own size, not stretched
+    minSizeKeepsShape = true     // a program bigger than its tile is drawn in the tile's shape, shrunk
+    minSizeShrink = 0.6          // ... down to this part of its smallest size
+    floatingMinSize = true       // a floating window that asks for no size opens at its smallest
+}
+focus {
+    color = "auto"               // the colours' accent; or "#RRGGBB" / "#RRGGBBAA"
+    width = 2.0; distance = 4.0
+}
+```
 
-### The menu's button and the language
+### Light or dark, and the colours
 
-The bar starts with a button of three lines that opens the launcher. `bar { menuButton = false }`
-takes it away; put `"menu"` into `left`, `center` or `right` to place it yourself.
+Light or dark — the bar, the menus, the launcher, the lock screen and your programs
+together — is switched in the quick settings and kept for the next start
+(`~/.local/state/newm/color-scheme`; dark until you choose). To fix it:
+
+```kotlin
+colorScheme = "dark"   // "auto" (the quick settings' last choice, the default), "dark" or "light"
+```
+
+The colours of the bar, the menus and the focus border are made from the wallpaper. The
+quick settings' palette tile chooses among them; to fix them:
+
+```kotlin
+colors {
+    source = "wallpaper"   // "wallpaper", "nord" (the classic newm colours) or a colour: "#5b8cc8"
+    style = "tonal"        // "tonal", "vibrant", "expressive", "neutral", "monochrome"
+}
+```
+
+`newm cmd colors` says which colours are in use; `newm cmd colors nord` changes them.
+
+### The language
 
 newm's menus speak Russian when the system's language is Russian. To choose:
 
@@ -214,12 +342,112 @@ newm's menus speak Russian when the system's language is Russian. To choose:
 language = "en"     // "auto" (the system's, the default), "en" or "ru"
 ```
 
-Light or dark — the bar, the menus, the launcher, the lock and the programs together — is
-switched in the quick settings and kept for the next start (dark until chosen). To fix it:
+### Screenshots
+
+The keys are in `keys { }` (Logo+Shift+S and Print: the chooser; Logo+Print: the screen;
+Alt+Print: the window). How the chooser works is in [Everyday use](using.md#screenshots).
 
 ```kotlin
-colorScheme = "dark"   // "auto" (the quick settings' last choice, the default), "dark" or "light"
+screenshots {
+    enabled = true
+    folder = "~/Pictures/Screenshots"
+    save = true; copy = true        // as a file, on the clipboard
+    pointer = false                 // the pointer in the picture
+    toast = true                    // "Screenshot saved" for a moment
+    start = "region"                // the chooser starts with "region", "window" or "screen" (unset: the last used)
+    delay = 0                       // seconds before it is taken
+    selection = "adjust"            // an area: "adjust" (drag, then move and resize it) or "new" (each drag a new one)
+    overviewStart = "windows"       // over the overview: "windows" (several, whole), "region", ... or "" (the last used)
+    sharpWindows = true             // an area of the overview: put together from the windows, sharp
+    sharpBackground = "wallpaper"   // behind them: "wallpaper", "none" (see-through), "#RRGGBB", "theme"
+    fileName = "Screenshot from {date} {time}"   // {date}, {time}, {kind}
+    format = "png"; quality = 92    // or "jpg"
+    then = "satty --filename {file}"            // a command with each file (an editor)
+}
 ```
+
+### The clipboard's history
+
+```kotlin
+clipboard {
+    enabled = true                  // false: nothing is kept, Logo+V does nothing
+    size = 50                       // how many things are kept (pinned ones on top of these)
+    pictures = true; files = true   // pictures and copied files are kept too
+    keepPins = true                 // pinned texts kept after a restart (~/.local/state/newm/clipboard-pins.json)
+    ignore = listOf("keepassxc", "bitwarden", "1password")   // never kept from these
+    maxPictureMb = 16; maxText = 200000
+    clearAtOnce = true              // false: "Clear" asks first
+    onChoose = "copy"               // "paste": also pasted into your window (Ctrl+V; Ctrl+Shift+V in a terminal)
+    width = 980; height = 620; top = 0.13
+    pinKey = "C-p"
+}
+```
+
+### Notifications
+
+newm is the notification server itself (org.freedesktop.Notifications): Telegram's messages,
+a finished download, a low battery come as cards at the top right, below the bar, in the
+bar's colours. A card stays a few seconds (while the pointer is over it, it waits; critical
+ones stay until closed); a click on it brings its program forward and does its main action,
+its buttons do theirs, its × closes it. None show while the screen is locked or a window is
+fullscreen: they go to the history behind the bar's bell all the same.
+
+The history is smart: once you look at a program's window for a few seconds (a glance does not
+count), its notifications are read and leave the history; old ones go by themselves.
+
+```kotlin
+notifications {
+    enabled = true                  // false: newm leaves notifications to another daemon (mako, dunst, swaync)
+    seconds = 6                     // how long a card stays when the program does not say
+    doNotDisturb = false            // true: no cards, the history only (the bell's switch changes it too)
+    readAfterFocusSeconds = 3       // a program's window focused this long: its notifications are read
+    keepHours = 24; keep = 100      // older or more ones leave the history
+    remember = true                 // the history kept across restarts (~/.local/state/newm/notifications.json)
+    takeOver = "stale"              // another daemon left from an old session is closed ("always", "never")
+    corner = "top_right"            // "top_left", "top", "bottom_right", "bottom_left", "bottom" (the compositor's notices follow)
+    width = 380; gap = 10           // the cards' width, the gap between them and to the edge
+    maxCards = 3                    // the most at once: the oldest goes to the history
+    monitor = "focused"             // "pointer", "first", or a monitor's name ("eDP-1")
+    criticalSeconds = 0             // how long a critical one stays (0: until closed)
+    showInFullscreen = false        // true: cards over a fullscreen window too
+    // Rules, each in turn: mute() no card (the history only), hide() not kept at all, urgency(0..2), seconds(n)
+    rule { n -> if (n.app == "Spotify") mute() }
+    rule { n -> if (n.summary.contains("password", ignoreCase = true)) hide() }
+    onNotification { n -> println("${n.app}: ${n.summary}") }   // told of each one (after the rules)
+}
+timeFormat = "HH:mm"                // how times are written ("h:mm a"): the history, the lock screen, the clipboard
+```
+
+In JSON and Lua a rule is a table: what it matches (`app`, `entry`, `summary`, `app_matches`,
+`summary_matches`, `body_matches`: the last three regular expressions) and what it says
+(`mute`, `hide`, `urgency`, `seconds`):
+
+```json
+"notifications": { "rules": [ { "app": "Spotify", "mute": true }, { "body_matches": "(?i)code: \\d+", "seconds": 30 } ] }
+```
+
+When another daemon already has the name (a mako left over from another session, say),
+newm does not fight it: it says once "Notifications go to mako — newm's own are off", and
+takes the name as soon as that one quits.
+
+### Sound, and messages on screen
+
+```kotlin
+sound { maxVolume = 150 }           // the volume slider's top, in percent (past 100: amplified)
+osd {
+    connections = "cards"           // Wi-Fi, a cable, Bluetooth came or went: "cards", "text" (a short line), "off"
+    seconds = 1.3                   // how long the volume's or brightness' level shows
+    position = "bottom"             // where: "bottom", "top", "center"
+    distance = 130                  // that far from the edge, in pixels
+    toastSeconds = 1.6              // a short message in the middle
+    cardSeconds = 2.8               // a connection's card
+    inFullscreen = false            // connections shown over a fullscreen window too
+    onConnection { e -> }           // told of each (e.kind: WIFI, WIRED, BLUETOOTH; e.connected; e.name)
+}
+```
+
+The volume's and brightness' wheel steps, their commands, the battery's levels and the power
+menu: see [Bars](bars.md#what-the-bar-needs).
 
 ### A scratchpad (a terminal that drops down)
 
@@ -238,15 +466,6 @@ Windows belong to it by their app id (here "drop"). Other looks: `Scratchpad.Edg
 from the top (`Edge(side = Side.RIGHT)` from the right), `Scratchpad.Overlay()` is a whole
 workspace above the current one. From a terminal: `newm cmd scratchpad drop`.
 
-### Wider windows push their neighbours
-
-Making a window wider (Super+Ctrl+L) or taller moves the windows beside it out of the way; made
-smaller again, the room is closed. To stack them on each other as newm did:
-
-```kotlin
-view { resizePushes = false }
-```
-
 ### A projector or a second monitor: mirror or extend
 
 A monitor plugged in for the first time is used beside the laptop's screen and the choice of
@@ -254,121 +473,36 @@ modes is shown; the laptop's display key (F7 on many) shows it any time. From a 
 `newm cmd displays mirror` (the same picture on both), `extend`, `laptop` or `other` (only that
 one). The choice is kept for that monitor.
 
-### Cards when Wi-Fi, a cable or Bluetooth comes or goes
+### Everything Caulis can do
 
-A card with a big picture shows in the middle of the screen for a moment (as on a Mac):
+`caulis` in your configuration is the compositor library newm is built on
+([Caulis](https://github.com/AristarkhKenebas/caulis)). What its guide describes works here
+too, for what newm has no setting of its own.
+
+## Restarting newm
+
+`newm cmd restart` ends newm and starts it again (newm's start script does that; so does
+`dev/newm-dev`, with a new build). Every program closes, as when you log out: save your work
+first. `newm cmd restart keep` also keeps your windows: at the next start each program starts again (a terminal in the folder its
+shell was in) and its window goes back to its place. What a program had open inside it
+(tabs, files) is its own to bring back.
 
 ```kotlin
-osd { connections = "cards" }   // the default; "text": a short line; "off": nothing
-```
-
-The clipboard's history also keeps pinned entries (Ctrl+P or the pin button): they stay
-on top, are never pushed out, and pinned texts are kept after a restart
-(~/.local/state/newm/clipboard-pins.json). Tab goes through All / Text / Pictures / Pinned.
-
-### Screenshots in detail
-
-```kotlin
-screenshots {
-    enabled = true
-    folder = "~/Pictures/Screenshots"
-    save = true; copy = true        // as a file, on the clipboard
-    pointer = false                 // the pointer in the picture
-    toast = true                    // "Screenshot saved" for a moment
-    start = "region"                // the chooser starts with "region", "window" or "screen"
-    delay = 0                       // seconds before it is taken
-    selection = "adjust"            // a part: "adjust" (drag and resize it after) or "new" (each drag a new one)
-    overviewStart = "windows"       // over the overview: "windows" (several, whole), "region", ... or "" (the last used)
-    sharpWindows = true             // a part of the overview: put together from the windows, sharp
-    sharpBackground = "wallpaper"   // behind them: "wallpaper", "none" (see-through), "#RRGGBB", "theme"
-    fileName = "Screenshot from {date} {time}"   // {date}, {time}, {kind}
-    format = "png"; quality = 92    // or "jpg" (quality 10..100)
-    then = "satty --filename {file}"            // a command with each file (an editor)
+session {
+    restoreAtLogin = false      // true: the windows of your last session open again when you log in
+    maxAgeMinutes = 10          // restart keep: kept longer ago than this, not opened (0: no limit)
+    maxWindows = 20             // at most so many programs; the launcher offers the rest ("Reopen")
+    exclude = listOf("steam")   // never opened again (app id or program)
+    staggerMs = 300             // one program after another, not all at once
 }
 ```
 
-In the overview (tap Super) the chooser has a fourth kind, "Windows, whole" (G): drag a
-frame over windows — every window it touches is in the picture, whole, from edge to edge —
-or click windows to add or drop them (Shift adds a frame to those chosen, Ctrl+A takes all),
-then Enter or Capture. The picture is put together from the windows at their own size, each
-as sharp as if it filled the screen, in the places they have in the overview. A part chosen
-over the overview is put together the same way (cut where the part ends). The toolbar's
-"Area" options button (M) switches between moving the part chosen and drawing a new one
-with each drag; the name of each button and its key show above it. The power menu of the bar has "Screenshot…" too.
+Under `dev/newm-dev` newm starts again at once ([Working on newm](development.md)). Started
+from a login screen or a console, newm ends and you are back there: start it again and the
+windows come back.
 
-### The wallpaper: following the view or standing still
+## When the screen flickers
 
-```kotlin
-background { mode = "static" }   // "follow" (the default): moves and zooms with the view
-```
-
-### The clipboard's history in detail
-
-```kotlin
-clipboard {
-    enabled = true
-    size = 50                       // pinned ones are kept on top of these
-    pictures = true; files = true   // pictures and copied files are kept too
-    keepPins = true                 // pinned texts kept after a restart
-    ignore = listOf("keepassxc", "bitwarden", "1password")   // never kept from these
-    maxPictureMb = 16; maxText = 200000
-}
-```
-
-"Clear" removes everything but the pinned ones; its arrow clears only text, pictures or
-files (grey when there is none). Tab goes from part to part of the window; the arrows or
-h j k l move inside one; Enter does it.
-
-### Quick actions
-
-The bar's grid button (before the power button) opens quick actions: the screen's
-brightness, caffeine (its arrow: for how long), a screenshot, the clipboard's history, the
-light or dark scheme, the colours and the keys. The wheel over it changes the brightness.
-`bar { quickButton = false }` takes it away; put "quick" into a list to place it yourself.
-
-### Moving windows with the mouse, the overview
-
-Super + left drag moves the window under the pointer, Super + right drag resizes it (as in
-Hyprland); on a touchpad Super and two fingers resize too. Super and the mouse moved alone do
-nothing any more:
-
-```kotlin
-mouse { superMove = "button" }   // "motion": Super and the mouse alone move it, as newm had it
-```
-
-In the overview (Super alone) the windows take no clicks: a click chooses one and the
-overview ends there.
-
-```kotlin
-overview {
-    input = false     // true: the windows take clicks there, as newm had it
-    choose = true     // a click chooses a window
-}
-```
-
-### Making windows smaller, crisp resizing
-
-A window as small as a tile lets it be — the first one fills the screen as one tile — can
-still be made narrower or shorter (Super+Ctrl+H/K, Super+right drag): the grid is made finer
-first (each tile 2 x 2, nothing moves on screen). A window is never made smaller than its
-program can be (Spotify: 800 x 600).
-
-While a window is resized it is drawn at its own size, not stretched, so it does not flicker
-when its new picture comes. `view { crispResize = false }` stretches it, as newm did.
-
-A program that cannot be as small as its tile (Spotify will not go below 800 x 600) is drawn
-at a bigger size of the tile's own shape and shrunk to fill the tile exactly — no empty sides.
-`view { minSizeKeepsShape = false }` gives it its smallest size, fitted inside the tile. Such a
-window can be made smaller than the program allows, down to `view { minSizeShrink = 0.6 }` of
-it (more would make everything in it too small).
-
-### Restarting with your windows
-
-`newm cmd restart keep` restarts newm (a new build, a changed setting) and opens your windows
-again afterwards: each program starts again (a terminal in the folder its shell was in) and its
-window goes back to its place. What can be kept is a program's command line; what a program
-had open inside it (tabs, files) is its own to bring back.
-
-If windows flicker, `newm cmd full-redraw on` draws every frame whole (a little slower) and
+`newm cmd full-redraw on` draws every frame whole (a little slower) and
 `newm cmd full-redraw off` goes back. If the flicker is gone while it is on, say so in a bug
 report: it comes from drawing only what changed.

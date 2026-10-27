@@ -10,8 +10,6 @@ import newm.bar.PillKind
 import newm.bar.PillButton
 import newm.bar.GlyphIcon
 import newm.bar.Glyph
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,6 +91,39 @@ private val confKeepPins = configuredValue("clipboard.keep_pins", true)
 private val confIgnore = configuredValue("clipboard.ignore", listOf("keepassxc", "bitwarden", "1password"))
 private val confMaxPictureMb = configuredValue("clipboard.max_picture_mb", 16)
 private val confMaxText = configuredValue("clipboard.max_text", 200_000)
+// clipboard { clearAtOnce = true; onChoose = "copy" | "paste"; pasteKey = "C-v"; terminalPasteKey = "C-S-v"; width; height; top; pinKey = "C-p" }
+private val confClearAtOnce = configuredValue("clipboard.clear_at_once", true)
+private val confOnChoose = configuredValue("clipboard.on_choose", "copy")
+private val confPasteKey = configuredValue("clipboard.paste_key", "C-v")
+private val confTerminalPasteKey = configuredValue("clipboard.terminal_paste_key", "C-S-v")
+private val confWidth = configuredValue("clipboard.width", 980)
+private val confHeight = configuredValue("clipboard.height", 620)
+private val confTop = configuredValue("clipboard.top", 0.13)
+private val confPinKey = configuredValue("clipboard.pin_key", "C-p")
+
+// Keys by their xkb names (as in keys { }) as evdev codes, for pasting: the modifiers, letters, Insert.
+private val EVDEV_MODIFIERS = mapOf("C" to 29, "S" to 42, "A" to 56, "1" to 56, "L" to 125)
+private const val EVDEV_LETTERS = "qwertyuiop" // 16..25
+private const val EVDEV_LETTERS2 = "asdfghjkl" // 30..38
+private const val EVDEV_LETTERS3 = "zxcvbnm" // 44..50
+
+/** The evdev codes of a combination in newm's notation ("C-S-v": Ctrl, Shift, V), modifiers first; null if a key is not known. */
+internal fun evdevCodes(combo: String): List<Int>? {
+    val parts = combo.trim().split('-')
+    val mods = parts.dropLast(1).map { EVDEV_MODIFIERS[it] ?: return null }
+    var name = parts.last()
+    val shift = name.length == 1 && name[0].isUpperCase()
+    name = name.lowercase()
+    val key = when {
+        name.length == 1 && name[0] in EVDEV_LETTERS -> 16 + EVDEV_LETTERS.indexOf(name[0])
+        name.length == 1 && name[0] in EVDEV_LETTERS2 -> 30 + EVDEV_LETTERS2.indexOf(name[0])
+        name.length == 1 && name[0] in EVDEV_LETTERS3 -> 44 + EVDEV_LETTERS3.indexOf(name[0])
+        name == "insert" -> 110
+        name == "return" -> 28
+        else -> return null
+    }
+    return (mods + (if (shift && 42 !in mods) listOf(42) else emptyList()) + key)
+}
 
 /**
  * One thing copied: text, or a picture (its PNG and a picture of it to show), the program it
@@ -169,7 +200,7 @@ class ClipboardHistory(private val wm: Layout) {
     private var widget: ComposeWidget? = null
 
     // Its coming and going (done by the compositor).
-    private val fade = newm.bar.Fade(inMillis = 260, outMillis = 180)
+    private val fade = newm.bar.Fade("clipboard", inMillis = 260, outMillis = 180)
 
     // What newm itself put back on the clipboard (not kept again as new).
     private var ours: ClipboardData? = null
@@ -188,9 +219,11 @@ class ClipboardHistory(private val wm: Layout) {
                 val d = caulis.desktop
                 val target = d.monitors.firstOrNull { it.area.contains(Rect(d.pointerX.toInt(), d.pointerY.toInt(), 1, 1)) } ?: d.monitors.firstOrNull()
                 if (m !== target) null else {
-                    val width = minOf(980, m.area.width - 80)
-                    val height = minOf(620, m.area.height - 120)
-                    Rect(m.area.x + (m.area.width - width) / 2, m.area.y + (m.area.height * 0.13).toInt(), width, height)
+                    // clipboard { width; height; top } (pixels at most; a part of the screen's height).
+                    val width = minOf(confWidth().coerceAtLeast(400), m.area.width - 80)
+                    val height = minOf(confHeight().coerceAtLeast(240), m.area.height - 120)
+                    val y = minOf(m.area.y + (m.area.height * confTop().coerceIn(0.0, 1.0)).toInt(), m.area.y + m.area.height - height).coerceAtLeast(m.area.y)
+                    Rect(m.area.x + (m.area.width - width) / 2, y, width, height)
                 }
             }
         }, level = DrawingLevel.ON_TOP, takesKeyboard = true,
@@ -342,6 +375,22 @@ class ClipboardHistory(private val wm: Layout) {
         entries.remove(entry)
         entries.add(0, entry)
         close()
+        // clipboard { onChoose = "paste" }: then pasted into the window that has the keyboard.
+        if (confOnChoose().trim().lowercase() == "paste") paste()
+    }
+
+    // Sends the paste keys (Ctrl+V; Ctrl+Shift+V to a terminal) to the focused window, a moment
+    // after the panel gave the keyboard back (through Caulis' input, as a keyboard would).
+    private fun paste() {
+        wm.caulis.after(120) {
+            val window = desktop.focusedWindow ?: return@after log.info { "Not pasted: no window has the keyboard" }
+            if (wm.lockShown()) return@after
+            val combo = if (isTerminalApp(window.appId)) confTerminalPasteKey() else confPasteKey()
+            val codes = evdevCodes(combo) ?: return@after log.warn("clipboard.paste_key: \"$combo\" cannot be sent (modifiers C, S, A, L and a letter, or Insert)")
+            log.info { "Pasting into ${window.appId} with $combo" }
+            codes.forEach { simulateKey(it, true) }
+            codes.reversed().forEach { simulateKey(it, false) }
+        }
     }
 
     fun remove(entry: ClipEntry) {
@@ -446,6 +495,9 @@ class ClipboardHistory(private val wm: Layout) {
         // The clearing menu: open, and its row in focus (0: everything, then text, pictures, files).
         var clearMenu by remember(opened) { mutableStateOf(false) }
         var clearRow by remember(opened) { mutableIntStateOf(0) }
+        // clipboard { clearAtOnce = false }: "Clear" asked once (of which kind: [askedKind]), the next one clears.
+        var clearAsked by remember(opened) { mutableStateOf(false) }
+        var askedKind by remember(opened) { mutableStateOf<ClipKind?>(null) }
         val focus = remember { FocusRequester() }
         val list = rememberLazyListState()
         LaunchedEffect(opened) { runCatching { focus.requestFocus() } }
@@ -456,7 +508,7 @@ class ClipboardHistory(private val wm: Layout) {
         }.sortedByDescending { it.pinned }
         LaunchedEffect(shown.size) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
         var byKeys by remember(opened) { mutableIntStateOf(0) }
-        LaunchedEffect(byKeys) { if (byKeys > 0 && shown.isNotEmpty()) list.animateScrollToItem(selected.coerceAtMost(shown.size - 1)) }
+        LaunchedEffect(byKeys) { if (byKeys > 0 && shown.isNotEmpty()) selected.coerceAtMost(shown.size - 1).let { if (NewmAnimations["scroll"].on) list.animateScrollToItem(it) else list.scrollToItem(it) } }
         // (Read when needed, not while composing: choosing another then redraws only the
         // preview and two rows — reading it here composed the whole window anew on each row
         // the pointer passed, and the pointer lagged.)
@@ -468,7 +520,14 @@ class ClipboardHistory(private val wm: Layout) {
             "Delete" to { current()?.let(history::remove) },
         )
         fun clearNow(kind: ClipKind?) {
-            if (history.canClear(kind)) history.clear(kind)
+            if (!history.canClear(kind)) return
+            if (!confClearAtOnce() && !(clearAsked && askedKind == kind)) {
+                clearAsked = true
+                askedKind = kind
+                return
+            }
+            history.clear(kind)
+            clearAsked = false
             clearMenu = false
             selected = 0
         }
@@ -478,6 +537,8 @@ class ClipboardHistory(private val wm: Layout) {
         // h j k l move within one; Enter does it; Escape closes the menu, then the window.
         fun onKey(e: androidx.compose.ui.input.key.KeyEvent): Boolean {
             if (e.type != KeyEventType.KeyDown) return false
+            // (Asked whether to clear: any other key than Enter is "no".)
+            if (clearAsked && e.key != Key.Enter && e.key != Key.NumPadEnter) clearAsked = false
             // The hints first: Enter or Escape is "Got it".
             if (!hintsSeen && (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Escape)) {
                 hintsDone(false)
@@ -506,7 +567,7 @@ class ClipboardHistory(private val wm: Layout) {
                 }
                 return true
             }
-            if (e.key == Key.P && e.isCtrlPressed) { current()?.let(history::pin); return true }
+            if (keyEventIs(confPinKey(), e)) { current()?.let(history::pin); return true }
             when (zone) {
                 Zone.SEARCH, Zone.LIST -> when {
                     down -> { selected = (selected + 1).coerceAtMost(shown.size - 1); byKeys++ }
@@ -565,7 +626,8 @@ class ClipboardHistory(private val wm: Layout) {
                     }
                     Spacer(Modifier.width(10.dp))
                     // Clearing, one button: the bin and the word, a line, the arrow (one kind only).
-                    ClearButton(history.canClear(), zone == Zone.CLEAR, colors, text, onClear = { clearNow(null) }, onMenu = { clearMenu = !clearMenu; clearRow = 0 })
+                    ClearButton(history.canClear(), zone == Zone.CLEAR, colors, text, if (clearAsked && askedKind == null) "Really clear?" else "Clear",
+                        onClear = { clearNow(null) }, onMenu = { clearMenu = !clearMenu; clearRow = 0; clearAsked = false })
                 }
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -644,7 +706,7 @@ class ClipboardHistory(private val wm: Layout) {
                         val glyphs = listOf(Glyph.TRASH, Glyph.COPY, Glyph.PICTURE, Glyph.FILE)
                         for ((i, kind) in clearKinds.withIndex()) {
                             val can = history.canClear(kind)
-                            ListRow(labels[i], colors, text, selected = clearRow == i, enabled = can, onClick = { clearNow(kind) },
+                            ListRow(if (clearAsked && askedKind == kind) "Really clear?" else labels[i], colors, text, selected = clearRow == i, enabled = can, onClick = { clearNow(kind) },
                                 leading = { GlyphIcon(glyphs[i], if (can) colors.text else colors.dim.copy(alpha = 0.5f), 15.dp) })
                         }
                     }
@@ -666,10 +728,10 @@ class ClipboardHistory(private val wm: Layout) {
             ) {
                 BasicText(newm.bar.tr("The clipboard's history"), style = text.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
                 for ((keys, what) in listOf(
-                    "Enter" to "Copy the chosen one again",
+                    "Enter" to if (confOnChoose().trim().lowercase() == "paste") "Paste the chosen one" else "Copy the chosen one again",
                     "↑ ↓  ·  j k" to "Choose",
                     "Tab" to "Go to the next part (kinds, Clear, the list, its buttons)",
-                    "Ctrl+P" to "Pin, so it stays",
+                    keyNames(confPinKey()).joinToString(" ") { it.joinToString("+") } to "Pin, so it stays",
                     "Delete" to "Remove it",
                     "Esc" to "Close",
                 )) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -698,7 +760,7 @@ class ClipboardHistory(private val wm: Layout) {
 
     // "🗑 Clear | ▾": one rounded button, a thin line between its two parts.
     @Composable
-    private fun ClearButton(can: Boolean, ringed: Boolean, colors: newm.bar.BarColors, text: TextStyle, onClear: () -> Unit, onMenu: () -> Unit) {
+    private fun ClearButton(can: Boolean, ringed: Boolean, colors: newm.bar.BarColors, text: TextStyle, label: String, onClear: () -> Unit, onMenu: () -> Unit) {
         val fg = if (can) colors.danger else colors.dim
         val bg = if (can) colors.danger.copy(alpha = 0.12f) else colors.text.copy(alpha = 0.06f)
         Row(
@@ -710,7 +772,7 @@ class ClipboardHistory(private val wm: Layout) {
                 .padding(start = 14.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 GlyphIcon(Glyph.TRASH, fg, 15.dp)
                 Spacer(Modifier.width(7.dp))
-                BasicText(newm.bar.tr("Clear"), style = text.copy(color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+                BasicText(newm.bar.tr(label), style = text.copy(color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
             }
             Box(Modifier.width(1.dp).height(20.dp).background(fg.copy(alpha = 0.35f)))
             Box(Modifier.fillMaxHeight().pointerInput(onMenu) { awaitPointerEventScope { while (true) if (awaitPointerEvent().type == PointerEventType.Release) onMenu() } }

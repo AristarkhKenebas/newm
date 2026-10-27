@@ -42,6 +42,12 @@ in
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
+    # The keyboard of services.xserver.xkb for newm too (it reads these when its configuration names none).
+    environment.sessionVariables = lib.mkIf (config.services.xserver.xkb.layout or "" != "") {
+      XKB_DEFAULT_LAYOUT = lib.mkDefault config.services.xserver.xkb.layout;
+      XKB_DEFAULT_VARIANT = lib.mkDefault config.services.xserver.xkb.variant;
+      XKB_DEFAULT_OPTIONS = lib.mkDefault config.services.xserver.xkb.options;
+    };
     services.displayManager.sessionPackages = [ session ];
     environment.etc."newm/config.json" = lib.mkIf (cfg.settings != { }) {
       source = json.generate "newm-config.json" cfg.settings;
@@ -52,7 +58,13 @@ in
     xdg.portal = {
       enable = lib.mkDefault true;
       extraPortals = lib.mkDefault [ pkgs.xdg-desktop-portal-gtk pkgs.xdg-desktop-portal-wlr ];
-      config.newm.default = lib.mkDefault [ "gtk" ];
+      # Files, dialogs, settings: gtk's; sharing the screen and screenshots: wlr's (newm has
+      # wlr-screencopy), else screen sharing in browsers and meetings finds nothing.
+      config.newm = {
+        default = lib.mkDefault [ "gtk" ];
+        "org.freedesktop.impl.portal.ScreenCast" = lib.mkDefault [ "wlr" ];
+        "org.freedesktop.impl.portal.Screenshot" = lib.mkDefault [ "wlr" ];
+      };
     };
   };
 }

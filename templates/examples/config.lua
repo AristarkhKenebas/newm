@@ -12,7 +12,18 @@ background = {
 }
 
 corner_radius = 24                   -- the screen's own corners
-anim_time = 0.3                      -- how long moving and zooming take (seconds)
+anim_time = 0.3                      -- how long moving and zooming take (seconds), with animations on
+
+-- Animations: off unless turned on; preset = "newm" is newm's usual look. Each by name as Hyprland's
+-- (camelCase): true/false, a look, or { enabled, millis (or speed), curve, style }. The guide's
+-- animations page lists every name.
+animations = {
+  preset = "none",                   -- "newm": all of newm's usual animations on
+  -- curves = { snappy = { bezier = { 0.05, 0.9, 0.1, 1.05 } } },
+  -- windows = { enabled = true, millis = 250, curve = "snappy" },
+  -- popupsIn = { enabled = true, style = "popin 90%" },
+  -- gestureSmoothing = false,
+}
 
 view = {
   corner_radius = 14,
@@ -42,7 +53,7 @@ panels = {
     theme = "auto",                  -- "light", "dark"
     left = { "window" },
     center = { "clock" },
-    right = { "tray", "layout", "bluetooth", "network", "volume", "battery", "power" },
+    right = { "tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power" },
     clock = "HH:mm", date = "EEE d MMM",
     -- style = "classic",            -- the original newm's bar, with texts = function() return { sys.cpu(), sys.time() } end
   },
@@ -73,7 +84,8 @@ keys = {
   ["L-"] = "toggle_overview",
   ["L-q"] = "close_focused_view",
   ["L-f"] = "toggle_fullscreen",
-  ["L-v"] = "toggle_focused_view_floating",
+  ["L-v"] = "toggle_clipboard",
+  ["L-S-v"] = "toggle_focused_view_floating",
   ["L-0"] = "fit_focused_view", ["L-s"] = "side_by_side",
   ["L-minus"] = "basic_scale 1", ["L-equal"] = "basic_scale -1",
   ["L-slash"] = "toggle_key_help",
@@ -83,12 +95,29 @@ keys = {
   ["XF86MonBrightnessUp"] = "brightness +5", ["XF86MonBrightnessDown"] = "brightness -5",
   ["XF86AudioRaiseVolume"] = "volume +5", ["XF86AudioLowerVolume"] = "volume -5",
   ["XF86AudioMute"] = "volume mute", ["XF86AudioMicMute"] = "mic-mute",
-  ["Print"] = function() newm.launch("grim") end,
+  ["L-S-s"] = "screenshot",
+  ["Print"] = "screenshot",
+  ["L-Print"] = "screenshot_screen",
+  ["A-Print"] = "screenshot_window",
 }
 
 -- Programs at the start.
 startup = {
   -- "mako",
 }
+
+-- Programs with the session, one after another once newm is shown (once per session).
+autostart = {
+  stagger_ms = 400,
+  entries = {
+    -- { app = { "waybar" } },
+    -- { app = { "nm-applet", "--indicator" }, delay_ms = 2000, if_not_running = true, restart = "on_crash" },
+    -- { shell = "sleep 1; notify-send hi" },
+  },
+}
+
+-- Dark until ready, then newm fades in; a sound with it ("airy", "classic", "glass", "soft").
+reveal = { enabled = true, fade_ms = 600 }
+startup_sound = { enabled = true, preset = "airy", volume = 0.8 }
 
 energy = { idle_times = { 120, 300, 600 } }  -- seconds: dim, lock, suspend

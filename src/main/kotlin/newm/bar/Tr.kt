@@ -31,10 +31,15 @@ fun verbatim(text: String): String = text.lines().joinToString("\n") { "$KEEP_ST
 private fun isVerbatim(text: String): Boolean =
     text.length >= 2 && text.first() == KEEP_START && text.last() == KEEP_END && text.indexOf(KEEP_START, 1) < 0
 
+// The longest text matched against the "%s" sentences.
+private const val MAX_TEMPLATE_TEXT = 1000
+
 private fun translate(english: String): String {
     if (english.isEmpty() || language() != "ru" || isVerbatim(english)) return english
     RU[english]?.let { return it }
-    for ((_, regex, russian) in templates) {
+    // (newm's own sentences are short; a long text is someone else's words, and the patterns'
+    // lazy "(.+?)" parts would only spend time going through it.)
+    if (english.length <= MAX_TEMPLATE_TEXT) for ((_, regex, russian) in templates) {
         val m = regex.matchEntire(english) ?: continue
         var out = russian
         for (g in m.groupValues.drop(1)) out = out.replaceFirst("%s", translate(g))
@@ -51,6 +56,18 @@ fun language(): String {
     if (conf != "auto") return if (conf.startsWith("ru")) "ru" else "en"
     return systemLanguage
 }
+
+/**
+ * The locale of dates (the bar's clock, the calendar, the notifications' times): Russian with
+ * newm's Russian words; with English ones the system's, unless that is Russian (English then).
+ */
+fun dateLocale(): Locale = when {
+    language() == "ru" -> RUSSIAN
+    Locale.getDefault().language == "ru" -> Locale.ENGLISH
+    else -> Locale.getDefault()
+}
+
+private val RUSSIAN: Locale = Locale.forLanguageTag("ru")
 
 private val systemLanguage: String by lazy {
     val env = listOf("LC_ALL", "LC_MESSAGES", "LANG").firstNotNullOfOrNull { System.getenv(it)?.takeIf { v -> v.isNotBlank() && v != "C" && v != "POSIX" } }
@@ -77,11 +94,24 @@ private val RU: Map<String, String> = mapOf(
     "connected" to "подключено",
     "Not connected" to "Нет подключения",
     "Keyboard: %s (a click switches)" to "Клавиатура: %s (щелчок переключает)",
+    "All windows" to "Все окна",
     "Bluetooth is off" to "Bluetooth выключен",
     "Bluetooth is on, nothing connected" to "Bluetooth включён, ничего не подключено",
     "Sound is off" to "Звук выключен",
     "Volume %s" to "Громкость %s",
     "Caffeine: the screen stays on" to "Кофеин: экран не гаснет",
+    // notifications
+    "Notifications" to "Уведомления",
+    "Notification" to "Уведомление",
+    "Notifications go to %s — newm's own are off" to "Уведомления уходят в %s — уведомления newm выключены",
+    "now" to "сейчас",
+    "Do not disturb" to "Не беспокоить",
+    "No cards, the history only" to "Без карточек, только история",
+    "No notifications" to "Нет уведомлений",
+    "New notifications: %s" to "Новых уведомлений: %s",
+    "No new notifications" to "Нет новых уведомлений",
+    "Do not disturb is on" to "Режим «Не беспокоить» включён",
+    "The middle button: do not disturb" to "Средняя кнопка: не беспокоить",
     // Wi-Fi
     "Wi-Fi" to "Wi-Fi",
     "Scan" to "Искать",
@@ -96,6 +126,14 @@ private val RU: Map<String, String> = mapOf(
     "Connect" to "Подключить",
     "Forget" to "Забыть",
     "Password" to "Пароль",
+    // the lock screen
+    "Who are you?" to "Кто вы?",
+    "That was not it. Again:" to "Неверно. Ещё раз:",
+    "Checking the password took too long (a fingerprint reader waiting?). Again:" to "Проверка пароля шла слишком долго (ждёт сканер отпечатков?). Ещё раз:",
+    "The password cannot be checked (PAM: %s). See newm's log." to "Пароль не проверить (PAM: %s). Подробности в журнале newm.",
+    "The password cannot be checked (PAM failed). See newm's log." to "Пароль не проверить (ошибка PAM). Подробности в журнале newm.",
+    "PAM cannot start (service %s, error %s). See newm's log." to "PAM не запускается (служба %s, ошибка %s). Подробности в журнале newm.",
+    "newm cannot tell who you are (uid %s), so it cannot check a password. See newm's log." to "newm не знает, кто вы (uid %s), и не может проверить пароль. Подробности в журнале newm.",
     "Wi-Fi password" to "Пароль Wi-Fi",
     "For “%s”" to "Для «%s»",
     "Cancel" to "Отмена",
@@ -265,6 +303,12 @@ private val RU: Map<String, String> = mapOf(
     "Point at a window first" to "Сначала наведите на окно",
     "No window has the focus" to "Нет окна в фокусе",
     "Screenshot in %s" to "Снимок через %s",
+    "Welcome to newm" to "Добро пожаловать в newm",
+    "%s, left from another session, was closed: notifications are newm's now" to "%s от прошлой сессии закрыт: уведомления теперь у newm",
+    "To choose newm at login (ly, SDDM, GDM): run  newm install-session  in a terminal." to
+        "Чтобы выбирать newm при входе (ly, SDDM, GDM), выполните в терминале  newm install-session.",
+    "Super+/ shows every key. Super+D starts a program, Super+S puts two windows side by side. On a touchpad: three fingers move, four zoom." to
+        "Super+/ показывает все клавиши. Super+D запускает программу, Super+S ставит два окна рядом. На тачпаде: три пальца двигают, четыре приближают.",
     "Windows, whole" to "Окна целиком",
     "Move and resize the area" to "Область двигается и тянется",
     "A new area each time" to "Каждый раз новая область",
@@ -320,4 +364,6 @@ private val RU: Map<String, String> = mapOf(
     "Zoom out" to "Отдалить",
     "Zoom in (see fewer)" to "Приблизить (меньше окон)",
     "Zoom out (see more)" to "Отдалить (больше окон)",
+    // (After "Keyboard: %s (a click switches)": the longer one is tried first.)
+    "Keyboard: %s" to "Клавиатура: %s",
 )
