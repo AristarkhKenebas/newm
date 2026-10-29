@@ -51,8 +51,8 @@ fun interface Interpolation<T> {
 
 private val confSizeAdjustment = configuredValue("interpolation.size_adjustment", .5)
 
-// view { crispResize = true }: a window being resized drawn at its own size, not stretched (false: as newm).
-private val confCrispResize = configuredValue("view.crisp_resize", true)
+// view { crispResize = true }: a window being resized drawn at its own size, not stretched (false, the default: as newm).
+private val confCrispResize = configuredValue("view.crisp_resize", false)
 
 class LayoutDownInterpolation(state0: LayoutDown, state1: LayoutDown) : Interpolation<LayoutDown> {
     private val lock = state0.lockPerc to state1.lockPerc

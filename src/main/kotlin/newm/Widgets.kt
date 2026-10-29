@@ -38,30 +38,22 @@ private val log = Logger("widgets")
 fun textureOf(renderer: Renderer, image: BufferedImage): GpuTexture {
     val w = image.width
     val h = image.height
-    val texture = renderer.createTexture(w, h)
-    val row = IntArray(w)
-    val bytes = ByteArray(w * h * 4)
-    var at = 0
-    for (y in 0 until h) {
-        image.getRGB(0, y, w, 1, row, 0, w)
-        for (argb in row) {
-            val a = argb ushr 24 and 0xff
-            if (a == 255) {
-                bytes[at] = argb.toByte()
-                bytes[at + 1] = (argb ushr 8).toByte()
-                bytes[at + 2] = (argb ushr 16).toByte()
-            } else {
-                bytes[at] = ((argb and 0xff) * a / 255).toByte()
-                bytes[at + 1] = ((argb ushr 8 and 0xff) * a / 255).toByte()
-                bytes[at + 2] = ((argb ushr 16 and 0xff) * a / 255).toByte()
-            }
-            bytes[at + 3] = a.toByte()
-            at += 4
-        }
+    // Java2D turns any picture into premultiplied ARGB ints in one go (its own fast loops, not a
+    // colour model asked pixel by pixel: a wallpaper took half a second of the compositor's
+    // thread). An ARGB int in this little-endian memory is B, G, R, A: as the GPU takes it.
+    val pre = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB_PRE)
+    val g = pre.createGraphics()
+    try {
+        g.composite = java.awt.AlphaComposite.Src
+        g.drawImage(image, 0, 0, null)
+    } finally {
+        g.dispose()
     }
+    val ints = (pre.raster.dataBuffer as java.awt.image.DataBufferInt).data
+    val texture = renderer.createTexture(w, h)
     Arena.ofConfined().use { arena ->
-        val pixels = arena.allocate(bytes.size.toLong())
-        MemorySegment.copy(bytes, 0, pixels, ValueLayout.JAVA_BYTE, 0, bytes.size)
+        val pixels = arena.allocate(w.toLong() * h * 4, 4)
+        MemorySegment.copy(ints, 0, pixels, ValueLayout.JAVA_INT_UNALIGNED.withOrder(java.nio.ByteOrder.LITTLE_ENDIAN), 0, w * h)
         texture.upload(pixels, 0, h)
     }
     return texture

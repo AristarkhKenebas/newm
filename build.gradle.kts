@@ -26,6 +26,26 @@ tasks.withType<JavaCompile>().configureEach {
     options.release = bytecodeVersion
 }
 
+// The Kotlin compiler's jars (hundreds of megabytes once loaded) are not on newm's class path:
+// config.kts is compiled by a Java of its own (KtsConfig) with them, from lib/compiler. newm
+// itself only loads the compiled script.
+val compilerModules = listOf("kotlin-compiler-embeddable", "kotlin-scripting-compiler-embeddable", "kotlin-scripting-compiler-impl-embeddable", "kotlin-daemon-embeddable", "kotlin-build-tools-api")
+val scriptCompiler: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    // (The jars as newm's own are resolved: for running on the JVM, the same versions.)
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objects.named(TargetJvmEnvironment.STANDARD_JVM))
+    }
+    shouldResolveConsistentlyWith(configurations.runtimeClasspath.get())
+}
+configurations.runtimeClasspath {
+    for (module in compilerModules) exclude(group = "org.jetbrains.kotlin", module = module)
+}
+
 dependencies {
     implementation(libs.caulis.wm)
     implementation(libs.caulis.compose)
@@ -36,6 +56,9 @@ dependencies {
     implementation(libs.kotlin.scripting.common)
     implementation(libs.kotlin.scripting.jvm)
     implementation(libs.kotlin.scripting.jvm.host)
+
+    // The Kotlin compiler (for config.kts): run in a Java of its own, never inside newm.
+    scriptCompiler(libs.kotlin.scripting.jvm.host)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -52,10 +75,39 @@ tasks.test {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
+// The memory options of newm's Java (see application below).
+val NEWM_GC_OPTIONS = listOf(
+    "-XX:+UseG1GC", "-Xms16m", "-Xmx1g", "-XX:SoftMaxHeapSize=96m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=20",
+    "-XX:G1PeriodicGCInterval=30000", "-XX:MaxMetaspaceSize=384m",
+)
+
 application {
     mainClass = "newm.MainKt"
     applicationName = "newm"
-    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "-XX:+UseZGC")
+    // Java's memory for a program that runs all day beside others (measured headless with a few
+    // windows: ~20 MB live): G1, with short pauses, aiming at under 96 MB of heap (more only
+    // while it is needed: SoftMaxHeapSize) and giving back what it does not use — kept at most
+    // 20% above what is used, looked at every 30 seconds when nothing else made it collect; at
+    // most 1 GB, never Java's default of a quarter of the computer's memory (4.9 GB were seen).
+    // (Measured: ZGC kept ~350 MB of heap, ~700 MB in all; Serial paused up to 40 ms — dropped
+    // frames.) More options: JAVA_OPTS or NEWM_OPTS; NEWM_GC_OPTS replaces these memory options
+    // (another collector: NEWM_GC_OPTS="-XX:+UseZGC -Xmx1g").
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED") + NEWM_GC_OPTIONS
+}
+
+// The compiler's jars (those newm does not have itself) in lib/compiler.
+distributions {
+    main {
+        contents {
+            into("lib/compiler") {
+                val own = configurations.runtimeClasspath
+                from(scriptCompiler.incoming.files.elements.zip(own.flatMap { it.incoming.files.elements }) { all, mine ->
+                    val names = mine.map { it.asFile.name }.toSet()
+                    all.map { it.asFile }.filter { it.name !in names }
+                })
+            }
+        }
+    }
 }
 
 // `newm --version` says it.
@@ -74,6 +126,8 @@ tasks.processResources {
 // With none, it says what to install instead of Java's own error.
 tasks.startScripts {
     val needed = bytecodeVersion
+    // NEWM_GC_OPTS: your memory options instead of newm's (another collector, another size).
+    val gcOptions = NEWM_GC_OPTIONS.joinToString(" ") { "\"$it\"" }
     doLast {
         val find = """
             |# newm needs Java $needed or newer: found here when JAVA_HOME and `java` are older.
@@ -204,7 +258,15 @@ tasks.startScripts {
             |    newm_aot
             |done
             """.trimMargin()
-        val withJava = text.substring(0, at + 1) + find + aot + text.substring(at + 1)
+        val defaults = text.lines().firstOrNull { it.startsWith("DEFAULT_JVM_OPTS=") }
+        check(defaults != null && gcOptions in defaults) { "the start script changed: newm's memory options are not in it" }
+        val withGc = text.replace(defaults, defaults + "\n" + """
+            |if [ -n "${'$'}{NEWM_GC_OPTS:-}" ]; then
+            |    DEFAULT_JVM_OPTS=${'$'}(printf '%s' "${'$'}DEFAULT_JVM_OPTS" | sed 's|$gcOptions||')
+            |    JAVA_OPTS="${'$'}NEWM_GC_OPTS ${'$'}{JAVA_OPTS:-}"
+            |fi
+            """.trimMargin())
+        val withJava = withGc.substring(0, at + 1) + find + aot + withGc.substring(at + 1)
         check(launch in withJava) { "the start script changed: newm's restart loop is not in it" }
         script.writeText(withJava.replace(launch, restart))
     }

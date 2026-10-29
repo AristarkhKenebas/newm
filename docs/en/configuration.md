@@ -84,30 +84,18 @@ A change applies as soon as you save. A key of your own can switch too:
 ### Keys
 
 ```kotlin
+bind("Super+Backspace", "close-window")      // close the window with Super+Backspace too
+bind("Super+B", "launch", "firefox")
+unbind("Super+S")                            // a key of the template taken away
 keys {
-    "L-b"("Open the browser") { launch("firefox") }
-    "L-e" { launch("nautilus") }
+    "Super+E"("Files") { launch("nautilus") }   // with code of your own
 }
 ```
 
-Keys are written as newm has always written them:
-
-- `L` is Logo, `S` Shift, `C` Ctrl, `A` Alt;
-- `"L-S-s"` is Logo+Shift+s, and a capital letter means Shift too (`"L-S"` is the same);
-- `"L-"` is Logo tapped alone;
-- `"L-a L-b"` is Logo+a, then Logo+b;
-- key names are those of xkb: `Return`, `Escape`, `space`, `Tab`, `minus`, `equal`, `slash`,
-  `grave`, `Print`, `Left`, `F5`, `XF86AudioMute`, ...
-
-The words in `"L-b"("Open the browser")` are what the keys' help (Logo+/) shows; a key
-without words is left out of it. Keys starting with `XF86` (the laptop's) also work on the
-lock screen.
-
-**`keys { }` is your whole list.** A key you leave out of it does nothing; the starting
-`config.kts` lists all of newm's keys, so change them there.
-
-Inside `{ }` you can use everything the layout can do (`move(-1, 0)`, `toggleOverview()`,
-`screenshot()`, ...): the list is in [Every setting](settings.md#everything-a-key-can-do).
+Keys are written as you say them (`"Super+Shift+Q"`, `"Ctrl+Alt+T"`, any case; Super is also
+Logo, Win, Mod or Meta), actions by name (`close-window`, `launch`, `fullscreen`, ...). newm's
+old way (`"L-q"`, `"L-S-h"`) works too. Every key name and action, and ready-made sets:
+[Key bindings](keys.md). `newm cmd keys` lists the keys bound now.
 
 ### Some windows float, some get blur
 
@@ -298,13 +286,16 @@ view {
     padding = 8.0
     unfocusedOpacity = 0.9       // windows without the focus a little see-through
     fade = true                  // windows fade in and out
-    fillFirst = true             // the first window takes the whole screen
-    placeBesideFocused = true    // a new window goes right of yours (false: the first free tile in view)
-    resizePushes = true          // a window made bigger pushes its neighbours (false: stacks on them)
-    crispResize = true           // a window being resized is drawn at its own size, not stretched
-    minSizeKeepsShape = true     // a program bigger than its tile is drawn in the tile's shape, shrunk
-    minSizeShrink = 0.6          // ... down to this part of its smallest size
+    fillFirst = false            // true: the first window takes the whole screen (false: a quarter, as newm)
+    resizePushes = false         // true: a window made bigger by keys pushes its neighbours aside
+    crispResize = false          // true: a window being resized is drawn at its own size, not stretched
+    fitDrawnSize = false         // true: a program that drew another size is fitted in its shape, not stretched
     floatingMinSize = true       // a floating window that asks for no size opens at its smallest
+}
+windows {
+    newPlacement = "right-of-focused"  // or "beside-focused", "end", "original" (newm's)
+    childPlacement = "below"           // a dialog, a photo viewer: "below" its window, "right", "over" (floating, as newm)
+    returnFocusToParent = true         // closing it gives the focus back to its window
 }
 focus {
     color = "auto"               // the colours' accent; or "#RRGGBB" / "#RRGGBBAA"

@@ -2,7 +2,8 @@
 
 **English** · [Русский](../ru/animations.md)
 
-newm's animations are **off by default**: a window opening, the view moving, the overview, a
+The starting `config.kts` turns newm's animations **on** (`animations { preset = "newm" }`).
+Without that line they are off: a window opening, the view moving, the overview, a
 menu — every change is there at once. Fingers are still followed exactly: a swipe or a pinch
 moves the view with them; only what comes after they lift (the snap) and their smoothing are
 animations.

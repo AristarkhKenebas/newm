@@ -1,0 +1,666 @@
+# The notes of config.kts in Russian: each "en:" line is a note of config.kts as it is there,
+# the "ru:" line under it the same in Russian. A test checks that every note has its line here.
+# Another language: a file config.<language>.txt like this one, and its name in TemplateText.LANGUAGES.
+
+en: newm — your configuration (~/.config/newm/config.kts).
+ru: newm — ваша конфигурация (~/.config/newm/config.kts).
+
+en: newm made this file the first time it started. Change anything and save: newm takes it on
+ru: newm создал этот файл при первом запуске. Измените что угодно и сохраните: newm применит это
+
+en: at once, no need to log out. A mistake shows up on screen with its line, and the settings
+ru: сразу, выходить из сеанса не нужно. Ошибка покажется на экране со своей строкой, а прежние
+
+en: before stay until it is fixed. Lines starting with // are notes or settings turned off:
+ru: настройки останутся, пока её не исправить. Строки, начинающиеся с //, — заметки или выключенные
+
+en: remove the // in front of a setting to use it.
+ru: настройки: уберите // перед настройкой, чтобы её включить.
+
+en: newm in short: windows are tiles on an endless wall. The screen shows a part of the wall —
+ru: newm коротко: окна — плитки на бесконечной стене. Экран показывает часть стены —
+
+en: zoom out (Logo+u, four fingers up) to see more of it, in (Logo+n) to see less. A new window
+ru: отдалите вид (Logo+u, четыре пальца вверх), чтобы видеть больше, приблизьте (Logo+n) — меньше. Новое окно
+
+en: opens right of the one you are in. Logo alone shows everything (the overview).
+ru: открывается справа от того, в котором вы. Одна клавиша Logo показывает всё (обзор).
+
+en: The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/README.md
+ru: Руководство: https://github.com/AristarkhKenebas/newm/blob/master/docs/ru/README.md
+
+en: Every setting: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/settings.md
+ru: Все настройки: https://github.com/AristarkhKenebas/newm/blob/master/docs/ru/settings.md
+
+en: --- Looks -----------------------------------------------------------------------------------
+ru: --- Внешний вид ------------------------------------------------------------------------------
+
+en: newm's own; or "~/Pictures/wallpaper.jpg" (an SVG stays sharp)
+ru: обои newm; или "~/Pictures/wallpaper.jpg" (SVG остаётся чётким)
+
+en: "follow": moves and zooms with the view; "static": stands still
+ru: "follow": двигаются и масштабируются вместе с видом; "static": стоят на месте
+
+en: how quickly it follows (seconds)
+ru: как быстро они следуют (секунды)
+
+en: the screen's own corners rounded (0: square)
+ru: скругление углов самого экрана (0: прямые)
+
+en: "auto" (the quick settings' choice), "dark" or "light"
+ru: "auto" (выбор в быстрых настройках), "dark" или "light"
+
+en: newm's menus: "auto" (the system's), "en" or "ru"
+ru: меню newm: "auto" (как в системе), "en" или "ru"
+
+en: times in the menus and on the lock screen ("h:mm a": 3:45 PM)
+ru: время в меню и на экране блокировки ("h:mm a": 3:45 PM)
+
+en: The colours of the bar, the menus and the focus border: made from the wallpaper, as phones do.
+ru: Цвета панели, меню и рамки фокуса: из обоев, как на телефонах.
+
+en: The quick settings (the bar's grid button) choose among them; set them here to keep them fixed.
+ru: Быстрые настройки (кнопка-сетка на панели) выбирают среди них; задайте их здесь, чтобы закрепить.
+
+en: "wallpaper", "nord" (the classic ones) or "#5b8cc8"
+ru: "wallpaper", "nord" (классические) или "#5b8cc8"
+
+en: "tonal", "vibrant", "expressive", "neutral", "monochrome"
+ru: "tonal", "vibrant", "expressive", "neutral", "monochrome"
+
+en: --- Animations ------------------------------------------------------------------------------
+ru: --- Анимации ---------------------------------------------------------------------------------
+
+en: newm's usual animations are on: windows glide to their places, the view glides when it moves.
+ru: Обычные анимации newm включены: окна плавно встают на места, вид плавно движется.
+
+en: Turn them off with preset = "none" (every change is there at once; fingers are still followed).
+ru: Выключить: preset = "none" (всё меняется сразу; за пальцами вид всё равно следует).
+
+en: As in Hyprland, each can be changed by name: a setting for a name is for those under it too
+ru: Как в Hyprland, каждую можно изменить по имени: настройка имени действует и на те, что под ним
+
+en: ("windows" for windowsIn, windowsOut, ...), unless they say otherwise. Each takes enabled,
+ru: ("windows" — на windowsIn, windowsOut, ...), если они не говорят иного. Каждая принимает enabled,
+
+en: its time in millis, a curve by its name and, for the menus and cards, a look (style): "fade",
+ru: своё время в millis, кривую по имени и, для меню и карточек, вид (style): "fade",
+
+en: "popin 90%", "slide up 20". Curves: "linear" (newm's own), "ease-out", "ease-in-out",
+ru: "popin 90%", "slide up 20". Кривые: "linear" (собственная newm), "ease-out", "ease-in-out",
+
+en: "smooth", "overshoot" (a little past and back), or your own: a Bézier curve with Hyprland's
+ru: "smooth", "overshoot" (чуть дальше и назад) или своя: кривая Безье с числами Hyprland
+
+en: numbers, or a spring.
+ru: или пружина.
+
+en: newm's usual animations; "none": all off
+ru: обычные анимации newm; "none": все выключены
+
+en: all on (as preset = "newm"); false: all off
+ru: все включены (как preset = "newm"); false: все выключены
+
+en: the global time (ms) of those without their own
+ru: общее время (мс) тех, у кого нет своего
+
+en: the global curve
+ru: общая кривая
+
+en: a curve of your own, used below by its name
+ru: своя кривая, ниже используется по имени
+
+en: Windows (time: the global one, 300 ms; curve: linear)
+ru: Окна (время: общее, 300 мс; кривая: linear)
+
+en: all window animations below
+ru: все анимации окон ниже
+
+en: a window appearing: it takes its place, the others make room
+ru: окно появляется: встаёт на место, остальные расступаются
+
+en: a window closing: the others take its place
+ru: окно закрывается: остальные занимают его место
+
+en: moved, resized, floating or tiled, side by side, onto another workspace
+ru: перемещено, изменён размер, плавает или в плитке, рядом, на другое рабочее пространство
+
+en: going fullscreen and back
+ru: переход в полный экран и обратно
+
+en: moved or resized with the mouse or fingers: settling on the grid when let go
+ru: перемещено или изменено мышью или пальцами: встаёт на сетку, когда отпустили
+
+en: The view and gestures
+ru: Вид и жесты
+
+en: the view moving: to the next window, zooming in and out, a bar coming
+ru: вид движется: к следующему окну, отдаление и приближение, появление панели
+
+en: the overview opening and closing (Logo alone)
+ru: обзор открывается и закрывается (одна Logo)
+
+en: after a swipe or pinch: gliding on to where it settles (time from the fingers' speed)
+ru: после свайпа или щипка: доезжает туда, где остановится (время от скорости пальцев)
+
+en: fingers smoothed: the view follows softly (75 ms); off: exactly under them
+ru: сглаживание пальцев: вид следует мягко (75 мс); выключено: точно под пальцами
+
+en: newm's own parts
+ru: Собственные части newm
+
+en: the focus border gliding to the focused window (300 ms)
+ru: рамка фокуса переезжает к окну в фокусе (300 мс)
+
+en: the lock screen sliding in (the screen is locked before) and out
+ru: экран блокировки въезжает (экран заблокирован раньше) и уезжает
+
+en: the launcher coming and going (ease-out)
+ru: лаунчер появляется и исчезает (ease-out)
+
+en: its first rows coming in one after another (220 ms)
+ru: его первые строки появляются одна за другой (220 мс)
+
+en: the wallpaper gliding behind the view (150 ms)
+ru: обои плывут за видом (150 мс)
+
+en: the wallpaper fading in the first time (600 ms)
+ru: обои проявляются в первый раз (600 мс)
+
+en: newm fading in after it started and out when it quits (1 s)
+ru: newm проявляется после запуска и гаснет при выходе (1 с)
+
+en: windows of the last session going back to their places
+ru: окна прошлого сеанса возвращаются на свои места
+
+en: the screen's brightness gliding to a new level
+ru: яркость экрана плавно переходит к новому уровню
+
+en: The bar, menus and cards: each "...In" and "...Out" on its own too (times: in / out)
+ru: Панель, меню и карточки: у каждой "...In" и "...Out" и по отдельности (время: появление / исчезновение)
+
+en: the bar's menus (280 / 180 ms); popupsResize: growing as they change
+ru: меню панели (280 / 180 мс); popupsResize: рост при изменении
+
+en: a look: "fade", "popin 90%", "slide up 20", "slide down 8"
+ru: вид: "fade", "popin 90%", "slide up 20", "slide down 8"
+
+en: notification cards (260 / 220 ms)
+ru: карточки уведомлений (260 / 220 мс)
+
+en: the volume and brightness slider and toasts (140 / 220 ms)
+ru: ползунок громкости и яркости и всплывающие надписи (140 / 220 мс)
+
+en: the clipboard's history, Logo+V (260 / 180 ms)
+ru: история буфера обмена, Logo+V (260 / 180 мс)
+
+en: the keys' help, Logo+/ (260 / 180 ms)
+ru: подсказка по клавишам, Logo+/ (260 / 180 мс)
+
+en: small motions: hover, toggles, lists scrolling, the refresh icon turning
+ru: мелкие движения: наведение, переключатели, прокрутка списков, вращение значка обновления
+
+en: fading in at the start, out at the end (seconds)
+ru: проявление при запуске, угасание при выходе (секунды)
+
+en: --- Windows ---------------------------------------------------------------------------------
+ru: --- Окна ---------------------------------------------------------------------------------------
+
+en: windows' corners (bigger cuts into what programs draw at their edges)
+ru: углы окон (больше — сильнее срезает то, что программы рисуют у краёв)
+
+en: the gap around each window
+ru: промежуток вокруг каждого окна
+
+en: the gap around a fullscreen window
+ru: промежуток вокруг окна в полном экране
+
+en: windows without the focus a little see-through (1.0: not)
+ru: окна без фокуса немного прозрачные (1.0: нет)
+
+en: windows fade in and out
+ru: окна плавно появляются и исчезают
+
+en: programs are told when they are fullscreen
+ru: программам сообщается, что они в полном экране
+
+en: programs may ask for it (a video's button)
+ru: программы могут попросить о нём (кнопка у видео)
+
+en: floating windows open at their smallest size
+ru: плавающие окна открываются наименьшими
+
+en: true: the first window fills the screen (false: a quarter, as newm)
+ru: true: первое окно занимает весь экран (false: четверть, как в newm)
+
+en: true: a window made bigger by keys pushes its neighbours aside
+ru: true: окно, увеличенное клавишами, раздвигает соседей
+
+en: true: a window being resized is drawn at its own size, not stretched
+ru: true: окно при изменении размера рисуется в своём размере, не растягивается
+
+en: true: a program that drew another size is fitted in its shape, not stretched
+ru: true: программа, нарисовавшая другой размер, вписывается в своей форме, не растягивается
+
+en: true: fullscreen stays when the view moves away
+ru: true: полный экран остаётся, когда вид уходит от окна
+
+en: Rules for some windows, decided when they open (their app id: `newm cmd debug` lists them).
+ru: Правила для некоторых окон, решаются при открытии (их app id показывает `newm cmd debug`).
+
+en: See-through terminals with what is behind them blurred (set the terminal's own
+ru: Прозрачные терминалы с размытым фоном за ними (задайте и прозрачность
+
+en: opacity too, for alacritty that is window.opacity = 0.85).
+ru: самого терминала, для alacritty это window.opacity = 0.85).
+
+en: Where windows open.
+ru: Где открываются окна.
+
+en: right of yours, the rest move on; "beside-focused", "end", "original" (newm's)
+ru: справа от вашего, остальные сдвигаются; "beside-focused", "end", "original" (как в newm)
+
+en: a dialog or a photo viewer: "below" its window, "right", "over" (floating, as newm)
+ru: диалог или просмотр фото: "below" — под своим окном, "right", "over" (плавает, как в newm)
+
+en: closing it gives the focus back to its window
+ru: при закрытии фокус возвращается его окну
+
+en: a window of the focused program without a parent (Telegram's viewer) is its child
+ru: окно программы в фокусе без родителя (просмотр Telegram) — её дочернее
+
+en: but not for these: their windows are their own
+ru: но не для этих: их окна — самостоятельные
+
+en: a line around the focused window
+ru: линия вокруг окна в фокусе
+
+en: "auto": the colours' accent; or "#RRGGBB" / "#RRGGBBAA" (see-through)
+ru: "auto": акцент цветов; или "#RRGGBB" / "#RRGGBBAA" (полупрозрачный)
+
+en: how far outside the window
+ru: насколько снаружи окна
+
+en: the line glides to the next window
+ru: линия переезжает к следующему окну
+
+en: a gradient, written as Hyprland's col.active_border
+ru: градиент, записанный как col.active_border в Hyprland
+
+en: a window wanting attention, not focused
+ru: окно, просящее внимания, без фокуса
+
+en: your own GLSL (next to this file), read again when saved;
+ru: свой GLSL (рядом с этим файлом), перечитывается при сохранении;
+
+en: with vec4 paint(vec2 at): progress, time, size and colors are at hand
+ru: в vec4 paint(vec2 at) доступны progress, time, size и colors
+
+en: false: the shader's own time stands still
+ru: false: собственное время шейдера стоит на месте
+
+en: The overview (Logo alone): every window at once.
+ru: Обзор (одна Logo): все окна сразу.
+
+en: true: the windows take clicks there
+ru: true: окна в обзоре получают щелчки
+
+en: a click chooses a window and ends the overview
+ru: щелчок выбирает окно и заканчивает обзор
+
+en: the window under the pointer is the chosen one
+ru: выбранное окно — то, что под указателем
+
+en: Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own,
+ru: Особые рабочие пространства ("special" в Hyprland): слой над стеной со своими окнами,
+
+en: shown with the keys below (Logo+grave).
+ru: показывается клавишами ниже (Logo+grave).
+
+en: the wall behind darker
+ru: стена за ним темнее
+
+en: and blurred (0: not)
+ru: и размыта (0: нет)
+
+en: room to the screen's edges
+ru: отступ от краёв экрана
+
+en: how much of the screen
+ru: какую часть экрана занимает
+
+en: windows opening while it is shown go into it
+ru: окна, открытые, пока оно показано, попадают в него
+
+en: --- The bar and panels ----------------------------------------------------------------------
+ru: --- Панель и экраны ---------------------------------------------------------------------------
+
+en: newm's own bar at the top: see-through islands floating at the edge — the focused window,
+ru: Собственная панель newm сверху: полупрозрачные острова у края — окно в фокусе,
+
+en: the clock (click: the calendar), the tray (background programs) and the network, volume,
+ru: часы (щелчок: календарь), трей (фоновые программы) и сеть, громкость,
+
+en: battery, notifications and power.
+ru: батарея, уведомления и питание.
+
+en: an island's height
+ru: высота острова
+
+en: the gap to the screen's edges
+ru: промежуток до краёв экрана
+
+en: "auto" (follows light or dark), "light", "dark"
+ru: "auto" (следует светлой или тёмной теме), "light", "dark"
+
+en: also "wall": a small map of your wall
+ru: ещё "wall": маленькая карта вашей стены
+
+en: java.time patterns: "h:mm a", "HH:mm:ss"
+ru: шаблоны java.time: "h:mm a", "HH:mm:ss"
+
+en: "" for none
+ru: "" — без даты
+
+en: the battery's percent beside it
+ru: процент батареи рядом с ней
+
+en: and islandColor, textColor: your own colours
+ru: и islandColor, textColor: ваши цвета
+
+en: shown by the module "texts"
+ru: показывается модулем "texts"
+
+en: the original newm's bar (bars/classic.kts)
+ru: панель исходного newm (bars/classic.kts)
+
+en: A bar at the bottom too:
+ru: Панель ещё и снизу:
+
+en: Or a bar program of your own instead (turn topBar off then; a waybar in newm's look
+ru: Или вместо неё своя программа-панель (тогда выключите topBar; waybar в стиле newm
+
+en: is in bars/waybar of this folder):
+ru: лежит в bars/waybar этой папки):
+
+en: its size: parts of the screen
+ru: его размер: доли экрана
+
+en: how many programs you start most are shown first
+ru: сколько самых запускаемых программ показывается первыми
+
+en: programs left out of it
+ru: программы, которых в нём нет
+
+en: Notifications of programs (Telegram's messages, a download done): cards at the top right,
+ru: Уведомления программ (сообщения Telegram, готовая загрузка): карточки справа сверху,
+
+en: a history behind the bar's bell.
+ru: история за колокольчиком на панели.
+
+en: false: leave them to mako or dunst
+ru: false: оставить их mako или dunst
+
+en: how long a card stays
+ru: сколько держится карточка
+
+en: true: no cards, only the history
+ru: true: без карточек, только история
+
+en: or "top_left", "top", "bottom_right", "bottom_left", "bottom"
+ru: или "top_left", "top", "bottom_right", "bottom_left", "bottom"
+
+en: What shows on the screen by itself.
+ru: Что показывается на экране само.
+
+en: Wi-Fi, a cable or Bluetooth coming or going: "cards", "text" or "off"
+ru: Wi-Fi, кабель или Bluetooth подключились или отключились: "cards", "text" или "off"
+
+en: how long the volume and brightness slider shows
+ru: сколько показывается ползунок громкости и яркости
+
+en: where: "bottom", "top", "center"
+ru: где: "bottom", "top", "center"
+
+en: The clipboard's history (Logo+V).
+ru: История буфера обмена (Logo+V).
+
+en: how many are kept (pinned ones on top of these)
+ru: сколько хранить (закреплённые — сверх этого)
+
+en: programs whose copies are never kept
+ru: программы, чьё скопированное никогда не хранится
+
+en: Screenshots (Logo+Shift+S or Print: choose; Logo+Print: the screen; Alt+Print: the window).
+ru: Снимки экрана (Logo+Shift+S или Print: выбрать; Logo+Print: экран; Alt+Print: окно).
+
+en: the chooser starts choosing a part; W chooses a window
+ru: выбор начинается с области; W выбирает окно
+
+en: true: it starts with the kind used last
+ru: true: начинать с вида, выбранного в прошлый раз
+
+en: true: a click (not a drag) takes the window under it
+ru: true: щелчок (не протягивание) берёт окно под указателем
+
+en: the pointer in the picture
+ru: указатель на снимке
+
+en: a command run with each file saved
+ru: команда, запускаемая с каждым сохранённым файлом
+
+en: --- Keyboard, mouse, monitors -----------------------------------------------------------
+ru: --- Клавиатура, мышь, мониторы -----------------------------------------------------------------
+
+en: Unset: the system's layouts (with Alt+Shift switching). Your own:
+ru: Не задано: раскладки системы (переключение Alt+Shift). Свои:
+
+en: Alt+Shift switches; "grp:caps_toggle": Caps Lock
+ru: Alt+Shift переключает; "grp:caps_toggle": Caps Lock
+
+en: Num Lock on from the start
+ru: Num Lock включён с самого начала
+
+en: the window under the mouse gets the keyboard (false: a click)
+ru: окно под мышью получает клавиатуру (false: по щелчку)
+
+en: X11 programs
+ru: программы X11
+
+en: Logo + left drag moves a window, Logo + right drag resizes it
+ru: Logo + тянуть левой кнопкой двигает окно, Logo + тянуть правой меняет размер
+
+en: hideAfter: seconds the mouse is still
+ru: hideAfter: сколько секунд мышь неподвижна
+
+en: A monitor of its own (connectors: `newm cmd debug`):
+ru: Свой монитор (разъёмы показывает `newm cmd debug`):
+
+en: --- Keys ------------------------------------------------------------------------------------
+ru: --- Клавиши ------------------------------------------------------------------------------------
+
+en: A key in one line: bind("Super+Backspace", "close-window"). Keys are written as you say them:
+ru: Клавиша в одну строку: bind("Super+Backspace", "close-window"). Клавиши пишутся, как вы их называете:
+
+en: Super (also Logo, Win), Ctrl, Alt, Shift and a key: a letter, a digit, Return, Space, Tab,
+ru: Super (а также Logo, Win), Ctrl, Alt, Shift и клавиша: буква, цифра, Return, Space, Tab,
+
+en: Escape, Backspace, Delete, Left, F1, Print and so on (case does not matter). "Super" alone is
+ru: Escape, Backspace, Delete, Left, F1, Print и так далее (регистр не важен). Одна "Super" — это
+
+en: Super tapped. Every action's name: docs/en/keys.md; `newm cmd keys` lists the keys bound now,
+ru: нажатая отдельно Super. Имена всех действий: docs/ru/keys.md; `newm cmd keys` перечисляет назначенные клавиши,
+
+en: Logo+/ shows them. unbind("Super+Q") takes a key away. newm's own way works too, with any of
+ru: Logo+/ показывает их. unbind("Super+Q") убирает клавишу. Прежний способ newm тоже работает, с любыми
+
+en: newm's functions inside { }: see the last lines of this block.
+ru: функциями newm внутри { }: см. последние строки этого блока.
+
+en: $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
+ru: $TERMINAL, иначе первый установленный: alacritty, foot, kitty, ...; или "foot"
+
+en: Programs
+ru: Программы
+
+en: find and start a program
+ru: найти и запустить программу
+
+en: Going around: the window beside
+ru: По сторонам: соседнее окно
+
+en: windows on the same tiles
+ru: окна на одних и тех же плитках
+
+en: Seeing more or less of the wall
+ru: Видеть больше или меньше стены
+
+en: Super tapped alone: all windows
+ru: одна нажатая Super: все окна
+
+en: see more
+ru: видеть больше
+
+en: see fewer
+ru: видеть меньше
+
+en: the window fills the screen
+ru: окно заполняет экран
+
+en: two windows side by side, and back
+ru: два окна рядом и обратно
+
+en: Moving a window on the wall
+ru: Двигать окно по стене
+
+en: Its size, in tiles (one tile: a screen at zoom 1)
+ru: Его размер в плитках (одна плитка: экран при масштабе 1)
+
+en: Windows
+ru: Окна
+
+en: close with Super+Backspace too
+ru: закрывать и по Super+Backspace
+
+en: the clipboard's history
+ru: история буфера обмена
+
+en: the window floats, and back
+ru: окно плавает и обратно
+
+en: into the terminal that started it
+ru: в запустивший его терминал
+
+en: Monitors: each has a wall of its own
+ru: Мониторы: у каждого своя стена
+
+en: Special workspaces: a layer above the wall (see specialWorkspace above)
+ru: Особые рабочие пространства: слой над стеной (см. specialWorkspace выше)
+
+en: The session
+ru: Сеанс
+
+en: these keys
+ru: эти клавиши
+
+en: load this file again
+ru: загрузить этот файл заново
+
+en: The laptop's keys (they work on the lock screen too)
+ru: Клавиши ноутбука (работают и на экране блокировки)
+
+en: Screenshots, as Windows has them
+ru: Снимки экрана, как в Windows
+
+en: choose a part, a window or the screen
+ru: выбрать область, окно или экран
+
+en: A Hyprland-like set, ready to use: remove the // in front of the lines you want.
+ru: Набор как в Hyprland, готовый к использованию: уберите // перед нужными строками.
+
+en: the first window, and so on
+ru: первое окно, и так далее
+
+en: a key of newm's taken away
+ru: клавиша newm убрана
+
+en: Or with code of your own inside { }:
+ru: Или со своим кодом внутри { }:
+
+en: --- Gestures (touchpads) ----------------------------------------------------------------------
+ru: --- Жесты (тачпады) ---------------------------------------------------------------------------
+
+en: Three fingers move over the wall, four zoom (up and down), five open the launcher,
+ru: Три пальца двигают по стене, четыре масштабируют (вверх и вниз), пять открывают лаунчер,
+
+en: Logo with one finger moves a window and with two resizes it.
+ru: Logo с одним пальцем двигает окно, с двумя — меняет его размер.
+
+en: move over the wall
+ru: двигаться по стене
+
+en: up and down: zoom
+ru: вверх и вниз: масштаб
+
+en: Logo + fingers: move, resize
+ru: Logo + пальцы: двигать, менять размер
+
+en: what a gesture does, shown at the bottom while it runs
+ru: что делает жест, показывается внизу, пока он идёт
+
+en: smoother (and slower) feel
+ru: мягче (и медленнее)
+
+en: Gestures of your own: the way the fingers go first decides; other ways stay newm's own.
+ru: Свои жесты: решает, куда пальцы пошли сначала; другие направления остаются жестами newm.
+
+en: --- The start ------------------------------------------------------------------------------------
+ru: --- Запуск --------------------------------------------------------------------------------------
+
+en: Programs started with the session: one after another once newm is shown, once per session
+ru: Программы, запускаемые с сеансом: одна за другой, когда newm показан, раз за сеанс
+
+en: (saving this file starts only what you added). `newm cmd autostart` lists them.
+ru: (сохранение этого файла запускает только добавленное). `newm cmd autostart` их перечисляет.
+
+en: a bar of your own
+ru: своя панель
+
+en: a piece of shell
+ru: кусочек shell
+
+en: also the programs of ~/.config/autostart
+ru: ещё и программы из ~/.config/autostart
+
+en: Dark until newm is ready, then it fades in.
+ru: Темно, пока newm не готов, потом он проявляется.
+
+en: A sound as newm fades in: "airy", "classic", "glass", "soft", or a file of yours.
+ru: Звук, когда newm проявляется: "airy", "classic", "glass", "soft" или ваш файл.
+
+en: false: silent
+ru: false: тихо
+
+en: The windows opened again after `newm cmd restart keep` (and, if you like, after logging in).
+ru: Окна, открываемые снова после `newm cmd restart keep` (и, если хотите, после входа).
+
+en: true: your last session's windows come back at login
+ru: true: окна прошлого сеанса возвращаются при входе
+
+en: programs never started again
+ru: программы, которые никогда не запускаются снова
+
+en: --- When things happen --------------------------------------------------------------------------
+ru: --- Когда что-то происходит ------------------------------------------------------------------
+
+en: (or in autostart { } above)
+ru: (или в autostart { } выше)
+
+en: seconds without input: dim, lock, suspend
+ru: секунды без действий: затемнить, заблокировать, усыпить
+
+en: and the screens go dark (0: never)
+ru: и экраны гаснут (0: никогда)
+
+en: something of your own after so many seconds
+ru: что-то своё через столько-то секунд

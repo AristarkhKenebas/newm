@@ -16,10 +16,11 @@ of tiles, and the screen shows a part of it:
         the screen shows 2×2 tiles of it; zoom out to see more
 ```
 
-- The first window fills the screen. A new window goes **to the right of the one you are
-  in** (the first free tile in its row), and the view moves to it.
-- A new window always gets one ordinary tile, even after you made the grid finer by
-  making a window smaller (see [below](#sizes)).
+- The screen shows 2 × 2 tiles to start with; the first window takes one, in the middle. A
+  new window opens **to the right of the one you are in** (the windows right of it move one
+  tile on), and the view moves to it. A dialog or a photo viewer of a program opens **below
+  its window** (see [Where windows open](#where-windows-open)).
+- A new window gets one tile (more if its program cannot be that small).
 - **Zoom out** to see more tiles at once, **zoom in** to see fewer. The windows get their
   new size, so they stay usable at any zoom.
 - **Move** over the wall to reach the windows beside you.
@@ -72,7 +73,7 @@ Shortcuts work whatever the keyboard layout: Logo+D is Logo+D on the Russian lay
 The window under the mouse gets the keys (no need to click it); `input { focusFollowsMouse = false }`
 turns that off.
 
-All of them can be changed: see [Your configuration](configuration.md#keys).
+All of them can be changed, in words: `bind("Super+Backspace", "close-window")` — see [Key bindings](keys.md).
 
 ## Touchpad
 
@@ -108,20 +109,33 @@ Tap **Logo** alone: you see every window at once, small.
 
 ## Sizes
 
-- **Logo+Ctrl+arrows** make a window bigger or smaller by tiles. Making it bigger pushes its
-  neighbours aside.
-- A window as small as one tile can still be made narrower or shorter: the grid is made
-  finer first (each tile 2 × 2), and nothing moves on screen.
-- A window is never made smaller than its program allows. A program that cannot be as small
-  as its tile (Spotify will not go below 800 × 600) is drawn at its tile's shape, a little
-  bigger, and shrunk to fill the tile. No empty bands at its sides.
+- **Logo+Ctrl+arrows** make a window bigger or smaller by whole tiles; the window goes over
+  its neighbours, which make a stack (Logo+T goes through it). `view { resizePushes = true }`
+  makes them move aside instead. A window of one tile made narrower becomes two wide,
+  reaching left — as in newm.
+- A program that cannot be as small as its tile keeps its smallest size, drawn smaller to
+  fit its tile.
+- Zooming (Logo+−/=, four fingers) shows more or fewer tiles; the programs get their new size
+  when the zoom settles on whole tiles.
+
+## Where windows open
+
+- A new window opens right of the one you are in; the windows right of it move one tile on.
+  `windows { newPlacement = "original" }` brings back newm's: the first free tile in view.
+- A program's child window — a dialog, a file chooser, a photo viewer — opens **below its
+  window** (what is below moves down). A window without a parent counts as one too when the
+  program of the focused window opens it (Telegram's photo viewer). `windows { childPlacement
+  = "over" }` floats it over its window instead, as newm did; `"right"` puts it beside.
+- Closing a child window gives the focus back to its window.
+
+All of it: [Every setting](settings.md#windows-).
 
 ## Floating windows
 
 **Logo+Shift+V** takes a window off the wall: it floats above it, and Logo + drag moves it.
-Dialogs and some programs (mpv, pavucontrol, the calculator) float by themselves. A floating
-window keeps the size its program asks for; a program that asks for none opens at its
-smallest.
+Some programs (mpv, pavucontrol, the calculator) float by a rule, windows of a fixed size by
+themselves. A floating window keeps the size its program asks for; a program that asks for
+none opens at its smallest.
 
 ## Fullscreen
 
@@ -155,8 +169,9 @@ the configuration: `colorScheme = "light"`.
 
 ## Screenshots
 
-**Logo+Shift+S** or **Print** opens the chooser. The screen stands still, and a toolbar at
-the bottom offers:
+**Logo+Shift+S** or **Print** opens the chooser. The screen stands still: drag a frame over
+the part you want (a window is chosen with W or the toolbar's button, not by where the pointer
+happens to be). The toolbar at the bottom offers:
 
 | Kind | Key | What |
 |---|---|---|
@@ -220,3 +235,34 @@ extend, only the laptop, only the other one. The display key (F7 on many laptops
 
 **Logo+Shift+Escape** or "Log out" in the power menu. From another console (Ctrl+Alt+F3),
 `pkill newm` ends it too.
+
+## Differences from the original newm
+
+newm's window management is the original's (the Python newm, jbuchermn/newm): the same grid
+of whole tiles, the same zooming, swiping, snapping, overview, fullscreen and placement
+algorithm. What is different on purpose:
+
+- **Where new windows open**: right of the focused window, the rest moving on (the original:
+  the first free tile in view) — `windows { newPlacement = "original" }` for that.
+- **Child windows** (dialogs, viewers) are tiled below their window, and the focus goes back
+  to it when they close (the original floated every window with a parent over its middle) —
+  `windows { childPlacement = "over" }` for that. A window of the focused program without a
+  parent counts as its child (`childBySameApp`).
+- **Moving between windows from a dialog** starts from its window (the original started
+  from the wall's corner), and focusing a dialog keeps its window in view.
+- **Moving and resizing with Logo + a mouse button** (left: move, right: resize) instead of
+  Logo and the mouse alone (`mouse { superMove = "motion" }` for that); in the overview,
+  windows take no clicks — a click chooses one.
+- A window's **largest height** is kept when it is resized (the original took the smallest
+  width there: a slip).
+- **Bars at the left or right** of the screen keep their room too.
+- Fullscreen left by moving or zooming away tells the program it is not fullscreen any more.
+- Additions that change nothing by default: `view { fillFirst, resizePushes, crispResize,
+  fitDrawnSize, fade, unfocusedOpacity }`, `fitFocusedView` (Logo+0), `sideBySide` (Logo+S),
+  special workspaces, scratchpads, the bar, lock screen, launcher, notifications, clipboard,
+  screenshots, animations by name and autostart.
+
+Gone: the finer grid of an earlier newm in Kotlin (a window of one tile split into 2 × 2
+smaller ones, and growing back), with its settings `minSizeKeepsShape` and `minSizeShrink`
+(still accepted, doing nothing). It worked badly; a better way of smaller windows will come
+later.

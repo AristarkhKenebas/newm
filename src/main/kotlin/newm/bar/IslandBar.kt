@@ -277,7 +277,7 @@ class BarModel(val wm: Layout) {
     var osd by mutableStateOf<OsdShow?>(null)
     var toast by mutableStateOf<OsdShow?>(null)
 
-    /** Clock text, changed each second (the bar reads it). */
+    /** The time for the clock: changed when the clock's text changes (each minute, or second when it shows seconds), and each day. */
     var now by mutableStateOf(LocalDateTime.now())
         private set
 
@@ -315,8 +315,10 @@ class BarModel(val wm: Layout) {
         bluetooth.start()
         powerProfiles.start()
         wm.every(1000) {
+            // The clock changes only when what it shows would: once a minute with "HH:mm" (the
+            // bar is not drawn anew every second for seconds nobody sees), each second with seconds shown.
             val t = LocalDateTime.now()
-            if (t.minute != now.minute || t.second != now.second) now = t
+            if (t.toLocalDate() != now.toLocalDate() || clockPatterns.any { clockText(it, t) != clockText(it, now) }) now = t
             refreshModules()
             watchBattery()
             if (noticePlace != Triple(cardsCorner(), cardsWidth(), cardsGap())) applyNoticeStyle()
@@ -489,10 +491,18 @@ class BarModel(val wm: Layout) {
     }
 
     /** The bar's text of the clock ([pattern], java.time's), in the language of newm's words. */
-    fun clock(pattern: String): String = try {
-        now.format(DateTimeFormats.of(pattern))
+    fun clock(pattern: String): String {
+        if (pattern !in clockPatterns) clockPatterns += pattern
+        return clockText(pattern, now)
+    }
+
+    // The clock patterns the bars use (what [now] changes for).
+    private val clockPatterns = java.util.concurrent.CopyOnWriteArraySet<String>()
+
+    private fun clockText(pattern: String, at: LocalDateTime): String = try {
+        at.format(DateTimeFormats.of(pattern))
     } catch (_: IllegalArgumentException) {
-        now.format(DateTimeFormatter.ofPattern("HH:mm"))
+        at.format(DateTimeFormatter.ofPattern("HH:mm"))
     }
 
     // --- modules of the configuration's own (topBar { module("name") { } }) ---

@@ -34,13 +34,24 @@ object DataConfig {
             when (key) {
                 "keys" -> {
                     val keys = value as? Map<*, *> ?: problems.add("$name: keys is a table of combination = action").let { continue }
-                    val bindings = keys.entries.mapNotNull { (combo, action) ->
-                        val run = actionOf(action, caulis, "$name: keys.$combo", problems) ?: return@mapNotNull null
-                        combo.toString() to run
+                    // Keys as people write them ("Super+Backspace") or newm's ("L-BackSpace"); null or false: none.
+                    val bindings = LinkedHashMap<String, (Layout) -> Unit>()
+                    val help = LinkedHashMap<String, String>()
+                    for ((combo, action) in keys.entries) {
+                        val key = KeyNotation.toNewmOrNull(combo.toString(), "$name: keys", problems) ?: continue
+                        if (action == null || action == false) {
+                            bindings.remove(key)
+                            help.remove(key)
+                            continue
+                        }
+                        val run = actionOf(action, caulis, "$name: keys.$combo", problems) ?: continue
+                        bindings.remove(key)
+                        bindings[key] = run
+                        // The help (Logo+/) says a named action's words, else the action as it is written ("move -1 0").
+                        help[key] = (action as? String)?.let { a -> KeyActions.byName(a.trim().substringBefore(' '))?.description ?: a } ?: ""
                     }
                     out["key_bindings"] = { layout: Layout -> bindings.map { (combo, run) -> combo to { run(layout) } } }
-                    // The help (Logo+/) says the action as it is written ("move -1 0").
-                    out["key_help"] = keys.entries.map { (combo, action) -> combo.toString() to (action as? String ?: "") }
+                    out["key_help"] = help.toList()
                 }
                 "rules" -> {
                     val rules = (value as? List<*>)?.filterIsInstance<Map<*, *>>() ?: problems.add("$name: rules is a list of tables").let { continue }
@@ -61,7 +72,7 @@ object DataConfig {
                     k["numlock"]?.let { pywm["numlock"] = it }
                     k["binding_modifiers"]?.let { pywm["binding_modifiers"] = it }
                 }
-                // compositor { quit_while_locked, lock_failure, lock_show_millis, stop_programs_on_quit }.
+                // compositor { quit_while_locked, lock_failure, lock_show_millis, stop_programs_on_quit, config_compiler_* }.
                 "compositor" -> (value as? Map<*, *>)?.let { c ->
                     val pywm = section("pywm")
                     for (key in COMPOSITOR_KEYS) c[key]?.let { pywm[key] = it }
@@ -259,6 +270,11 @@ object DataConfig {
         val method = camelToSnake(word)
         // (The terminal asked for when the key is pressed: terminal = "..." of the configuration, then.)
         if (method == "terminal") return { _ -> caulis.launch(defaultTerminal()) }
+        // One of newm's actions by name ("close-window", "go-to-window 3"; see KeyActions).
+        KeyActions.byName(word)?.takeIf { method != "launch" && method !in layoutMethods }?.let { named ->
+            val args = rest.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            return { layout -> named.run(layout, args) }
+        }
         if (method == "launch") {
             if (rest.isEmpty()) return null.also { problems += "$where: launch needs a command (\"launch alacritty\")" }
             return { _ -> caulis.launch(rest) }
@@ -317,4 +333,4 @@ private val NATIVE_BAR_KEYS = setOf(
 private val MODULE_ACTIONS = setOf("on_click", "on_middle", "on_right", "on_scroll_up", "on_scroll_down")
 
 // The settings of compositor { } in config.json / config.lua.
-private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit")
+private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit", "config_compiler_jvm_options", "config_compiler_timeout_seconds")

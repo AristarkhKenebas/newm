@@ -50,6 +50,7 @@ window gets its new size, so it stays usable. Tap Logo alone to see all of them 
 ```nix
 # flake.nix
 inputs.newm.url = "github:AristarkhKenebas/newm";
+inputs.newm.inputs.nixpkgs.follows = "nixpkgs";   # optional and safe (never nixpkgs-gradle)
 
 # your NixOS configuration
 imports = [ newm.nixosModules.default ];

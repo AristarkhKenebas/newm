@@ -47,16 +47,26 @@ setting in use.
 | `acceptFullscreen` | `true` | programs may ask to be fullscreen (a video's button) |
 | `floatingMinSize` | `true` | a floating window whose program asks for no size opens at its smallest |
 | `borderWsSwitch` | `10.0` | how far past a monitor's edge a window is dragged before it moves to the next |
-| `fillFirst` | `true` | the first window fills the screen (`false`: a quarter, as the old newm) |
-| `placeBesideFocused` | `true` | a new window goes right of yours (`false`: the first free tile in view) |
+| `fillFirst` | `false` | the first window fills the screen (`false`: a quarter, zoomed out, as newm) |
 | `fade` | `true` | windows fade in and out |
 | `unfocusedOpacity` | `1.0` | how opaque windows without the focus are |
-| `resizePushes` | `true` | a window made bigger pushes its neighbours aside (`false`: stacks on them) |
-| `crispResize` | `true` | a window being resized is drawn at its own size, not stretched |
-| `minSizeKeepsShape` | `true` | a program bigger than its tile is drawn in the tile's shape and shrunk (`false`: its smallest size, fitted inside) |
-| `minSizeShrink` | `0.6` | how far such a program may be shrunk (1: never smaller than it allows) |
+| `resizePushes` | `false` | a window made bigger by keys pushes its neighbours aside (`false`: goes over them, as newm) |
+| `crispResize` | `false` | a window being resized by keys is drawn at its own size, not stretched (`false`: stretched, as newm) |
+| `fitDrawnSize` | `false` | a program that drew another size than asked is drawn in its own shape inside its place (`false`: stretched to it, as newm) |
 | `stickyFullscreen` | `false` | a fullscreen window stays fullscreen when the view moves or zooms away from it |
 | `rules { view -> ... }` | | rules for some windows: `rule(float, floatSize, floatPos, opacity, blur, focus)`, see [Your configuration](configuration.md#some-windows-float-some-get-blur) |
+
+## windows { }
+
+Where new windows and a program's child windows open (see [Everyday use](using.md#where-windows-open)).
+
+| Setting | Default | What |
+|---|---|---|
+| `newPlacement` | `"right-of-focused"` | a new window: `"right-of-focused"` (right of yours, the windows right of it move on), `"beside-focused"` (the first free tile right of yours, nothing moves), `"end"` (right of all windows), `"original"` (newm's: the first free tile in view, row by row) |
+| `childPlacement` | `"below"` | a child window (a dialog, a photo viewer): `"below"` its parent (what is below moves down), `"right"` of it, `"over"` it floating (as newm) |
+| `returnFocusToParent` | `true` | a child window closing gives the focus back to its parent (or to the window focused when it came); `false`: the nearest window, as newm |
+| `childBySameApp` | `true` | a window without a parent, opened by the program of the focused window (the same connection and app id, as Telegram's photo viewer), counts as its child |
+| `childBySameAppExcept` | terminals, browsers | app ids whose new windows are never children that way (`["foot", "kitty", "firefox", ...]`) |
 
 ## focus { }
 
@@ -247,6 +257,8 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `lockFailure` | `"own-lock"` | a lock that does not show: Caulis's own plain lock screen until a locker unlocks (Enter starts the locker again), or `"notice"`: only said |
 | `lockShowMillis` | `3000` | how long a lock may take to show before it counts as failed |
 | `stopProgramsOnQuit` | `true` | programs started inside are asked to end when newm quits |
+| `configCompilerJvmOptions` | `"-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"` | the Java options of the short-lived Java that compiles config.kts (the Kotlin compiler never runs inside newm); for the next compilation — a start's first takes the environment's `NEWM_CONFIG_COMPILER_OPTS` |
+| `configCompilerTimeoutSeconds` | `180` | at most this long for compiling config.kts, then it is stopped and said (a start's first: `NEWM_CONFIG_COMPILER_TIMEOUT`) |
 
 ## cursor { }
 
@@ -304,7 +316,9 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `save`, `copy` | `true`, `true` | saved as a file, put on the clipboard |
 | `pointer` | `false` | the pointer in the picture |
 | `toast` | `true` | a short message when one is taken |
-| `start` | the one used last | the chooser starts with `"region"`, `"window"` or `"screen"` |
+| `start` | `"region"` | the chooser starts with `"region"`, `"window"` or `"screen"` |
+| `rememberKind` | `false` | `true`: it starts with the kind used last instead (a window after a window) |
+| `clickPicksWindow` | `false` | `true`: a click (not a drag) while choosing an area takes the window under the pointer; else a window is chosen with W or its button |
 | `delay` | `0` | seconds to wait |
 | `selection` | `"adjust"` | an area: `"adjust"` (moved and resized after) or `"new"` (each drag a new one) |
 | `overviewStart` | `"windows"` | in the overview: `"windows"` (several, whole), `"region"`, `"window"`, `"screen"`, `""` (the last used) |
@@ -348,7 +362,7 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `showInFullscreen` | `false` | cards over a fullscreen window too |
 | `rule { n -> }` | | a rule (several: each in turn): `mute()` (the history only), `hide()` (not kept), `urgency(0..2)`, `seconds(n)`; in JSON a table (see [Notifications](configuration.md#notifications)) |
 | `onNotification { n -> }` | | told of each notification (`n.app`, `n.summary`, `n.body`, `n.urgency`) |
-| `takeOver` | `"stale"` | another daemon (mako, dunst) holding the notifications: `"stale"` closes one left from another session (started before newm, or on another display), `"always"` closes any, `"never"` leaves it (newm's own stay off until it quits) |
+| `takeOver` | `"stale"` | another daemon (mako, dunst) holding the notifications: `"stale"` closes one left from another session (started before newm, or on another display), `"always"` closes any, `"never"` leaves it (newm's own stay off until it quits). Only when newm runs on the screen as the session's compositor: nested or headless (tests) it never closes another daemon |
 
 ## sound { }, osd { }
 
@@ -357,6 +371,7 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `sound { maxVolume }` | `150` | the volume slider's top, percent |
 | `sound { wheelStep }` | `2` | percent a notch of the wheel over the bar's volume |
 | `sound { setVolume, getVolume }` | wpctl, else pactl | your own commands (`{percent}`) |
+| `sound { followVolume, volumeEverySeconds }` | `true`, `10` | the bar's volume follows the sound server's news of changes (`pactl subscribe`) instead of asking every few seconds; how often it asks (six times rarer while following) |
 | `osd { connections }` | `"cards"` | Wi-Fi, a cable or Bluetooth came or went: `"cards"`, `"text"`, `"off"` |
 | `osd { seconds, position, distance }` | `1.3`, `"bottom"`, `130` | how long the volume's or brightness' level shows; where (`"top"`, `"center"`), how far from that edge |
 | `osd { toastSeconds, cardSeconds }` | `1.6`, `2.8` | how long a short message and a connection's card show |
@@ -564,6 +579,7 @@ session bus):
 ```sh
 newm cmd debug                  # the layout: every window with its app id and place, the monitors
 newm cmd config                 # every setting in use
+newm cmd keys                   # every key bound now, as "Super+Shift+H  Move the window left"
 newm cmd update-config          # load the configuration again
 newm cmd lock                   # lock the screen
 newm cmd open-launcher          # the launcher (close-launcher closes it)

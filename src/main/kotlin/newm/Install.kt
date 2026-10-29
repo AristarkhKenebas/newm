@@ -153,24 +153,40 @@ object Templates {
         "bars/classic.kts", "bars/waybar/config.jsonc", "bars/waybar/style.css",
     )
 
-    /** Writes the templates into [dir] (what is there already stays). */
-    fun copyTo(dir: Path) {
+    /**
+     * Writes the templates into [dir] (what is there already stays), config.kts with its notes
+     * in [language] (the system's: Russian notes for a Russian system, else English).
+     */
+    fun copyTo(dir: Path, language: String = TemplateText.systemLanguage()) {
         for (name in FILES) {
             val target = dir.resolve(name)
             if (Files.exists(target)) continue
             Files.createDirectories(target.parent)
-            Templates::class.java.getResourceAsStream("/newm/templates/$name")!!.use { Files.copy(it, target) }
+            if (name == "config.kts") {
+                val english = Templates::class.java.getResourceAsStream("/newm/templates/$name")!!.use { String(it.readAllBytes()) }
+                Files.writeString(target, TemplateText.translate(english, language))
+                log.info { "config.kts written with its notes in \"$language\"" }
+            } else {
+                Templates::class.java.getResourceAsStream("/newm/templates/$name")!!.use { Files.copy(it, target) }
+            }
         }
     }
 
-    /** Copies the files of [from] (the system's /etc/newm) into [to] (what is there already stays). */
-    fun copyFolder(from: Path, to: Path) {
+    /**
+     * Copies the files of [from] (the system's /etc/newm) into [to] (what is there already
+     * stays); config.kts with the notes newm knows in [language].
+     */
+    fun copyFolder(from: Path, to: Path, language: String = TemplateText.systemLanguage()) {
         Files.walk(from).use { files ->
             for (file in files.filter(Files::isRegularFile).toList()) {
                 val target = to.resolve(from.relativize(file).toString())
                 if (Files.exists(target)) continue
                 Files.createDirectories(target.parent)
-                Files.copy(file, target)
+                if (from.relativize(file).toString() == "config.kts") {
+                    Files.writeString(target, TemplateText.translate(Files.readString(file), language))
+                } else {
+                    Files.copy(file, target)
+                }
                 // (Nix's files are read-only: the user's copy is theirs to change.)
                 target.toFile().setWritable(true, true)
             }

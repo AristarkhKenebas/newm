@@ -26,7 +26,31 @@ private val confEnabled = configuredValue("notifications.enabled", true)
 // notifications { takeOver }: another daemon holding the name — "stale" (the default: one left
 // from another session, started before newm or showing on another display, is closed),
 // "always" (any is closed), "never" (left alone; newm's own stay off until it quits).
+// Only on the screen: nested or headless newm never closes another daemon (see takeOverDecision).
 private val confTakeOver = configuredValue("notifications.take_over", "stale")
+
+/**
+ * Whether another notification daemon is closed for newm's own (notifications.takeOver [mode]):
+ * only when newm is the session's compositor (on the screen — never nested or headless, nor
+ * before it knows), then any with "always", with "stale" one of the same user started before
+ * newm or showing on another Wayland display; "never" (or anything else) leaves it alone.
+ */
+internal fun takeOverDecision(
+    mode: String,
+    backend: dev.caulis.wm.Caulis.Backend?,
+    alive: Boolean,
+    sameUser: Boolean,
+    startedBefore: Boolean,
+    otherDisplay: String?,
+    ourDisplay: String?,
+): Boolean {
+    if (backend != dev.caulis.wm.Caulis.Backend.SCREEN || !alive) return false
+    return when (mode.trim().lowercase()) {
+        "always" -> true
+        "stale" -> sameUser && (startedBefore || (otherDisplay != null && ourDisplay != null && otherDisplay != ourDisplay))
+        else -> false
+    }
+}
 
 // notifications { seconds = 6 }: how long a card stays when the program does not say.
 private val confSeconds = configuredValue("notifications.seconds", 6)
@@ -506,19 +530,28 @@ class NotificationCenter(private val model: BarModel) {
 
     // True if the daemon [pid] is to be closed for newm's own (notifications.takeOver): any with
     // "always"; with "stale" one started before newm, or showing on another Wayland display.
+    // (Never when newm runs nested or headless: then it is not the session's compositor, and
+    // the daemon is the live session's own — a test newm on the user's bus closed their mako.)
     private fun shouldTakeOver(pid: Int): Boolean {
-        val mode = confTakeOver().trim().lowercase()
-        if (mode == "always") return true
-        if (mode != "stale") return false
-        val other = ProcessHandle.of(pid.toLong()).orElse(null) ?: return false
-        if (other.info().user().orElse("") != ProcessHandle.current().info().user().orElse("?")) return false
-        val started = other.info().startInstant().orElse(null)
+        val backend = wm.caulis.runningBackend
+        val other = ProcessHandle.of(pid.toLong()).orElse(null)
+        val started = other?.info()?.startInstant()?.orElse(null)
         val ours = ProcessHandle.current().info().startInstant().orElse(null)
-        if (started != null && ours != null && started.isBefore(ours)) return true
         val display = runCatching { String(Files.readAllBytes(Path.of("/proc/$pid/environ"))) }.getOrNull()
             ?.split('\u0000')?.firstOrNull { it.startsWith("WAYLAND_DISPLAY=") }?.substringAfter('=')
-        val ourDisplay = wm.caulis.programEnvironment()["WAYLAND_DISPLAY"]
-        return display != null && ourDisplay != null && display != ourDisplay
+        val take = takeOverDecision(
+            mode = confTakeOver(),
+            backend = backend,
+            alive = other != null,
+            sameUser = other != null && other.info().user().orElse("") == ProcessHandle.current().info().user().orElse("?"),
+            startedBefore = started != null && ours != null && started.isBefore(ours),
+            otherDisplay = display,
+            ourDisplay = wm.caulis.programEnvironment()["WAYLAND_DISPLAY"],
+        )
+        if (!take && backend != null && backend != dev.caulis.wm.Caulis.Backend.SCREEN) {
+            log.info { "Not taking $NAME over: newm runs ${backend.name.lowercase()}, not as the session's compositor" }
+        }
+        return take
     }
 
     // notifications.enabled changed (a reload): the name taken or given back.

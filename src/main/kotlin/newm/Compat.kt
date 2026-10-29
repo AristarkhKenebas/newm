@@ -48,6 +48,9 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
             }
             "lock_show_millis" -> number { caulis.lockShowMillis = it.toLong().coerceIn(100, 60_000) }
             "stop_programs_on_quit" -> flag { caulis.stopProgramsOnQuit = it }
+            // newm's own: compositor { configCompilerJvmOptions, configCompilerTimeoutSeconds } (the next compilation of config.kts).
+            "config_compiler_jvm_options" -> text { KtsConfig.jvmOptions = it.trim().split(Regex("\\s+")).filter(String::isNotEmpty).ifEmpty { KtsConfig.DEFAULT_JVM_OPTIONS } }
+            "config_compiler_timeout_seconds" -> number { KtsConfig.timeoutSeconds = it.toLong().coerceIn(5, 3600) }
             // pywm's: programs draw their own title bars (true), or none are drawn at all.
             "encourage_csd" -> flag { caulis.titleBars = if (it) dev.caulis.core.TitleBars.PROGRAM else dev.caulis.core.TitleBars.NONE }
             else -> log.info { "pywm.$key: pywm's own (Caulis draws here), left out" }

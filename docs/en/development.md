@@ -24,12 +24,28 @@ legacy/                 the original Python newm, for reference
 With Caulis's sources next to this folder (`../caulis`), add `-Pcaulis.local=true` to build
 against them. `./install.sh` and `dev/newm-dev` do this by themselves.
 
-To try newm without leaving your desktop, run `build/install/newm/bin/newm` in a terminal.
-It opens as a window.
+To try newm without leaving your desktop, run it in a terminal on a D-Bus session of its own
+(so it never touches your desktop's notifications, tray or media keys); it opens as a window:
+
+```sh
+dbus-run-session -- build/install/newm/bin/newm
+```
+
+Headless (no window at all; for scripts and measurements), give it its own home and bus too:
+
+```sh
+env -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS CAULIS_MODE=headless HOME=$(mktemp -d) \
+    dbus-run-session -- build/install/newm/bin/newm
+```
+
+(newm nested or headless never closes your notification daemon even on your own bus, but it
+would still take names there.) `./gradlew test` keeps the tests off the desktop's buses by
+itself.
 
 The Nix package builds offline from the dependencies listed in `nix/deps.json`. After a
 change to the dependencies (a new Caulis version in `gradle/libs.versions.toml`), make it
-again: `nix build .#default.mitmCache.updateScript && ./result`.
+again: `nix run .#update-deps` (it uses the flake's pinned Gradle, input `nixpkgs-gradle`,
+and records its version in `nix/deps-gradle-version`).
 
 ## Working on newm inside newm
 

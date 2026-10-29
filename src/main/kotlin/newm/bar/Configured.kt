@@ -179,6 +179,10 @@ internal val confBarWheelLines = configuredValue<Number>("mouse.bar_wheel_lines"
 internal val confVolumeStep = configuredValue("sound.wheel_step", 2)
 internal val confSetVolume = configuredValue<String?>("sound.set_volume", null)
 internal val confGetVolume = configuredValue<String?>("sound.get_volume", null)
+// sound { volumeEverySeconds = 10; followVolume = true }: how often the volume is asked (a program
+// run each time), and whether the sound server's own news of changes is followed (pactl subscribe).
+internal val confVolumeEvery = configuredValue("sound.volume_every_seconds", 10)
+internal val confFollowVolume = configuredValue("sound.follow_volume", true)
 
 // brightness { wheelStep = 5; minimum = 1; device; set; get }: the screen's brightness from the bar.
 internal val confBrightnessStep = configuredValue("brightness.wheel_step", 5)

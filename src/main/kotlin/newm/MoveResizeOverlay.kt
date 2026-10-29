@@ -4,6 +4,9 @@ import dev.caulis.log.Logger
 
 private val log = Logger("overlay")
 
+// How often a moving or resizing window still moves on when no frame is drawn (a monitor off).
+private const val SLOW_TICK_MILLIS = 100L
+
 private val confMoveGridOvr = configuredValue("move.grid_ovr", 0.2)
 private val confMoveGridM = configuredValue("move.grid_m", 3.0)
 private val confResizeGridOvr = configuredValue("resize.grid_ovr", 0.1)
@@ -134,9 +137,6 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
     private var wsState = layout.state.workspaceState(workspace)
     private var i = 0.0
     private var j = 0.0
-    // The fewest tiles it may have (the program's smallest size).
-    private var minW = 1.0
-    private var minH = 1.0
     private var w = 1.0
     private var h = 1.0
     private var hystW: (Double) -> Double = { it }
@@ -148,16 +148,7 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
     private var closed = false
 
     init {
-        // Already as small as a tile lets it be (the first window, filling the screen): the grid
-        // is made finer first (nothing moves on screen), so it can be dragged smaller.
-        var found = layout.state.findViewOrNull(view)
-        found?.let { (vs0, ws0, handle) ->
-            val (mw, mh) = view.minTiles(ws0)
-            if ((vs0.w <= mw || vs0.h <= mh) && ws0.size * 2 <= MAX_GRID && !ws0.isFullscreen() && !ws0.isInOverview()) {
-                layout.update(layout.state.settingWorkspaceState(layout.workspaces.first { it.handle == handle }, ws0.refined()))
-                found = layout.state.findViewOrNull(view)
-            }
-        }
+        val found = layout.state.findViewOrNull(view)
         if (found != null) {
             val (vs, ws, wsHandle) = found
             wsState = ws
@@ -184,12 +175,8 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
         }
         iGrid = Grid("i", pyRound(i - 3), pyRound(i + 3), i, confMoveGridOvr(), confMoveGridM())
         jGrid = Grid("j", pyRound(j - 3), pyRound(j + 3), j, confMoveGridOvr(), confMoveGridM())
-        // (Never smaller than the program can be.)
-        val (mw, mh) = view.minTiles(wsState)
-        minW = mw
-        minH = mh
-        wGrid = Grid("w", mw.toInt(), maxOf(pyRound(w + 3), mw.toInt()), w, confResizeGridOvr(), confResizeGridM())
-        hGrid = Grid("h", mh.toInt(), maxOf(pyRound(h + 3), mh.toInt()), h, confResizeGridOvr(), confResizeGridM())
+        wGrid = Grid("w", 1, pyRound(w + 3), w, confResizeGridOvr(), confResizeGridM())
+        hGrid = Grid("h", 1, pyRound(h + 3), h, confResizeGridOvr(), confResizeGridM())
     }
 
     override fun onGesture(values: Map<String, Double>) {
@@ -199,20 +186,21 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
         val dh = factor * (values["delta_y"] ?: 0.0)
         val ni: Double
         val nw: Double
-        if (w + dw < minW) {
-            val d = minW - (w + dw)
+        // (Past one tile it grows the other way: left and up.)
+        if (w + dw < 1) {
+            val d = 1 - (w + dw)
             ni = i - d
-            nw = minW + d
+            nw = 1 + d
         } else {
             ni = i
             nw = w + dw
         }
         val nj: Double
         val nh: Double
-        if (h + dh < minH) {
-            val d = minH - (h + dh)
+        if (h + dh < 1) {
+            val d = 1 - (h + dh)
             nj = j - d
-            nh = minH + d
+            nh = 1 + d
         } else {
             nj = j
             nh = h + dh
@@ -287,14 +275,30 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         }
     }
 
-    // (A thread at 120 Hz there; a timer on the compositor's thread here.)
+    // When it last moved on (nanoseconds): the slow timer only steps in when no frame came.
+    private var lastTick = 0L
+    private var slowTicker: AutoCloseable? = null
+
+    // (A thread at 120 Hz there; once a drawn frame here, the screen's pace. A slow timer as well,
+    // for when no frame is drawn — a monitor off — so it still ends.)
     override fun postInit() {
         log.trace { "MoveResizeOverlay: Starting..." }
-        ticker = layout.every(10) { tick() }
+        ticker = layout.everyFrame { tick() }
+        slowTicker = layout.every(SLOW_TICK_MILLIS) {
+            if (System.nanoTime() - lastTick >= SLOW_TICK_MILLIS * 1_000_000) tick()
+        }
+    }
+
+    private fun stopTicking() {
+        ticker?.close()
+        ticker = null
+        slowTicker?.close()
+        slowTicker = null
     }
 
     private fun tick() {
         if (!running) return
+        lastTick = System.nanoTime()
         val t = now()
         var inProgress = false
         targetViewPos?.let { (ii, ij, fi, fj, it0, ft) ->
@@ -364,7 +368,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         }
         if (!inProgress && wantsClose) {
             running = false
-            ticker?.close()
+            stopTicking()
             log.trace { "MoveResizeOverlay: finished" }
             layout.exitOverlay()
         }
@@ -434,7 +438,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
 
     override fun preDestroy() {
         running = false
-        ticker?.close()
+        stopTicking()
     }
 
     override fun exitTransition(): Pair<LayoutState?, dev.caulis.core.ResolvedAnimation?> {
@@ -454,7 +458,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
                 this.i = i; this.j = j; this.w = w; this.h = h
                 scaleOrigin = null
                 moveOrigin = null
-            }.coarsened().focusingView(view),
+            }.focusingView(view),
         )
         state.validateStackIndices(view)
         return state to NewmAnimations["moveResize"]

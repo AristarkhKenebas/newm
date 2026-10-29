@@ -24,8 +24,17 @@ private val log = Logger("layout")
 
 // newm's own wallpaper unless another is named; "" for none (a wallpaper program instead, swaybg).
 private val confScreensOffAfter = configuredValue("energy.screens_off_after", 0)
-// A new window goes right of the focused one (false: newm's first free place in view).
-private val confPlaceBesideFocused = configuredValue("view.place_beside_focused", true)
+// windows { newPlacement }: where a new window opens — "right-of-focused" (others move right),
+// "beside-focused" (the first free tile right of it in its row), "end" (right of all), "original" (newm's).
+private val confNewPlacement = configuredValue("windows.new_placement", "right-of-focused")
+// (Before windows { newPlacement }: view { placeBesideFocused }, true "beside-focused", false "original".)
+private val confPlaceBesideFocused = configuredValue<Boolean?>("view.place_beside_focused", null)
+// windows { returnFocusToParent = true }: a child window closing gives the focus back to its parent
+// (or to the window focused when it came); false: newm's nearest window.
+private val confReturnFocusToParent = configuredValue("windows.return_focus_to_parent", true)
+// view { fitDrawnSize = false }: a program that drew another size than asked is drawn at its own
+// shape inside its place (true), not stretched to it (false, as newm).
+private val confFitDrawnSize = configuredValue("view.fit_drawn_size", false)
 // What a gesture does, shown at the bottom while it runs.
 private val confGestureHints = configuredValue("gestures.hints", true)
 private val confLockProgram = configuredValue<String?>("panels.lock.program", null)
@@ -54,17 +63,20 @@ private val confOnReconfigure = configuredValue<() -> Unit>("on_reconfigure") { 
 private val confLockOnWakeup = configuredValue("lock_on_wakeup", true)
 // lock { sleepWait = 3 }: seconds sleep waits for the lock screen to show (0..30).
 private val confSleepWait = configuredValue<Number>("panels.lock.sleep_wait", 3.0)
-private val confSynchronousUpdate = configuredValue<() -> Unit>("synchronous_update") { }
+// Frames held on longer than this (seconds) are told in the log (something forgot to let go).
+private const val FRAMES_HELD_WARN_SECONDS = 10
+
+// (Its default does nothing: then the layout's queue sleeps while nothing is queued.)
+private val noSynchronousUpdate: () -> Unit = { }
+private val confSynchronousUpdate = configuredValue("synchronous_update", noSynchronousUpdate)
 private val confEnableCGestures = configuredValue("gestures.c.enabled", true)
 private val confEnableDBusGestures = configuredValue("gestures.dbus.enabled", true)
 // (Off unless asked for: any program of the user's could unlock over the session bus without the password.)
 private val confEnableUnlockCommand = configuredValue("enable_unlock_command", false)
 private val confGestureBindingSwipeToZoom = configuredValue<List<String?>>("gesture_bindings.swipe_to_zoom", listOf(null, "swipe-4"))
 private val confGestureBindingSwipe = configuredValue<List<String?>>("gesture_bindings.swipe", listOf(null, "swipe-3"))
-private val confResizePushes = configuredValue("view.resize_pushes", true)
-
-// The finest grid made by making windows smaller (tiles across the view).
-internal const val MAX_GRID = 8.0
+// A window made wider or taller by keys pushes its neighbours aside (false, as newm: it stacks on them).
+private val confResizePushes = configuredValue("view.resize_pushes", false)
 // overview { input = false: windows take no clicks there; choose = true: a click chooses one (and leaves) }
 private val confOverviewInput = configuredValue("overview.input", false)
 private val confOverviewChoose = configuredValue("overview.choose", true)
@@ -144,6 +156,7 @@ class Animation(
 
     // Its final state written, `then` run and the parts' animations flushed — whatever fails
     // on the way, so the queue goes on.
+    // (`then` runs even when the final state fails: it may let go of what holds frames on.)
     private fun finished(state: LayoutState?): Boolean {
         try {
             if (state != null) {
@@ -155,13 +168,22 @@ class Animation(
                 }
                 layout.update(state)
             }
-            then?.invoke()
         } catch (e: Exception) {
             log.error("Finishing an animation", e)
+        }
+        try {
+            then?.invoke()
+        } catch (e: Exception) {
+            log.error("After an animation", e)
         } finally {
             layout.doFlushAnimation()
         }
         return true
+    }
+
+    /** Given up (it failed): what was to follow it runs all the same. */
+    fun abandon() {
+        finished(null)
     }
 
     fun start() {
@@ -210,15 +232,35 @@ class LayoutQueue(private val layout: Layout) {
     private var currentOverlay: Overlay? = null
     private var currentAnimation: Animation? = null
     private var ticker: AutoCloseable? = null
+    private var started = false
+
+    // About 30 times a second while something is queued, runs or the configuration wants
+    // every_frame (synchronous_update); asleep otherwise (an idle compositor wakes for nothing).
+    private val tickMillis = 1000L / 30
 
     fun start() {
-        ticker = layout.every(1000L / 30) { tick() }
+        started = true
+        wake()
     }
 
     fun stop() {
+        started = false
         ticker?.close()
         ticker = null
     }
+
+    /** Ticks again if there is work (something queued or running, or every_frame configured). */
+    fun wake() {
+        if (!started || ticker != null || !busy()) return
+        log.trace { "Layout queue ticking" }
+        ticker = layout.every(tickMillis) { tick() }
+    }
+
+    /** Whether the queue ticks now (for tests and the log). */
+    val ticking: Boolean get() = ticker != null
+
+    private fun busy(): Boolean =
+        pending.isNotEmpty() || currentOverlay != null || currentAnimation != null || confSynchronousUpdate() !== noSynchronousUpdate
 
     fun push(next: Any) {
         if (next is Overlay) {
@@ -237,6 +279,7 @@ class LayoutQueue(private val layout: Layout) {
                 pending += next
             }
         }
+        wake()
     }
 
     fun onOverlayDestroyed() {
@@ -248,21 +291,36 @@ class LayoutQueue(private val layout: Layout) {
     private fun tick() {
         try {
             val first = pending.firstOrNull()
+            // (Frames held from the start of each, let go when it ends — or fails to start.)
             if (first is Overlay) {
                 if (currentAnimation == null && currentOverlay == null) {
                     log.trace { "Starting overlay..." }
                     pending.removeAt(0)
                     currentOverlay = first
-                    layout.startOverlay(first)
                     layout.enterConstantDamage()
+                    try {
+                        layout.startOverlay(first)
+                    } catch (e: Exception) {
+                        log.error("An overlay failed to start: left", e)
+                        currentOverlay = null
+                        layout.overlayFailed(first)
+                        layout.exitConstantDamage()
+                    }
                 }
             } else if (first is Animation) {
                 if (currentAnimation == null && (currentOverlay == null || first.overlaySafe)) {
                     log.trace { "Starting animation..." }
                     pending.removeAt(0)
                     currentAnimation = first
-                    first.start()
                     layout.enterConstantDamage()
+                    try {
+                        first.start()
+                    } catch (e: Exception) {
+                        log.error("An animation failed to start: left", e)
+                        currentAnimation = null
+                        first.abandon()
+                        layout.exitConstantDamage()
+                    }
                 }
             }
             currentAnimation?.let { a ->
@@ -271,6 +329,7 @@ class LayoutQueue(private val layout: Layout) {
                     a.checkFinished()
                 } catch (e: Exception) {
                     log.error("Unexpected while finishing an animation", e)
+                    a.abandon()
                     true
                 }
                 if (done) {
@@ -282,6 +341,12 @@ class LayoutQueue(private val layout: Layout) {
             confSynchronousUpdate()()
         } catch (e: Exception) {
             log.error("Unexpected during the layout's queue", e)
+        }
+        // Nothing left to do: asleep until the next push.
+        if (!busy()) {
+            ticker?.close()
+            ticker = null
+            log.trace { "Layout queue idle" }
         }
     }
 }
@@ -364,6 +429,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     // The view with the focus now, and the one that had it when its window closed.
     private var focusedView: View? = null
     private var closingFocused: View? = null
+    private var lostFocus: Pair<Window, Double>? = null
+    private var focusedWindowNow: Window? = null
+
+    /** The last view with the focus that was shown then (the one a new window opens beside, or is a child of). */
+    internal var lastShownFocused: View? = null
+        get() = field?.takeIf { !it.destroyed }
     /** The layout's state of this frame (the lock screen's and the launcher's way in). */
     var layoutDown = LayoutDown(0.0)
         private set
@@ -392,7 +463,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // on before newm hears of the window closing).
             val before = focusedView
             if (before != null && !before.window.mapped) closingFocused = before
+            // (Caulis may move the focus on while the closing window still counts as mapped: the
+            // one that lost it just now, for destroyView.)
+            val beforeWindow = focusedWindowNow
+            if (beforeWindow != null && window !== beforeWindow) lostFocus = beforeWindow to now()
+            focusedWindowNow = window
             focusedView = window?.let(::viewOf)
+            // (A window not shown yet — Caulis focuses a new one at once — is not where the next one opens beside.)
+            focusedView?.takeIf { state.findViewOrNull(it) != null }?.let { lastShownFocused = it }
             for (v in views.values.toList()) v.onFocusChange()
         }
         caulis.onMonitorAdded { onLayoutChange() }
@@ -427,6 +505,58 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun damage() {
         desktopOrNull()?.requestRedraw()
     }
+
+    // What runs once a drawn frame (an overlay following the fingers): paced by the screen.
+    private val frameActions = ArrayList<() -> Unit>()
+
+    /**
+     * Runs [action] once every drawn frame (the screen's own pace), until the result is closed;
+     * frames are drawn meanwhile. Close it on every way the caller ends.
+     */
+    fun everyFrame(action: () -> Unit): AutoCloseable {
+        frameActions += action
+        enterConstantDamage()
+        var closed = false
+        return AutoCloseable {
+            if (!closed) {
+                closed = true
+                frameActions -= action
+                exitConstantDamage()
+            }
+        }
+    }
+
+    // Since when frames are held on without pause (seconds), and whether that was told.
+    private var framesHeldSince: Double? = null
+    private var framesHeldTold = false
+
+    // Frames held on for long (an enter without its exit somewhere): every monitor is drawn
+    // every refresh then. Said once, with who holds them.
+    private fun watchHeldFrames() {
+        if (constantDamage <= 0) {
+            if (framesHeldTold) log.info { "Frames are no longer held on" }
+            framesHeldSince = null
+            framesHeldTold = false
+            return
+        }
+        val since = framesHeldSince ?: now().also { framesHeldSince = it }
+        if (!framesHeldTold && now() - since > FRAMES_HELD_WARN_SECONDS) {
+            framesHeldTold = true
+            val who = listOfNotNull(
+                overlay?.let { "overlay ${it::class.simpleName}" },
+                "queue".takeIf { queue.ticking },
+                "${frameActions.size} frame actions".takeIf { frameActions.isNotEmpty() },
+                views.values.filter { it.holdsFrames }.takeIf { it.isNotEmpty() }?.joinToString(prefix = "views ") { it.handle.toString() },
+            )
+            log.warn("Frames held on for over $FRAMES_HELD_WARN_SECONDS s (count $constantDamage): ${who.joinToString().ifEmpty { "nobody known" }}")
+        }
+    }
+
+    /** Whether the layout's queue ticks now (asleep at idle). */
+    internal val queueTicking: Boolean get() = queue.ticking
+
+    /** How many hold frames on without pause now (0 at idle). */
+    internal val framesHeld: Int get() = constantDamage
 
     fun enterConstantDamage() {
         constantDamage++
@@ -476,10 +606,6 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             } else if (previous != null && previous.size != up.size && up.size != requestedSize[window]) {
                 view.onResized(up.size.first, up.size.second, clientLeading = true)
             }
-            // Drew bigger than asked (Spotify says 800 x 600 but will not be lower than ~700):
-            // its real smallest size, used for what it is asked next.
-            // (Only from its answer to the last size asked: an older picture is not its smallest.)
-            if (window.caughtUp && !animating) requestedSize[window]?.let { (aw, ah) -> view.learnSmallest(aw, ah, up.size.first, up.size.second) }
             return placeOf(down, up.size, steady = !animating && !view.animating)
         }
 
@@ -498,6 +624,13 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
         // Asked once a frame: the layout's own state of this frame (pywm processed it every frame).
         override fun animating(now: Long): Boolean {
+            for (action in frameActions.toList()) {
+                try {
+                    action()
+                } catch (e: Exception) {
+                    log.error("Unexpected in a frame's action", e)
+                }
+            }
             layoutDown = process(reducer(state))
             specials.everyFrame(overviewShown())
             // A monitor got another mode, scale or place (Caulis says nothing of it): workspaces anew.
@@ -541,10 +674,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private fun placeOf(down: ViewDown, drawn: Pair<Int, Int>? = null, steady: Boolean = true): WindowPlace? {
         var b = down.box
         if (b.w <= 0.0 || b.h <= 0.0) return null
-        // The program drew another size than asked (a smallest size of its own, as Spotify's):
-        // its picture at its own size (zoomed as the view is) in the middle of its place, made
-        // smaller to fit when bigger, never stretched (stretched it came out blurred and askew). (Not while moving:
-        // there the picture follows the place until the program catches up.)
+        // The program drew another size than asked: stretched to its place, as newm (pywm) did;
+        // with view { fitDrawnSize }: its picture at its own shape (zoomed as the view is) in the
+        // middle of its place, made smaller to fit when bigger. (Not while moving: there the
+        // picture follows the place until the program catches up.)
         val tileBox = b
         val asked = down.size
         var cut = false
@@ -552,7 +685,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (down.resizeScale > 0.0 && drawn != null && drawn.first > 0 && drawn.second > 0) {
             b = Box(b.x, b.y, drawn.first * down.resizeScale, drawn.second * down.resizeScale)
             cut = true
-        } else if (drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked &&
+        } else if (confFitDrawnSize() && drawn != null && asked.first > 0 && asked.second > 0 && drawn.first > 0 && drawn.second > 0 && drawn != asked &&
             // (Bigger than asked, it will stay so: fitted while the view moves too, never stretched to
             // its place and back — a harmonica. Smaller: it is catching up, it follows its place.)
             (steady || drawn.first >= asked.first && drawn.second >= asked.second)
@@ -786,7 +919,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         barModel.showOsd()
         barModel.showNotificationCards()
         showKeyHelp()
-        every(1000) { (topBars + bottomBars).forEach(Bar::refresh) }
+        every(1000) {
+            (topBars + bottomBars).forEach(Bar::refresh)
+            watchHeldFrames()
+        }
         // The wall and the focused window, as the bars show them; a popup goes with its bar.
         every(200) {
             val bars = topBars + bottomBars
@@ -920,9 +1056,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     /**
-     * Where a new view of [w] x [h] tiles goes: if the view shows more than the views take, at
-     * 0, 0 (the first) or beside them; else the first free place in view, else right of the
-     * focused one.
+     * newm's place_initial: where a new view of [w] x [h] tiles goes. If the view shows more
+     * than the views take: at 0, 0 (the first), else beside them; else the first free place in
+     * view, row by row; else right of the focused one.
      */
     fun placeInitial(workspace: Workspace, wsState: WorkspaceState, w: Int, h: Int): Pair<Int, Int> {
         var placeI = 0
@@ -937,19 +1073,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val viewMaxI = ceil(wsState.i + wsState.size - 1)
         val viewMaxJ = ceil(wsState.j + wsState.size - 1)
 
-        // Beside the window you are in: right of it, the first free place in its row (newm took
-        // the first free place in view, row by row, which could be anywhere: below, at a slant).
-        val anchor = if (confPlaceBesideFocused()) {
-            (findFocusedView()?.handle?.let { wsState.viewStates[it] } ?: workspace.focusViewHint?.let { wsState.viewStates[it] })?.takeIf { it.isTiled && it.w > 0 }
-        } else null
         if (tiles(workspace).isEmpty()) {
             placeI = 0
             placeJ = 0
-        } else if (anchor != null) {
-            placeI = pyRound(anchor.i + anchor.w)
-            placeJ = pyRound(anchor.j)
-            fun free(i: Int): Boolean = (placeJ until placeJ + h).all { jp -> (i until i + w).all { ip -> wsState.isTileFree(ip, jp) } }
-            while (!free(placeI)) placeI += 1
         } else if (viewMaxI - viewMinI > maxI - minI) {
             placeI = maxI + 1
             placeJ = max(minJ, viewMinJ)
@@ -960,14 +1086,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             var found = false
             outer@ for (j in floor(wsState.j) until ceil(wsState.j + wsState.size)) {
                 for (i in floor(wsState.i) until ceil(wsState.i + wsState.size)) {
-                    var free = true
-                    check@ for (jp in j until j + h) for (ip in i until i + w) {
-                        if (!wsState.isTileFree(ip, jp)) {
-                            free = false
-                            break@check
-                        }
-                    }
-                    if (free) {
+                    if (isFree(wsState, i, j, w, h)) {
                         placeI = i
                         placeJ = j
                         found = true
@@ -985,6 +1104,75 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
         log.trace { "Found initial placement at $placeI, $placeJ" }
         return placeI to placeJ
+    }
+
+    // All tiles of [w] x [h] at [i], [j] free.
+    private fun isFree(wsState: WorkspaceState, i: Int, j: Int, w: Int, h: Int): Boolean =
+        (j until j + h).all { jp -> (i until i + w).all { ip -> wsState.isTileFree(ip, jp) } }
+
+    /**
+     * Where the new tiled [view] of [w] x [h] tiles goes on [wsState] (room made there: what
+     * is in the way moves aside). A child window (see [View.childOf]) by windows { childPlacement }:
+     * below its parent or right of it; any other by windows { newPlacement }.
+     */
+    internal fun placeNew(view: View, workspace: Workspace, wsState: WorkspaceState, w: Int, h: Int): Pair<Int, Int> {
+        val tiled = tiles(workspace).filter { it !== view }
+        if (tiled.isEmpty()) return placeInitial(workspace, wsState, w, h)
+        // The tiled window it comes from: its parent's (a dialog's window), or the focused one.
+        fun tiledOf(v: View?): ViewState? = generateSequence(v) { it.parent }.firstNotNullOfOrNull { a -> wsState.viewStates[a.handle]?.takeIf { it.isTiled && it.w > 0 } }
+        val child = view.openedAsChildOf()
+        if (child != null) {
+            val p = tiledOf(child)
+            when (confChildPlacement().takeIf { p != null }) {
+                "below" -> return insertAt(wsState, pyRound(p!!.i), pyRound(p.j + p.h), w, h, columns = false).also { log.info { "Child window ${view.appId} below its parent, at ${it.first}, ${it.second}" } }
+                "right" -> return insertAt(wsState, pyRound(p!!.i + p.w), pyRound(p.j), w, h, columns = true).also { log.info { "Child window ${view.appId} right of its parent, at ${it.first}, ${it.second}" } }
+                else -> {}
+            }
+        }
+        val placement = confPlaceBesideFocused()?.let { if (it) "beside-focused" else "original" } ?: confNewPlacement()
+        val anchor = tiledOf(view.focusedAtOpen) ?: tiledOf(findFocusedView()?.takeIf { it !== view }) ?: workspace.focusViewHint?.let { h0 -> wsState.viewStates[h0]?.takeIf { it.isTiled && it.w > 0 } }
+        return when (placement) {
+            "right-of-focused" -> if (anchor == null) placeInitial(workspace, wsState, w, h)
+                else insertAt(wsState, pyRound(anchor.i + anchor.w), pyRound(anchor.j), w, h, columns = true)
+            "beside-focused" -> if (anchor == null) placeInitial(workspace, wsState, w, h) else {
+                // The first free place right of it in its row.
+                var i = pyRound(anchor.i + anchor.w)
+                val j = pyRound(anchor.j)
+                while (!isFree(wsState, i, j, w, h)) i += 1
+                i to j
+            }
+            "end" -> {
+                // Right of all windows, in the focused one's row (or the first row in view).
+                val e = wsState.extent()
+                val j = anchor?.let { pyRound(it.j) } ?: max(floor(e[1]), floor(wsState.j))
+                var i = floor(e[2]) + 1
+                while (!isFree(wsState, i, j, w, h)) i += 1
+                i to j
+            }
+            "original" -> placeInitial(workspace, wsState, w, h)
+            else -> {
+                if (warnedPlacement.add(placement)) log.warn("windows { newPlacement = \"$placement\" } is none of right-of-focused, beside-focused, end, original: original")
+                placeInitial(workspace, wsState, w, h)
+            }
+        }
+    }
+
+    private val warnedPlacement = HashSet<String>()
+
+    // Room for [w] x [h] tiles at [i], [j]: with [columns], every window from column [i] on
+    // moves [w] right (a column put in); else every window from row [j] on moves [h] down. A
+    // window reaching over that line from before stays; if it is in the way still, the place
+    // moves on right until free.
+    private fun insertAt(wsState: WorkspaceState, i: Int, j: Int, w: Int, h: Int, columns: Boolean): Pair<Int, Int> {
+        for (s in wsState.viewStates.values) {
+            if (!s.isTiled) continue
+            if (columns && s.i >= i - 0.01) s.i += w
+            if (!columns && s.j >= j - 0.01) s.j += h
+        }
+        var pi = i
+        while (!isFree(wsState, pi, j, w, h)) pi += 1
+        log.trace { "Room made at $pi, $j (${if (columns) "columns" else "rows"})" }
+        return pi to j
     }
 
     /** The monitors changed: workspaces and widgets anew. */
@@ -1172,6 +1360,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     fun resetGesture() = gestureProviders.forEach(GestureProvider::resetGesture)
+
+    /** A gesture as a provider gives it (for tests: fingers without a touchpad). */
+    internal fun gesture(gesture: NewmGesture): Boolean = gestureProviderCallback(gesture)
 
     private fun gestureProviderCallback(gesture: NewmGesture): Boolean {
         if (isLocked()) return false
@@ -1424,6 +1615,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         o.destroy()
     }
 
+    /** [o] failed to start: it is gone, whatever it began (its timers) ended. */
+    fun overlayFailed(o: Overlay) {
+        try {
+            o.preDestroy()
+        } catch (e: Exception) {
+            log.error("Cleaning up a failed overlay", e)
+        }
+        if (overlay === o) overlay = null
+        if (destroyingOverlay === o) destroyingOverlay = null
+        focusBorders.damage()
+        resetGesture()
+    }
+
     fun onOverlayDestroyed() {
         log.trace { "Overlay destroyed" }
         destroyingOverlay = null
@@ -1443,7 +1647,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         requestedSize.remove(window)
         // (Caulis gave the focus to another window already: it had it if it had it last.)
         // (Gone into a special workspace: it keeps the focus there, no other view takes it.)
-        val wasFocused = (view.isFocused() || view === closingFocused || view === focusedView) && caulis.desktop.scratchpadOf(window) == null
+        val justLost = lostFocus?.let { (w, at) -> w === window && now() - at < 0.5 } == true
+        val wasFocused = (view.isFocused() || view === closingFocused || view === focusedView || justLost) && caulis.desktop.scratchpadOf(window) == null
+        if (justLost) lostFocus = null
         if (closingFocused === view) closingFocused = null
         if (focusedView === view) focusedView = null
         val (s, wsState, _) = state.findViewOrNull(view) ?: run {
@@ -1459,6 +1665,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             var p = view.parent
             while (p != null && !p.isTiled(state) && p.parent != null) p = p.parent
             if (p != null) bestView = p.handle
+            // A child window (a parent of its own, or the same program's window focused when it
+            // came): back to that one, or to the window focused before it opened.
+            if (confReturnFocusToParent()) view.returnFocusTo()?.let { back ->
+                log.info { "Focus back to ${back.appId} (${back.handle}) as its child window closes" }
+                bestView = back.handle
+            }
 
             if (bestView == null) {
                 var bestScore = 1000.0
@@ -1535,6 +1747,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 null
             }
             "debug" -> debugStr()
+            // Every key bound now, as it is written in words ("Super+Shift+H  Move the window left").
+            "keys" -> confKeyHelp().ifEmpty { confKeyBindings()(this).map { it.first to "" } }.let { all ->
+                val rows = all.map { (combo, words) -> KeyNotation.readable(combo) to newm.bar.tr(words) }
+                val width = rows.maxOfOrNull { it.first.length } ?: 0
+                rows.joinToString("\n") { (k, w) -> if (w.isBlank()) k else k.padEnd(width + 2) + w }.ifEmpty { "no keys" }
+            }
             "inhibit-idle" -> {
                 idleInhibitUser = true
                 null
@@ -1764,6 +1982,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         reloadConfig {
             setup()
             damage()
+            queue.wake() // (every_frame may be configured now)
             confOnReconfigure()()
         }
     }
@@ -1940,8 +2159,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             val (fs, wsState, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to s0
             val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return@animateTo null to s0
             if (!fs.isTiled || wsState.isFullscreen()) return@animateTo null to s0
-            // In ordinary tiles (on a grid made finer: as many of the finer ones).
-            val u = pyRound(wsState.newTile()).coerceAtLeast(1).toDouble()
+            val u = 1.0
             fun near(a: Double, b: Double) = Math.abs(a - b) < 0.01
             // The window right beside it in its row (its right neighbour, else its left one).
             val row = wsState.viewStates.entries.filter { (h, v) -> h != view.handle && v.isTiled && near(v.j, fs.j) }
@@ -2199,33 +2417,26 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         animateTo({ s ->
             val view = findFocusedView() ?: return@animateTo null to s
             try {
-                val (_, found, wsHandle) = s.findView(view)
+                val (vs, wsState, wsHandle) = s.findView(view)
                 val ws = workspaces.first { it.handle == wsHandle }
-                var wsState = found
-                var vs = wsState.views[view.handle] ?: return@animateTo null to s
-                // (Never smaller than the program can be.)
-                var (minW, minH) = view.minTiles(wsState)
-                // Smaller than one tile (the first window fills the screen as one): the grid is
-                // made finer first — each tile 2 x 2, nothing moves on screen — and then it shrinks
-                // by one of the finer tiles (to half the screen across, the whole height kept).
-                if ((di < 0 && vs.w + di < minW || dj < 0 && vs.h + dj < minH) && wsState.size * 2 <= MAX_GRID &&
-                    !wsState.isFullscreen() && !wsState.isInOverview()
-                ) {
-                    wsState = wsState.refined()
-                    vs = wsState.views[view.handle] ?: return@animateTo null to s
-                    view.minTiles(wsState).let { (mw, mh) -> minW = mw; minH = mh }
-                    log.info { "The grid made finer (${wsState.size / 2} → ${wsState.size} tiles across) to make $view smaller" }
+                var i = vs.i
+                var j = vs.j
+                var w = vs.w + di
+                var h = vs.h + dj
+                // (Narrower than one tile: two wide, reaching left; shorter: two tall, reaching up — as newm.)
+                if (w == 0.0) {
+                    w = 2.0
+                    i -= 1
                 }
-                val i = vs.i
-                val j = vs.j
-                val w = (vs.w + di).let { if (di < 0) maxOf(it, minW) else it }
-                val h = (vs.h + dj).let { if (dj < 0) maxOf(it, minH) else it }
-                if (w == vs.w && h == vs.h && (di < 0 || dj < 0)) return@animateTo null to s
+                if (h == 0.0) {
+                    h = 2.0
+                    j -= 1
+                }
                 val next = wsState.replacingViewState(view) { this.i = i; this.j = j; this.w = w; this.h = h }
                 if (confResizePushes()) makeRoom(next, view.handle, vs, i, j, w, h)
                 // (The new state's stacks, not the live one's: that is changed only through update.)
                 next.validateStackIndices(view)
-                null to s.settingWorkspaceState(ws, next.coarsened().focusingView(view))
+                null to s.settingWorkspaceState(ws, next.focusingView(view))
             } catch (e: Exception) {
                 log.warn("The window could not be resized: $e")
                 null to s

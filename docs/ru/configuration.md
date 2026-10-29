@@ -85,30 +85,18 @@ keyboard {
 ### Клавиши
 
 ```kotlin
+bind("Super+Backspace", "close-window")      // закрывать окно и по Super+Backspace
+bind("Super+B", "launch", "firefox")
+unbind("Super+S")                            // клавиша шаблона убрана
 keys {
-    "L-b"("Открыть браузер") { launch("firefox") }
-    "L-e" { launch("nautilus") }
+    "Super+E"("Файлы") { launch("nautilus") }   // со своим кодом
 }
 ```
 
-Клавиши записываются так, как их всегда записывал newm:
-
-- `L` — Logo, `S` — Shift, `C` — Ctrl, `A` — Alt;
-- `"L-S-s"` — Logo+Shift+s, и заглавная буква тоже означает Shift (`"L-S"` — то же самое);
-- `"L-"` — Logo, нажатая отдельно;
-- `"L-a L-b"` — Logo+a, затем Logo+b;
-- названия клавиш — как в xkb: `Return`, `Escape`, `space`, `Tab`, `minus`, `equal`, `slash`,
-  `grave`, `Print`, `Left`, `F5`, `XF86AudioMute`, ...
-
-Слова в `"L-b"("Открыть браузер")` показывает подсказка по клавишам (Logo+/); клавиша без
-слов в неё не попадает. Клавиши, начинающиеся с `XF86` (клавиши ноутбука), работают и на
-экране блокировки.
-
-**`keys { }` — это весь ваш список.** Клавиша, которой в нём нет, ничего не делает;
-стартовый `config.kts` перечисляет все клавиши newm, так что меняйте их там.
-
-Внутри `{ }` доступно всё, что умеет раскладка окон (`move(-1, 0)`, `toggleOverview()`,
-`screenshot()`, ...): список — в [Все настройки](settings.md#всё-что-может-клавиша).
+Клавиши пишутся, как вы их называете (`"Super+Shift+Q"`, `"Ctrl+Alt+T"`, регистр не важен;
+Super — это и Logo, Win, Mod, Meta), действия — по имени (`close-window`, `launch`,
+`fullscreen`, ...). Прежняя запись newm (`"L-q"`, `"L-S-h"`) тоже работает. Все имена клавиш
+и действий и готовые наборы: [Клавиши](keys.md). `newm cmd keys` перечисляет назначенные клавиши.
 
 ### Одни окна плавают, у других размытие
 
@@ -299,13 +287,16 @@ view {
     padding = 8.0
     unfocusedOpacity = 0.9       // окна без фокуса немного прозрачные
     fade = true                  // окна плавно появляются и исчезают
-    fillFirst = true             // первое окно занимает весь экран
-    placeBesideFocused = true    // новое окно встаёт справа от вашего (false: первая свободная плитка в виде)
-    resizePushes = true          // увеличенное окно раздвигает соседей (false: ложится поверх)
-    crispResize = true           // окно при изменении размера рисуется в своём размере, не растягивается
-    minSizeKeepsShape = true     // программа больше своей плитки рисуется в форме плитки, уменьшенной
-    minSizeShrink = 0.6          // ... не меньше этой доли своего наименьшего размера
+    fillFirst = false            // true: первое окно занимает весь экран (false: четверть, как в newm)
+    resizePushes = false         // true: окно, увеличенное клавишами, раздвигает соседей
+    crispResize = false          // true: окно при изменении размера рисуется в своём размере, не растягивается
+    fitDrawnSize = false         // true: программа, нарисовавшая другой размер, вписывается в своей форме
     floatingMinSize = true       // плавающее окно, не просящее размера, открывается наименьшим
+}
+windows {
+    newPlacement = "right-of-focused"  // или "beside-focused", "end", "original" (как в newm)
+    childPlacement = "below"           // диалог, просмотр фото: "below" — под своим окном, "right", "over" (плавает, как в newm)
+    returnFocusToParent = true         // при закрытии фокус возвращается его окну
 }
 focus {
     color = "auto"               // акцент цветов; или "#RRGGBB" / "#RRGGBBAA"

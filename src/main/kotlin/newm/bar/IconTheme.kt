@@ -13,7 +13,6 @@ import org.jetbrains.skia.svg.SVGDOM
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 
 private val log = Logger("bar")
 
@@ -24,8 +23,14 @@ private val log = Logger("bar")
  */
 object IconTheme {
 
-    // One thread for the reading and drawing of icons (never the compositor's).
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "newm-icons").apply { isDaemon = true } }
+    private val ICON_THREADS = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
+
+    // Threads for the reading and drawing of icons (never the compositor's): as many as half the
+    // processors (at most 4: a start with many windows draws their icons side by side), gone
+    // again after a few seconds without work.
+    private val worker = java.util.concurrent.ThreadPoolExecutor(
+        ICON_THREADS, ICON_THREADS, 5, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue(),
+    ) { r -> Thread(r, "newm-icons").apply { isDaemon = true } }.apply { allowCoreThreadTimeOut(true) }
 
     // Every icon file of a theme folder by its name ("firefox" -> its files).
     private val indexes = ConcurrentHashMap<Path, Map<String, List<Path>>>()

@@ -2,40 +2,48 @@
 //
 // newm made this file the first time it started. Change anything and save: newm takes it on
 // at once, no need to log out. A mistake shows up on screen with its line, and the settings
-// before stay until it is fixed. Lines starting with // are notes: remove the // to use one.
+// before stay until it is fixed. Lines starting with // are notes or settings turned off:
+// remove the // in front of a setting to use it.
 //
 // newm in short: windows are tiles on an endless wall. The screen shows a part of the wall —
-// zoom out (Logo+u, four fingers up) to see more of it, in (Logo+n) to see less. New windows
-// take the next free tile. Logo alone shows everything (the overview).
+// zoom out (Logo+u, four fingers up) to see more of it, in (Logo+n) to see less. A new window
+// opens right of the one you are in. Logo alone shows everything (the overview).
 //
 // The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/README.md
+// Every setting: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/settings.md
 
 // --- Looks -----------------------------------------------------------------------------------
 
 background {
-    path = "resource:wallpaper.jpg"         // newm's own; or "~/Pictures/wallpaper.jpg"
+    path = "resource:wallpaper.jpg"         // newm's own; or "~/Pictures/wallpaper.jpg" (an SVG stays sharp)
     mode = "follow"                         // "follow": moves and zooms with the view; "static": stands still
-    // timeScale = 0.15                     // how quickly it follows (seconds; with the animation "backgroundMove" on)
+    // timeScale = 0.15                     // how quickly it follows (seconds)
 }
 
 cornerRadius = 24                           // the screen's own corners rounded (0: square)
+// colorScheme = "auto"                     // "auto" (the quick settings' choice), "dark" or "light"
+// language = "auto"                        // newm's menus: "auto" (the system's), "en" or "ru"
+// timeFormat = "HH:mm"                     // times in the menus and on the lock screen ("h:mm a": 3:45 PM)
+
+// The colours of the bar, the menus and the focus border: made from the wallpaper, as phones do.
+// The quick settings (the bar's grid button) choose among them; set them here to keep them fixed.
+// colors {
+//     source = "wallpaper"                 // "wallpaper", "nord" (the classic ones) or "#5b8cc8"
+//     style = "tonal"                      // "tonal", "vibrant", "expressive", "neutral", "monochrome"
+// }
 
 // --- Animations ------------------------------------------------------------------------------
 //
-// Off: every change is there at once (fingers are still followed exactly — only what comes after
-// they lift is at once). One line turns on newm's usual animations, as newm always looked:
-//
-//     animations { preset = "newm" }
-//
-// Or, as in Hyprland, all of them (`enabled = true`) or each by name. A setting for a name is
-// for those under it too ("windows" for windowsIn, windowsOut, ...), unless they say otherwise.
-// Each takes: enabled, millis (its time; or speed = Hyprland's tenths of a second), curve (by
-// name) and, for the menus and cards, a look (style): "fade", "popin 90%", "slide up 20".
-// Curves: "linear" (newm's own), "ease-out" (fast, then gently), "ease-in-out", "smooth",
-// "overshoot" (a little past and back), or your own: curve("name", x1, y1, x2, y2) is a
-// Bézier curve with Hyprland's (and CSS's) numbers, spring("name", stiffness, damping) a spring.
+// newm's usual animations are on: windows glide to their places, the view glides when it moves.
+// Turn them off with preset = "none" (every change is there at once; fingers are still followed).
+// As in Hyprland, each can be changed by name: a setting for a name is for those under it too
+// ("windows" for windowsIn, windowsOut, ...), unless they say otherwise. Each takes enabled,
+// its time in millis, a curve by its name and, for the menus and cards, a look (style): "fade",
+// "popin 90%", "slide up 20". Curves: "linear" (newm's own), "ease-out", "ease-in-out",
+// "smooth", "overshoot" (a little past and back), or your own: a Bézier curve with Hyprland's
+// numbers, or a spring.
 animations {
-    // preset = "newm"                      // all of newm's usual animations on
+    preset = "newm"                         // newm's usual animations; "none": all off
     // enabled = true                       // all on (as preset = "newm"); false: all off
     // millis = 300                         // the global time (ms) of those without their own
     // curve = "linear"                     // the global curve
@@ -46,26 +54,26 @@ animations {
     // animation("windows", millis = 250, curve = "snappy")   // all window animations below
     // on("windowsIn")                      // a window appearing: it takes its place, the others make room
     // on("windowsOut")                     // a window closing: the others take its place
-    // on("windowsMove")                    // moved, resized, floating/tiled, side by side, onto another workspace, swallowed
+    // on("windowsMove")                    // moved, resized, floating or tiled, side by side, onto another workspace
     // on("fullscreen")                     // going fullscreen and back
-    // on("moveResize")                     // moved or resized with mouse or fingers: settling on the grid when let go
+    // on("moveResize")                     // moved or resized with the mouse or fingers: settling on the grid when let go
 
     // The view and gestures
-    // on("camera")                         // the view moving: to the next window, zooming in and out (Logo+u/n), a bar coming
+    // on("camera")                         // the view moving: to the next window, zooming in and out, a bar coming
     // on("overview")                       // the overview opening and closing (Logo alone)
     // on("gestureSnap")                    // after a swipe or pinch: gliding on to where it settles (time from the fingers' speed)
     // on("gestureSmoothing")               // fingers smoothed: the view follows softly (75 ms); off: exactly under them
 
     // newm's own parts
-    // on("border")                         // the focus border gliding to the focused window (focus.animTime, 300 ms)
+    // on("border")                         // the focus border gliding to the focused window (300 ms)
     // on("lock")                           // the lock screen sliding in (the screen is locked before) and out
     // on("launcher")                       // the launcher coming and going (ease-out)
     // on("launcherList")                   // its first rows coming in one after another (220 ms)
-    // on("backgroundMove")                 // the wallpaper gliding behind the view (background.timeScale, 150 ms)
+    // on("backgroundMove")                 // the wallpaper gliding behind the view (150 ms)
     // on("backgroundIn")                   // the wallpaper fading in the first time (600 ms)
-    // on("startup"); on("quit")            // newm fading in after it started and out when it quits (blendTime, 1 s)
+    // on("startup"); on("quit")            // newm fading in after it started and out when it quits (1 s)
     // on("sessionRestore")                 // windows of the last session going back to their places
-    // on("brightness")                     // the screen's brightness gliding to a new level (config.py's BacklightManager)
+    // on("brightness")                     // the screen's brightness gliding to a new level
 
     // The bar, menus and cards: each "...In" and "...Out" on its own too (times: in / out)
     // on("popups")                         // the bar's menus (280 / 180 ms); popupsResize: growing as they change
@@ -74,30 +82,48 @@ animations {
     // on("osd")                            // the volume and brightness slider and toasts (140 / 220 ms)
     // on("clipboard")                      // the clipboard's history, Logo+V (260 / 180 ms)
     // on("keyHelp")                        // the keys' help, Logo+/ (260 / 180 ms)
-    // on("widgets")                        // small motions: hover (colours under the pointer, 100–140 ms),
-    //                                      // toggles (switches and sliders, 160 ms), scroll (lists to the chosen entry),
-    //                                      // spinner (the refresh icon turning, 900 ms a turn)
+    // on("widgets")                        // small motions: hover, toggles, lists scrolling, the refresh icon turning
 }
-// blendTime = 1.0                          // fading in at the start, out at the end (with startup and quit on)
+// blendTime = 1.0                          // fading in at the start, out at the end (seconds)
+
+// --- Windows ---------------------------------------------------------------------------------
 
 view {
     cornerRadius = 14.0                     // windows' corners (bigger cuts into what programs draw at their edges)
     padding = 8.0                           // the gap around each window
-    // fullscreenPadding = 0.0
+    // fullscreenPadding = 0.0              // the gap around a fullscreen window
+    // unfocusedOpacity = 0.92              // windows without the focus a little see-through (1.0: not)
+    // fade = true                          // windows fade in and out
     // sendFullscreen = true                // programs are told when they are fullscreen
     // acceptFullscreen = true              // programs may ask for it (a video's button)
     // floatingMinSize = true               // floating windows open at their smallest size
+    // fillFirst = false                    // true: the first window fills the screen (false: a quarter, as newm)
+    // resizePushes = false                 // true: a window made bigger by keys pushes its neighbours aside
+    // crispResize = false                  // true: a window being resized is drawn at its own size, not stretched
+    // fitDrawnSize = false                 // true: a program that drew another size is fitted in its shape, not stretched
+    // stickyFullscreen = false             // true: fullscreen stays when the view moves away
 
     // Rules for some windows, decided when they open (their app id: `newm cmd debug` lists them).
     rules { view ->
         when (view.appId) {
             "pavucontrol", "mpv", "imv", "org.gnome.Calculator" -> rule(float = true)
             // See-through terminals with what is behind them blurred (set the terminal's own
-            // opacity too, e.g. alacritty: window.opacity = 0.85).
+            // opacity too, for alacritty that is window.opacity = 0.85).
             "Alacritty", "foot", "kitty", "org.wezfurlong.wezterm" -> rule(blur = Blur(radius = 6, passes = 4))
+            // "org.keepassxc.KeePassXC" -> rule(float = true, floatSize = 900 to 600)
+            // "firefox" -> rule(opacity = 0.97)
             else -> null
         }
     }
+}
+
+// Where windows open.
+windows {
+    newPlacement = "right-of-focused"       // right of yours, the rest move on; "beside-focused", "end", "original" (newm's)
+    childPlacement = "below"                // a dialog or a photo viewer: "below" its window, "right", "over" (floating, as newm)
+    returnFocusToParent = true              // closing it gives the focus back to its window
+    // childBySameApp = true                // a window of the focused program without a parent (Telegram's viewer) is its child
+    // childBySameAppExcept = listOf("foot", "kitty", "firefox")   // but not for these: their windows are their own
 }
 
 focus {
@@ -105,48 +131,45 @@ focus {
     color = "auto"                          // "auto": the colours' accent; or "#RRGGBB" / "#RRGGBBAA" (see-through)
     distance = 4.0                          // how far outside the window
     width = 2.0
-    // animTime = 0.3                      // its glide (with the animation "border" on)
     // animateOnChange = false              // the line glides to the next window
     // color = "rgba(33ccffee) rgba(00ff99ee) 45deg"   // a gradient, written as Hyprland's col.active_border
     // urgentColor = "rgb(ff5555)"          // a window wanting attention, not focused
     // shader = "border.glsl"               // your own GLSL (next to this file), read again when saved;
-    //                                      // see Caulis's border shaders: rainbow, pulsing glow, marching ants:
-    //   vec4 paint(vec2 at) { float h = fract(progress + time * 0.2);
-    //       return vec4(clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0), 1.0); }
-    //   vec4 paint(vec2 at) { return vec4(colors[0].rgb * (0.55 + 0.45 * sin(time * 3.0)), 1.0); }
-    //   vec4 paint(vec2 at) { float d = step(0.5, fract((progress * 2.0 * (size.x + size.y) - time * 40.0) / 16.0));
-    //       return mix(vec4(0.1, 0.1, 0.1, 1.0), vec4(1.0, 0.85, 0.2, 1.0), d); }
+    //                                      // with vec4 paint(vec2 at): progress, time, size and colors are at hand
     // animate = true                       // false: the shader's own time stands still
 }
 
-// Special workspaces (Hyprland's "special"): above the wall on the focused monitor, at the
-// screen's own place, with a small layout of their own; the overview hides them.
-// specialWorkspace {
-//     dim = 0.4                            // the wall behind darker
-//     blurRadius = 0                       // and blurred (0: not)
-//     gap = 40                             // room to the screen's edges
-//     size = 1.0                           // how much of the screen
-//     hideWhenEmpty = true
-//     newWindowsJoin = true                // windows opening while it is shown go into it
-// }
+// The overview (Logo alone): every window at once.
+overview {
+    input = false                           // true: the windows take clicks there
+    choose = true                           // a click chooses a window and ends the overview
+    followPointer = true                    // the window under the pointer is the chosen one
+}
 
-// The colours of the bar, the menus and the focus border: made from the wallpaper, as phones do.
-// The quick settings (the bar's grid button) have a palette tile to choose among them; set them here to keep them fixed.
-// colors {
-//     source = "wallpaper"                // "wallpaper", "nord" (the classic ones) or "#5b8cc8"
-//     style = "tonal"                     // "tonal", "vibrant", "expressive", "neutral", "monochrome"
-// }
+// Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own,
+// shown with the keys below (Logo+grave).
+specialWorkspace {
+    dim = 0.4                               // the wall behind darker
+    // blurRadius = 8                       // and blurred (0: not)
+    gap = 40                                // room to the screen's edges
+    // size = 1.0                           // how much of the screen
+    // hideWhenEmpty = true
+    // newWindowsJoin = true                // windows opening while it is shown go into it
+    // clickOutsideHides = true
+}
+
+// --- The bar and panels ----------------------------------------------------------------------
 
 panels {
-    // newm's own bar at the top: three see-through islands floating at the edge — the wall
-    // (each window a tile; click: all windows) and the focused window, the clock (click: the
-    // calendar), the tray (background programs) and the network, volume, battery, power.
+    // newm's own bar at the top: see-through islands floating at the edge — the focused window,
+    // the clock (click: the calendar), the tray (background programs) and the network, volume,
+    // battery, notifications and power.
     topBar {
         enabled = true
         height = 32                         // an island's height
         margin = 6                          // the gap to the screen's edges
         cornerRadius = 12
-        theme = "auto"                      // "auto" (follows light/dark), "light", "dark"
+        theme = "auto"                      // "auto" (follows light or dark), "light", "dark"
         fontSize = 13
         // font = "Inter"
         left = listOf("window")             // also "wall": a small map of your wall
@@ -154,6 +177,7 @@ panels {
         right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power")
         clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"
         date = "EEE d MMM"                  // "" for none
+        // showPercent = true               // the battery's percent beside it
         // accentColor = "#BF616A"          // and islandColor, textColor: your own colours
         // texts { listOf(cpu(), memory()) }   // shown by the module "texts"
         // style = "classic"                // the original newm's bar (bars/classic.kts)
@@ -168,11 +192,49 @@ panels {
     lock {
         w = 0.6; h = 0.6                    // its size: parts of the screen
         cornerRadius = 32.0
+        // clock = "HH:mm"
     }
     launcher {
         w = 0.7; h = 0.7
         cornerRadius = 24.0
+        // frequent = 8                     // how many programs you start most are shown first
+        // hide = listOf("htop")            // programs left out of it
     }
+}
+
+// Notifications of programs (Telegram's messages, a download done): cards at the top right,
+// a history behind the bar's bell.
+notifications {
+    enabled = true                          // false: leave them to mako or dunst
+    seconds = 6                             // how long a card stays
+    // doNotDisturb = false                 // true: no cards, only the history
+    // corner = "top_right"                 // or "top_left", "top", "bottom_right", "bottom_left", "bottom"
+    // showInFullscreen = false
+}
+
+// What shows on the screen by itself.
+osd {
+    connections = "cards"                   // Wi-Fi, a cable or Bluetooth coming or going: "cards", "text" or "off"
+    // seconds = 1.3                        // how long the volume and brightness slider shows
+    // position = "bottom"                  // where: "bottom", "top", "center"
+}
+
+// The clipboard's history (Logo+V).
+clipboard {
+    enabled = true
+    size = 50                               // how many are kept (pinned ones on top of these)
+    // pictures = true; files = true
+    // ignore = listOf("org.keepassxc.KeePassXC")   // programs whose copies are never kept
+}
+
+// Screenshots (Logo+Shift+S or Print: choose; Logo+Print: the screen; Alt+Print: the window).
+screenshots {
+    // folder = "~/Pictures/Screenshots"
+    start = "region"                        // the chooser starts choosing a part; W chooses a window
+    // rememberKind = false                 // true: it starts with the kind used last
+    // clickPicksWindow = false             // true: a click (not a drag) takes the window under it
+    // pointer = false                      // the pointer in the picture
+    // then = "satty --filename {file}"     // a command run with each file saved
 }
 
 // --- Keyboard, mouse, monitors -----------------------------------------------------------
@@ -191,6 +253,11 @@ input {
     // xwayland = true                      // X11 programs
 }
 
+mouse {
+    superMove = "button"                    // Logo + left drag moves a window, Logo + right drag resizes it
+    // moveButton = "left"; resizeButton = "right"
+}
+
 // cursor { theme = "Adwaita"; size = 24; hideAfter = 5 }   // hideAfter: seconds the mouse is still
 
 // A monitor of its own (connectors: `newm cmd debug`):
@@ -198,104 +265,137 @@ input {
 // output("HDMI-A-1") { width = 2560; height = 1440; refreshHz = 144.0; x = 1920; y = 0 }
 
 // --- Keys ------------------------------------------------------------------------------------
-// "L" is the Logo (Super) key, "S" Shift, "C" Ctrl, "A" Alt: "L-S-h" is Logo+Shift+h, and
-// "L-H" means the same. "L-" is Logo tapped alone. "L-x"("what it does") { } shows it in the
-// help (Logo+/); a key without words is left out of it. Inside { } the layout is at hand: move(...),
-// toggleOverview(), ... (all of them: docs/en/settings.md).
+// A key in one line: bind("Super+Backspace", "close-window"). Keys are written as you say them:
+// Super (also Logo, Win), Ctrl, Alt, Shift and a key: a letter, a digit, Return, Space, Tab,
+// Escape, Backspace, Delete, Left, F1, Print and so on (case does not matter). "Super" alone is
+// Super tapped. Every action's name: docs/en/keys.md; `newm cmd keys` lists the keys bound now,
+// Logo+/ shows them. unbind("Super+Q") takes a key away. newm's own way works too, with any of
+// newm's functions inside { }: see the last lines of this block.
 
 val terminal = defaultTerminal()             // $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
 
 keys {
-    // Each key with what it does in words: Logo+/ shows them all.
-
     // Programs
-    "L-Return"("Open a terminal") { launch(terminal) }
-    "L-d"("Find and start a program") { enterLauncherOverlay() }
+    bind("Super+Return",          "launch", terminal, description = "Open a terminal")
+    bind("Super+D",               "launcher")                  // find and start a program
+    // bind("Super+B",            "launch", "firefox", description = "Firefox")
 
     // Going around: the window beside
-    "L-h"("Window to the left") { move(-1, 0) }
-    "L-j"("Window below") { move(0, 1) }
-    "L-k"("Window above") { move(0, -1) }
-    "L-l"("Window to the right") { move(1, 0) }
-    "L-Left"("Window to the left") { move(-1, 0) }
-    "L-Down"("Window below") { move(0, 1) }
-    "L-Up"("Window above") { move(0, -1) }
-    "L-Right"("Window to the right") { move(1, 0) }
-    "L-Tab"("Next window") { cycleViews(1) }
-    "L-S-Tab"("Previous window") { cycleViews(-1) }
-    "L-t"("Next window of a stack") { moveInStack(1) }
+    bind("Super+H",               "focus-left")
+    bind("Super+J",               "focus-down")
+    bind("Super+K",               "focus-up")
+    bind("Super+L",               "focus-right")
+    bind("Super+Left",            "focus-left")
+    bind("Super+Down",            "focus-down")
+    bind("Super+Up",              "focus-up")
+    bind("Super+Right",           "focus-right")
+    bind("Super+Tab",             "next-window")
+    bind("Super+Shift+Tab",       "previous-window")
+    bind("Super+T",               "next-in-stack")             // windows on the same tiles
 
     // Seeing more or less of the wall
-    "L-"("All windows (tap Super alone)") { toggleOverview() }
-    "L-minus"("Zoom out (see more)") { basicScale(1) }
-    "L-equal"("Zoom in (see fewer)") { basicScale(-1) }
-    "L-u"("Zoom out") { basicScale(1) }
-    "L-n"("Zoom in") { basicScale(-1) }
-    "L-0"("Fit the window to the screen") { fitFocusedView() }
-    "L-s"("Two windows side by side, and back") { sideBySide() }
+    bind("Super",                 "overview")                  // Super tapped alone: all windows
+    bind("Super+Minus",           "zoom-out")                  // see more
+    bind("Super+Equal",           "zoom-in")                   // see fewer
+    bind("Super+U",               "zoom-out")
+    bind("Super+N",               "zoom-in")
+    bind("Super+0",               "fit-window")                // the window fills the screen
+    bind("Super+S",               "side-by-side")              // two windows side by side, and back
 
     // Moving a window on the wall
-    "L-S-h"("Move the window left") { moveFocusedView(-1, 0) }
-    "L-S-j"("Move the window down") { moveFocusedView(0, 1) }
-    "L-S-k"("Move the window up") { moveFocusedView(0, -1) }
-    "L-S-l"("Move the window right") { moveFocusedView(1, 0) }
-    "L-S-Left"("Move the window left") { moveFocusedView(-1, 0) }
-    "L-S-Down"("Move the window down") { moveFocusedView(0, 1) }
-    "L-S-Up"("Move the window up") { moveFocusedView(0, -1) }
-    "L-S-Right"("Move the window right") { moveFocusedView(1, 0) }
+    bind("Super+Shift+H",         "move-window-left")
+    bind("Super+Shift+J",         "move-window-down")
+    bind("Super+Shift+K",         "move-window-up")
+    bind("Super+Shift+L",         "move-window-right")
+    bind("Super+Shift+Left",      "move-window-left")
+    bind("Super+Shift+Down",      "move-window-down")
+    bind("Super+Shift+Up",        "move-window-up")
+    bind("Super+Shift+Right",     "move-window-right")
 
     // Its size, in tiles (one tile: a screen at zoom 1)
-    "L-C-h"("Window narrower") { resizeFocusedView(-1, 0) }
-    "L-C-l"("Window wider") { resizeFocusedView(1, 0) }
-    "L-C-k"("Window shorter") { resizeFocusedView(0, -1) }
-    "L-C-j"("Window taller") { resizeFocusedView(0, 1) }
-    "L-C-Left"("Window narrower") { resizeFocusedView(-1, 0) }
-    "L-C-Right"("Window wider") { resizeFocusedView(1, 0) }
-    "L-C-Up"("Window shorter") { resizeFocusedView(0, -1) }
-    "L-C-Down"("Window taller") { resizeFocusedView(0, 1) }
+    bind("Super+Ctrl+H",          "window-narrower")
+    bind("Super+Ctrl+L",          "window-wider")
+    bind("Super+Ctrl+K",          "window-shorter")
+    bind("Super+Ctrl+J",          "window-taller")
+    bind("Super+Ctrl+Left",       "window-narrower")
+    bind("Super+Ctrl+Right",      "window-wider")
+    bind("Super+Ctrl+Up",         "window-shorter")
+    bind("Super+Ctrl+Down",       "window-taller")
 
     // Windows
-    "L-q"("Close the window") { closeFocusedView() }
-    "L-f"("Fullscreen, and back") { toggleFullscreen() }
-    "L-v"("Clipboard history") { toggleClipboard() }
-    "L-S-v"("Float, and back") { toggleFocusedViewFloating() }
+    bind("Super+Q",               "close-window")
+    // bind("Super+Backspace",    "close-window")              // close with Super+Backspace too
+    bind("Super+F",               "fullscreen")
+    bind("Super+V",               "clipboard")                 // the clipboard's history
+    bind("Super+Shift+V",         "float")                     // the window floats, and back
+    // bind("Super+W",            "swallow")                   // into the terminal that started it
 
-    // Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own
-    // (L-s and L-S-s are taken above: change them if you want Hyprland's Super+S / Super+Shift+S)
-    // "L-grave"("Special workspace, and back") { toggleSpecialWorkspace() }
-    // "L-S-grave"("Window into the special workspace") { moveToSpecialWorkspace() }
-    // "L-C-grave"("Window back onto the wall") { moveOutOfSpecialWorkspace() }
-    // "L-m"("Music, and back") { toggleSpecialWorkspace("music") }
-    // "L-S-m"("Window into music, unseen") { moveToSpecialWorkspace("music", silent = true) }
+    // Monitors: each has a wall of its own
+    // bind("Super+Period",       "next-monitor")
+    // bind("Super+Shift+Period", "window-to-next-monitor")
+
+    // Special workspaces: a layer above the wall (see specialWorkspace above)
+    bind("Super+Grave",           "special-workspace")
+    bind("Super+Shift+Grave",     "to-special-workspace")
+    bind("Super+Ctrl+Grave",      "from-special-workspace")
+    // bind("Super+M",            "special-workspace", "music")
+    // bind("Super+Shift+M",      "to-special-workspace", "music")
 
     // The session
-    "L-slash"("These keys") { toggleKeyHelp() }
-    "L-p"("Lock the screen") { ensureLocked(dim = true) }
-    "L-C"("Reload this configuration") { updateConfig() }
-    "L-S-Escape"("Log out") { terminate() }
+    bind("Super+Slash",           "key-help")                  // these keys
+    bind("Super+P",               "lock")
+    bind("Super+Shift+C",         "reload")                    // load this file again
+    bind("Super+Shift+Escape",    "logout")
 
-    // The laptop's keys work on the lock screen too
-    "XF86MonBrightnessUp"("Brighter") { caulis.run("brightness +5") }
-    "XF86MonBrightnessDown"("Darker") { caulis.run("brightness -5") }
-    "XF86AudioRaiseVolume"("Louder") { caulis.run("volume +5") }
-    "XF86AudioLowerVolume"("Quieter") { caulis.run("volume -5") }
-    "XF86AudioMute"("Sound off, and on") { caulis.run("volume mute") }
-    "XF86AudioMicMute"("Microphone off, and on") { caulis.run("mic-mute") }
+    // The laptop's keys (they work on the lock screen too)
+    bind("BrightnessUp",          "caulis", "brightness +5", description = "Brighter")
+    bind("BrightnessDown",        "caulis", "brightness -5", description = "Darker")
+    bind("VolumeUp",              "caulis", "volume +5", description = "Louder")
+    bind("VolumeDown",            "caulis", "volume -5", description = "Quieter")
+    bind("Mute",                  "caulis", "volume mute", description = "Sound off, and on")
+    bind("MicMute",               "caulis", "mic-mute", description = "Microphone off, and on")
+
     // Screenshots, as Windows has them
-    "L-S-s"("Screenshot: choose a part") { screenshot() }
-    "L-Print"("Screenshot of the screen") { screenshotScreen() }
-    "Print"("Screenshot: choose") { screenshot() }
-    "A-Print"("Screenshot of the window") { screenshotWindow() }
+    bind("Super+Shift+S",         "screenshot")                // choose a part, a window or the screen
+    bind("Print",                 "screenshot")
+    bind("Super+Print",           "screenshot-screen")
+    bind("Alt+Print",             "screenshot-window")
+
+    // A Hyprland-like set, ready to use: remove the // in front of the lines you want.
+    // bind("Super+C",            "close-window")
+    // bind("Super+Backspace",    "close-window")
+    // bind("Super+R",            "launcher")
+    // bind("Super+E",            "launch", "nautilus", description = "Files")
+    // bind("Super+1",            "go-to-window", "1")         // the first window, and so on
+    // bind("Super+2",            "go-to-window", "2")
+    // bind("Super+3",            "go-to-window", "3")
+    // bind("Super+4",            "go-to-window", "4")
+    // bind("Super+5",            "go-to-window", "5")
+    // bind("Super+6",            "go-to-window", "6")
+    // bind("Super+7",            "go-to-window", "7")
+    // bind("Super+8",            "go-to-window", "8")
+    // bind("Super+9",            "go-to-window", "9")
+    // bind("Super+M",            "logout")
+    // unbind("Super+S")                                       // a key of newm's taken away
+
+    // Or with code of your own inside { }:
+    // "Super+Shift+Return"("A terminal in my projects") { launch("foot -D ~/projects") }
 }
 
 // --- Gestures (touchpads) ----------------------------------------------------------------------
 
 gestures {
+    // Three fingers move over the wall, four zoom (up and down), five open the launcher,
+    // Logo with one finger moves a window and with two resizes it.
     // bind(GestureAction.SWIPE, null, "swipe-3")                    // move over the wall
     // bind(GestureAction.SWIPE_TO_ZOOM, null, "swipe-4")            // up and down: zoom
     // bind(GestureAction.MOVE_RESIZE, "L", "move-1", "swipe-2")     // Logo + fingers: move, resize
     // bind(GestureAction.LAUNCHER, null, "swipe-5")
+    hints = true                                                     // what a gesture does, shown at the bottom while it runs
     // lpInertia = 0.8                                               // smoother (and slower) feel
+    // Gestures of your own: the way the fingers go first decides; other ways stay newm's own.
+    // on("swipe-4", "left", "Next monitor") { moveWorkspace(1) }
+    // on("swipe-4", "right", "Previous monitor") { moveWorkspace(-1) }
 }
 
 // --- The start ------------------------------------------------------------------------------------
@@ -305,29 +405,35 @@ gestures {
 autostart {
     // app("waybar")                                          // a bar of your own
     // app("nm-applet", "--indicator") { delay = 2.seconds; ifNotRunning = true; restart = OnCrash(maxTimes = 3, within = 1.minutes) }
+    // app("telegram-desktop", "-startintray") { delay = 3.seconds }
     // shell("sleep 1; notify-send 'Hello'")                  // a piece of shell
-    // desktopEntries = true                                  // also ~/.config/autostart's programs
+    // desktopEntries = true                                  // also the programs of ~/.config/autostart
 }
 
-// Dark until newm is ready, then it fades in (on by default).
+// Dark until newm is ready, then it fades in.
 reveal {
-    // enabled = true
+    enabled = true
     // fadeMillis = 600
 }
 
-// A sound as newm fades in (on by default): "airy", "classic", "glass", "soft", or a file of yours.
+// A sound as newm fades in: "airy", "classic", "glass", "soft", or a file of yours.
 startupSound {
-    // preset = "airy"
-    // volume = 0.8
+    enabled = true                                            // false: silent
+    preset = "airy"
+    volume = 0.8
     // file = "~/sounds/hello.ogg"
-    // enabled = false                                        // silent
+}
+
+// The windows opened again after `newm cmd restart keep` (and, if you like, after logging in).
+session {
+    // restoreAtLogin = false                                 // true: your last session's windows come back at login
+    // exclude = listOf("org.keepassxc.KeePassXC")            // programs never started again
 }
 
 // --- When things happen --------------------------------------------------------------------------
 
 onStartup {
-    // launch("mako")                       // notifications (or in autostart { } above)
-    // launch("nm-applet --indicator")
+    // launch("nm-applet --indicator")      // (or in autostart { } above)
 }
 
 // onReconfigure { launch("notify-send newm 'Configuration loaded'") }
@@ -336,5 +442,6 @@ energy {
     idleTimes = listOf(120, 300, 600)       // seconds without input: dim, lock, suspend
     screensOffAfter = 330                   // and the screens go dark (0: never)
     // suspendCommand = "systemctl suspend"
+    // after(1800) { ensureLocked() }       // something of your own after so many seconds
 }
 // lockOnWakeup = true

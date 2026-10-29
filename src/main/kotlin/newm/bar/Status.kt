@@ -58,15 +58,59 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
     private var task: ScheduledFuture<*>? = null
     private var wifiNameAt = 0L
     private var wifiName = ""
+    // The volume as last read, and when (it costs a program run: wpctl or pactl).
+    private var volumeRead: Volume? = null
+    private var volumeAt = 0L
+    // The sound server says each change (pactl subscribe): no asking every few seconds.
+    @Volatile
+    private var follower: Process? = null
+    @Volatile
+    private var closed = false
 
     fun start() {
         if (task != null) return
         task = worker.scheduleWithFixedDelay({ readAll() }, 0, periodSeconds, TimeUnit.SECONDS)
+        if (confFollowVolume() && confGetVolume() == null && installed("pactl")) followVolume()
     }
 
     /** Reads again now (after the volume was changed, ...). */
     fun refreshSoon() {
-        worker.execute { readAll() }
+        worker.execute { readAll(volumeNow = true) }
+    }
+
+    // `pactl subscribe` on a thread of its own: a change of an output (a sink) or of the server
+    // (another default output) reads the volume again, once for a burst of them. It ends with
+    // newm; if it fails, the volume is asked every sound { volumeEverySeconds } as before.
+    private fun followVolume() {
+        Thread({
+            val process = try {
+                ProcessBuilder("pactl", "subscribe").redirectErrorStream(true).start().also { it.outputStream.close() }
+            } catch (e: Exception) {
+                log.info { "pactl subscribe cannot be started ($e): the volume is read every ${confVolumeEvery()} s" }
+                return@Thread
+            }
+            follower = process
+            log.info { "The volume follows the sound server (pactl subscribe)" }
+            var pending: ScheduledFuture<*>? = null
+            try {
+                process.inputStream.bufferedReader().forEachLine { line ->
+                    if (closed) return@forEachLine
+                    if ("on sink" in line || "on server" in line) {
+                        if (pending?.isDone != false) pending = worker.schedule({ readVolumeNow() }, 100, TimeUnit.MILLISECONDS)
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            follower = null
+            if (!closed) log.info { "pactl subscribe ended: the volume is read every ${confVolumeEvery()} s" }
+        }, "newm-volume-follow").apply { isDaemon = true }.start()
+    }
+
+    private fun readVolumeNow() {
+        val v = try { readVolume() } catch (e: Exception) { log.trace { "volume: $e" }; null }
+        volumeRead = v
+        volumeAt = System.nanoTime()
+        caulis.post { if (volume != v) volume = v }
     }
 
     /** The volume as it is about to be (shown at once, before the sound server says it). */
@@ -74,10 +118,17 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
         volume = (volume ?: Volume(percent, false)).copy(percent = percent, muted = false)
     }
 
-    private fun readAll() {
+    private fun readAll(volumeNow: Boolean = false) {
         val b = try { readBattery() } catch (e: Exception) { log.trace { "battery: $e" }; null }
         val n = try { readNetwork() } catch (e: Exception) { log.trace { "network: $e" }; Network(Network.Kind.NONE) }
-        val v = try { readVolume() } catch (e: Exception) { log.trace { "volume: $e" }; null }
+        // The volume (a program run): when asked for, the first time, and every sound { volumeEverySeconds }
+        // (rarely while the sound server says its changes itself).
+        val every = confVolumeEvery().coerceAtLeast(1) * (if (follower != null) FOLLOWED_SLOWER else 1)
+        if (volumeNow || volumeAt == 0L || System.nanoTime() - volumeAt >= every * 1_000_000_000L) {
+            volumeRead = try { readVolume() } catch (e: Exception) { log.trace { "volume: $e" }; null }
+            volumeAt = System.nanoTime()
+        }
+        val v = volumeRead
         val l = try { readBrightness() } catch (e: Exception) { null }
         val a = try { readAddress() } catch (e: Exception) { null }
         caulis.post {
@@ -198,7 +249,14 @@ class Status(private val caulis: Caulis, private val periodSeconds: Long = 2) : 
     }
 
     override fun close() {
+        closed = true
         task?.cancel(false)
         worker.shutdownNow()
+        follower?.destroy()
+    }
+
+    private companion object {
+        // While pactl says each change, the volume is still asked now and then (a change it missed), this much rarer.
+        const val FOLLOWED_SLOWER = 6
     }
 }

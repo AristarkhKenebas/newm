@@ -51,6 +51,7 @@ newm — это композитор Wayland. Обычные оконные ме
 ```nix
 # flake.nix
 inputs.newm.url = "github:AristarkhKenebas/newm";
+inputs.newm.inputs.nixpkgs.follows = "nixpkgs";   # по желанию, безопасно (но не nixpkgs-gradle)
 
 # ваша конфигурация NixOS
 imports = [ newm.nixosModules.default ];

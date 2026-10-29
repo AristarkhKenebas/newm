@@ -287,7 +287,10 @@ class Panels(private val wm: Layout) {
         var now by remember { mutableStateOf(LocalDateTime.now()) }
         LaunchedEffect(Unit) {
             while (true) {
-                now = LocalDateTime.now()
+                // (Drawn anew only when the clock's or the date's text changes: each minute unless it shows seconds.)
+                val t = LocalDateTime.now()
+                val pattern = confLockClock() ?: confTimeFormat()
+                if (formatted(t, pattern) != formatted(now, pattern) || formatted(t, confLockDate()) != formatted(now, confLockDate())) now = t
                 delay(1000)
             }
         }

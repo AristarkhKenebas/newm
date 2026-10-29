@@ -56,6 +56,32 @@ Gradle.
 Задавать `programs.newm.package` не нужно: модуль сам берёт newm из flake. Пакеты есть для
 `x86_64-linux` и `aarch64-linux`.
 
+### Какие `follows` безопасны
+
+У flake newm три входа:
+
+| Вход | Что newm из него берёт | Следовать за вашим nixpkgs? |
+|---|---|---|
+| `nixpkgs` | библиотеки, которые newm открывает во время работы (Mesa, libinput, ...) | **можно**, и даже хорошо: тогда у newm та же Mesa, что у системы |
+| `caulis` | Java 27 и список этих библиотек | оставьте как есть (он уже следует за `nixpkgs` newm) |
+| `nixpkgs-gradle` | Gradle, которым newm **собирается** | **никогда**: он закреплён нарочно |
+
+```nix
+inputs.newm = {
+  url = "github:AristarkhKenebas/newm";
+  inputs.nixpkgs.follows = "nixpkgs";            # можно
+  # inputs.nixpkgs-gradle.follows = "nixpkgs";   # нельзя: сборка остановится
+};
+```
+
+newm собирается без сети из списка загрузок Gradle (`nix/deps.json`), а в этом списке файлы
+для одной версии Gradle (`nix/deps-gradle-version`). Другой Gradle просит другие файлы
+(например, сборку плагина Kotlin для этого Gradle), и сборка упала бы с «Could not find
+kotlin-gradle-plugin-...-gradleNNN.jar». Поэтому newm всегда собирается Gradle из своего
+`nixpkgs-gradle`, за каким бы nixpkgs ни следовало остальное. Если этот Gradle всё же
+подменить, сборка сразу остановится со словами «nix/deps.json ... was made for Gradle X,
+but this build got Gradle Y» и скажет, что делать.
+
 ## Что делает модуль
 
 - устанавливает команду `newm`;
@@ -243,11 +269,18 @@ there yet», список для этой версии newm ещё не сдел
 и версия Caulis из `gradle/libs.versions.toml` уже в Maven Central):
 
 ```sh
-nix build .#default.mitmCache.updateScript && ./result
+nix run .#update-deps
 ```
 
-Он запишет `nix/deps.json`; дальше `nix build` работает (с флейком сначала `git add
-nix/deps.json`: флейк видит только файлы, которые знает git).
+Он сделает `nix/deps.json` закреплённым Gradle flake (вход `nixpkgs-gradle`) и запишет версию
+этого Gradle в `nix/deps-gradle-version`; чтобы перейти на другой Gradle, поменяйте ревизию
+`nixpkgs-gradle` во `flake.nix` и запустите снова. Дальше `nix build` работает (с флейком
+сначала `git add nix/deps.json nix/deps-gradle-version`: флейк видит только файлы, которые
+знает git).
+
+Если сборка останавливается со словами «nix/deps.json ... was made for Gradle X, but this
+build got Gradle Y», вход `nixpkgs-gradle` у newm заставили следовать за другим nixpkgs или
+подменили его Gradle: см. [Какие `follows` безопасны](#какие-follows-безопасны).
 
 ## Если что-то пошло не так
 

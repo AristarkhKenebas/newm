@@ -24,12 +24,28 @@ legacy/                 оригинальный newm на Python, для спр
 Если исходники Caulis лежат рядом с этой папкой (`../caulis`), добавьте `-Pcaulis.local=true`,
 чтобы собрать newm с ними. `./install.sh` и `dev/newm-dev` делают это сами.
 
-Чтобы попробовать newm, не покидая свой рабочий стол, запустите `build/install/newm/bin/newm`
-в терминале. newm откроется как обычное окно.
+Чтобы попробовать newm, не покидая свой рабочий стол, запустите его в терминале на отдельной
+сессии D-Bus (тогда он не трогает уведомления, трей и медиаклавиши вашего стола); newm
+откроется как обычное окно:
+
+```sh
+dbus-run-session -- build/install/newm/bin/newm
+```
+
+Без окна вообще (headless: для скриптов и замеров) — тоже со своим домом и шиной:
+
+```sh
+env -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS CAULIS_MODE=headless HOME=$(mktemp -d) \
+    dbus-run-session -- build/install/newm/bin/newm
+```
+
+(Вложенный или headless newm никогда не закрывает ваш демон уведомлений, даже на вашей шине,
+но имена на ней он всё равно занял бы.) `./gradlew test` сам держит тесты вдали от шин стола.
 
 Пакет Nix собирается без сети из зависимостей, перечисленных в `nix/deps.json`. После
 изменения зависимостей (новая версия Caulis в `gradle/libs.versions.toml`) создайте его
-заново: `nix build .#default.mitmCache.updateScript && ./result`.
+заново: `nix run .#update-deps` (он берёт закреплённый Gradle flake, вход `nixpkgs-gradle`,
+и записывает его версию в `nix/deps-gradle-version`).
 
 ## Работа над newm внутри newm
 

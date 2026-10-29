@@ -123,15 +123,11 @@ class ConfigLoader(private val caulis: Caulis, private val handler: PyConfig.Han
 
     /** newm's own default (when the user's cannot be loaded at the start). */
     fun loadDefault(): Map<String, Any?>? {
-        val copy = Files.createTempFile("newm-default", ".kts")
-        return try {
-            ConfigLoader::class.java.getResourceAsStream("/newm/templates/config.kts")!!.use { Files.copy(it, copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
-            val compiled = KtsConfig.compile(copy)
-            val config = NewmConfig(caulis)
-            if (KtsConfig.run(compiled, config).isEmpty()) config.values else null
-        } finally {
-            Files.deleteIfExists(copy)
-        }
+        // (As config.kts: the same compiled script as a user's untouched copy of it, from the cache.)
+        val text = ConfigLoader::class.java.getResourceAsStream("/newm/templates/config.kts")!!.use { String(it.readAllBytes()) }
+        val compiled = KtsConfig.compile(text, "config.kts")
+        val config = NewmConfig(caulis)
+        return if (KtsConfig.run(compiled, config).isEmpty()) config.values else null
     }
 
     private fun runKts(compiled: KtsConfig.Compiled): Map<String, Any?>? {

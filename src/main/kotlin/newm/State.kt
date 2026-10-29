@@ -71,23 +71,6 @@ data class ViewState(
         scaleOrigin?.let { w = it.first; h = it.second }
         return doubleArrayOf(i, j, w, h)
     }
-
-    /**
-     * Its place in tiles on a grid [f] times as fine (a finer or coarser grid): a tiled view's
-     * place and size, a floating one's place, and where a move or resize started from.
-     */
-    internal fun scaledBy(f: Double) {
-        if (isTiled) {
-            i *= f
-            j *= f
-            w *= f
-            h *= f
-        } else if (!isLayer) {
-            floatPos = floatPos.first * f to floatPos.second * f
-        }
-        moveOrigin?.let { moveOrigin = it.copy(i = it.i * f, j = it.j * f) }
-        scaleOrigin?.let { scaleOrigin = it.first * f to it.second * f }
-    }
 }
 
 /** state_before_fullscreen: i, j, size before, and i, j, size in fullscreen. */
@@ -152,62 +135,7 @@ class WorkspaceState(
             topBarDy, bottomBarDy, topExcluded, bottomExcluded, stateBeforeOverview, leftExcluded, rightExcluded,
         )
         res.viewStates = viewStates.mapValuesTo(LinkedHashMap()) { it.value.copy() }
-        res.unit = unit
         return res
-    }
-
-    /**
-     * How many grid tiles across one ordinary tile is: 1, then 2, 4, ... each time the grid is
-     * made finer ([refined]) — a new window gets one ordinary tile, not one of the finer ones.
-     */
-    var unit: Double = 1.0
-
-    /**
-     * The size of a new window (and of Super+S's halves) in tiles: one ordinary tile (the grid's
-     * [unit], kept over restarts) — however far the view is zoomed out.
-     */
-    fun newTile(): Double = unit
-
-    /**
-     * The grid as coarse again as it can be: while every tiled window's place and size are even,
-     * each 2 x 2 tiles become one (nothing moves on screen) — the opposite of [refined].
-     */
-    fun coarsened(): WorkspaceState {
-        fun even(x: Double) = Math.abs(x / 2 - Math.rint(x / 2)) < 1e-6
-        var r = this
-        while (r.unit >= 2.0 && r.viewStates.values.filter { it.isTiled }.all { even(it.i) && even(it.j) && even(it.w) && even(it.h) }) {
-            val c = r.copy(i = r.i / 2, j = r.j / 2, size = r.size / 2, sizeOrigin = r.sizeOrigin?.div(2))
-            c.scaleRemembered(0.5)
-            c.intermediateRows.clear()
-            c.intermediateCols.clear()
-            for (v in c.viewStates.values) v.scaledBy(0.5)
-            c.unit = r.unit / 2
-            r = c
-        }
-        if (r !== this) log.info { "The grid made coarser again (one tile: ${r.unit} of them)" }
-        return r
-    }
-
-    /**
-     * The same picture on a grid twice as fine: every tile split into 2 x 2, the view and the
-     * tiled windows' places doubled with it — nothing moves on screen, but a window of one
-     * tile can then be made smaller.
-     */
-    fun refined(): WorkspaceState {
-        val r = copy(i = i * 2, j = j * 2, size = size * 2, sizeOrigin = sizeOrigin?.times(2))
-        r.scaleRemembered(2.0)
-        r.intermediateRows.clear()
-        r.intermediateCols.clear()
-        for (v in r.viewStates.values) v.scaledBy(2.0)
-        r.unit = unit * 2
-        return r
-    }
-
-    // Where the view was before the overview and before fullscreen, on a grid [f] times as fine
-    // (they are in tiles too: left as they were, leaving the overview zoomed twice too far).
-    private fun scaleRemembered(f: Double) {
-        stateBeforeOverview = stateBeforeOverview?.let { it.copy(i = it.i * f, j = it.j * f, size = it.size * f, sizeOrigin = it.sizeOrigin?.times(f)) }
-        stateBeforeFullscreen = stateBeforeFullscreen?.let { BeforeFullscreen(it.i * f, it.j * f, it.size * f, it.fi * f, it.fj * f, it.fsize * f) }
     }
 
     fun replacingViewState(view: View, change: ViewState.() -> Unit): WorkspaceState {
@@ -608,10 +536,7 @@ class LayoutState(
         val orphanWs = workspaceStates.getValue(layout.workspaces[0].handle)
         for (k in workspaceStates.keys.toList()) {
             if (k !in handles) {
-                // (In the tiles of the workspace they go to: its grid may be finer or coarser.)
-                val gone = workspaceStates.getValue(k)
-                val f = orphanWs.unit / gone.unit
-                gone.viewStates.forEach { (l, s) -> orphans += l to s.copy().also { if (f != 1.0) it.scaledBy(f) } }
+                workspaceStates.getValue(k).viewStates.forEach { (l, s) -> orphans += l to s.copy() }
                 workspaceStates.remove(k)
             }
         }

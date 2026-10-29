@@ -56,6 +56,32 @@ Gradle.
 You do not need to set `programs.newm.package`: the module takes newm from the flake by
 itself. The flake has packages for `x86_64-linux` and `aarch64-linux`.
 
+### Which `follows` are safe
+
+newm's flake has three inputs:
+
+| Input | What newm takes from it | Make it follow your nixpkgs? |
+|---|---|---|
+| `nixpkgs` | the libraries newm opens while running (Mesa, libinput, ...) | **safe**, and good: newm then uses the same Mesa as your system |
+| `caulis` | Java 27 and the list of those libraries | leave it as it is (it follows newm's `nixpkgs` already) |
+| `nixpkgs-gradle` | the Gradle newm is **built** with | **never**: it is pinned on purpose |
+
+```nix
+inputs.newm = {
+  url = "github:AristarkhKenebas/newm";
+  inputs.nixpkgs.follows = "nixpkgs";            # fine
+  # inputs.nixpkgs-gradle.follows = "nixpkgs";   # do not: the build stops
+};
+```
+
+newm is built offline from a list of Gradle's downloads (`nix/deps.json`), and that list
+holds the files of one Gradle version (`nix/deps-gradle-version`). Another Gradle asks for
+other files (for example the Kotlin plugin's build for that Gradle) and the build would
+stop with "Could not find kotlin-gradle-plugin-...-gradleNNN.jar". So newm always builds
+with the Gradle of its own `nixpkgs-gradle`, whatever nixpkgs the rest follows. If that
+Gradle is replaced anyway, the build stops at once with "nix/deps.json ... was made for
+Gradle X, but this build got Gradle Y" and says what to do.
+
 ## What the module does
 
 - installs the `newm` command;
@@ -242,11 +268,18 @@ the list was not made for this version of newm yet. Make it in newm's folder (wi
 once the Caulis version in `gradle/libs.versions.toml` is on Maven Central):
 
 ```sh
-nix build .#default.mitmCache.updateScript && ./result
+nix run .#update-deps
 ```
 
-It writes `nix/deps.json`; `nix build` works from then on (with a flake, `git add nix/deps.json`
-first: a flake sees only files git knows).
+It makes `nix/deps.json` with the flake's pinned Gradle (input `nixpkgs-gradle`) and writes
+that Gradle's version to `nix/deps-gradle-version`; to move to another Gradle, change the
+revision of `nixpkgs-gradle` in `flake.nix` and run it again. `nix build` works from then on
+(with a flake, `git add nix/deps.json nix/deps-gradle-version` first: a flake sees only
+files git knows).
+
+If the build stops with "nix/deps.json ... was made for Gradle X, but this build got
+Gradle Y", newm's `nixpkgs-gradle` input was made to follow another nixpkgs, or its Gradle
+was overridden: see [Which `follows` are safe](#which-follows-are-safe).
 
 ## If something goes wrong
 

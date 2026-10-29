@@ -31,9 +31,19 @@ abstract class Overlay(protected val layout: Layout) {
     }
 
     fun destroy() {
-        preDestroy()
+        // (Whatever fails here, the overlay ends: the layout's queue and its frames go on.)
+        try {
+            preDestroy()
+        } catch (e: Exception) {
+            log.error("Overlay: cleaning up failed", e)
+        }
         ready = false
-        val (wmState, dt) = exitTransition()
+        val (wmState, dt) = try {
+            exitTransition()
+        } catch (e: Exception) {
+            log.error("Overlay: its exit failed, it ends at once", e)
+            null to null
+        }
         if (wmState != null && dt != null) {
             log.trace { "Overlay: Exit animation" }
             layout.animateTo({ null to wmState }, dt, ::exitFinished, overlaySafe = true)

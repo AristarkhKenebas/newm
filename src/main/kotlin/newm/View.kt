@@ -12,14 +12,22 @@ private val log = Logger("view")
 private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 private val confPadding = configuredValue("view.padding", 6.0)
 private val confFullscreenPadding = configuredValue("view.fullscreen_padding", 0.0)
-private val confMinSizeKeepsShape = configuredValue("view.min_size_keeps_shape", true)
-private val confMinSizeShrink = configuredValue("view.min_size_shrink", 0.6)
 // Windows without the focus a little see-through (1: not at all; newm issue 139).
 private val confUnfocusedOpacity = configuredValue("view.unfocused_opacity", 1.0)
 // Windows fade in when they open and out when they close.
 private val confFade = configuredValue("view.fade", true)
-// The first window of an empty workspace takes the whole screen (newm showed it as a quarter, zoomed out).
-private val confFillFirst = configuredValue("view.fill_first", true)
+// The first window of an empty workspace takes the whole screen (false, as newm: a quarter, zoomed out).
+private val confFillFirst = configuredValue("view.fill_first", false)
+
+// windows { childPlacement = "below" | "over" | "right" }: where a program's child window (a
+// dialog, a photo viewer) opens — tiled below its parent, floating over it (newm), or right of it.
+internal val confChildPlacement = configuredValue("windows.child_placement", "below")
+// windows { childBySameApp = true }: a window without a parent opened by the program whose window
+// has the focus (the same connection and app id: Telegram's photo viewer) counts as its child.
+private val confChildBySameApp = configuredValue("windows.child_by_same_app", true)
+// ... but not for these programs (their new windows are windows of their own: terminals, browsers).
+private val confChildBySameAppExcept = configuredValue("windows.child_by_same_app_except",
+    listOf("foot", "footclient", "kitty", "Alacritty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty", "firefox", "chromium", "google-chrome", "brave-browser"))
 private val confBorderWsSwitch = configuredValue("view.border_ws_switch", 10.0)
 private val confRulesCallback = configuredValue<(View) -> Map<String, Any?>?>("view.rules") { null }
 private val confFloatingMinSize = configuredValue("view.floating_min_size", true)
@@ -52,6 +60,10 @@ class Up(window: Window, focused: Boolean) {
     /** min_w, max_w, min_h, max_h (0: none). */
     val sizeConstraints = intArrayOf(window.minWidth, window.maxWidth, window.minHeight, window.maxHeight)
     val isFloating = window.parent != null || window.fixedSize || window.prefersFloating
+    /** Its size cannot change (smallest = largest). */
+    val fixedSize = window.fixedSize
+    /** An X11 dialog, palette or splash screen. */
+    val prefersFloating = window.prefersFloating
     val isFocused = focused
     val showsCsd = !window.serverDecorated
     val fixedOutput: Monitor? = null
@@ -93,6 +105,43 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     val pid: Int get() = window.pid
     val role: String get() = "toplevel"
     val parent: View? get() = window.parent?.let(wm::viewOf)
+
+    // The window that had the focus when this one came (it goes back there when this one closes, if it is its child).
+    internal val focusedAtOpen: View? = wm.lastShownFocused
+
+    /**
+     * The window this one is a child of, for where it opens and where the focus goes when it
+     * closes: its parent (xdg parent, X11 transient), else — windows { childBySameApp } — the
+     * window of the same program (connection and app id) that had the focus when it came
+     * (Telegram's photo viewer has no parent). Null: a window of its own.
+     */
+    val childOf: View? get() {
+        parent?.let { return it }
+        if (!confChildBySameApp()) return null
+        val f = focusedAtOpen?.takeIf { !it.destroyed && it !== this } ?: return null
+        if (appId.isEmpty() || f.appId != appId || appId in confChildBySameAppExcept()) return null
+        return f.takeIf { runCatching { window.sameProgramAs(f.window) }.getOrDefault(false) }
+    }
+
+    // Decided once when it opens (the focus moves on afterwards).
+    private var childOfAtOpen: View? = null
+    private var childDecided = false
+
+    /** [childOf] as it was when the window opened (null: a window of its own). */
+    internal fun openedAsChildOf(): View? {
+        if (!childDecided) {
+            childDecided = true
+            childOfAtOpen = childOf
+            childOfAtOpen?.let { p -> if (parent == null) log.info { "$appId: a window without a parent from the focused window of the same program: its child (${p.handle})" } }
+        }
+        return childOfAtOpen?.takeIf { !it.destroyed }
+    }
+
+    /** Where the focus goes back when this window closes: its parent, or the window focused when it came. Null: none of these. */
+    internal fun returnFocusTo(): View? {
+        val p = openedAsChildOf() ?: return null
+        return p.takeIf { !it.destroyed } ?: focusedAtOpen?.takeIf { !it.destroyed && it !== this }
+    }
     val isXwayland: Boolean get() = window.javaClass.name.contains("xwayland", ignoreCase = true)
 
     override fun toString(): String {
@@ -140,13 +189,16 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         val posHint = numberPair(rules["float_pos"], "float_pos")
 
         if (up != null) {
+            // (Not for being a child: that is windows { childPlacement } below.)
+            floats = up.prefersFloating && parent == null
             val c = up.sizeConstraints
             if (c[0] > 0 && c[2] > 0 && c[0] == c[1] && c[2] == c[3]) floats = true
         }
-        if (parent != null) floats = true
+        // A child window: floating over its parent (newm: every window with a parent), or tiled beside it.
+        if (openedAsChildOf() != null && confChildPlacement() == "over") floats = true
         // A rule says last (view.rules: float = false tiles a dialog or a fixed-size window too).
         (rules["float"] as? Boolean)?.let { rule ->
-            if (rule != floats) log.info { "Rule: ${if (rule) "floating" else "tiled"} although ${if (parent != null) "a child window" else "it would ${if (floats) "float" else "tile"}"}: $this" }
+            if (rule != floats) log.info { "Rule: ${if (rule) "floating" else "tiled"} although it would ${if (floats) "float" else "tile"}: $this" }
             floats = rule
         }
         return Floating(floats, sizeHint, posHint)
@@ -306,7 +358,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         val (w, h) = initial.size
         var ci = referenceWsState.i + referenceWsState.size / 2.0
         var cj = referenceWsState.j + referenceWsState.size / 2.0
-        val parentView = parent
+        val parentView = openedAsChildOf()
         if (posHint != null) {
             ci = referenceWsState.i + posHint.first * referenceWsState.size
             cj = referenceWsState.j + posHint.second * referenceWsState.size
@@ -444,21 +496,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
         // Override: Keep aspect-ratio of windows
         if (!ignoreMinSize) {
-            val (_, maxW, _, maxH) = up.sizeConstraints.toList()
-            val (minW, minH) = smallest(up)
-            // Smaller than the program can be (Spotify: 800 x 600): it is asked for the same shape
-            // as its place, only as much bigger as it needs, and drawn shrunk to fill its place
-            // exactly — no empty sides, no stretching while the view moves.
-            val grow = maxOf(if (minW > 0 && width in 1 until minW) minW.toDouble() / width else 1.0,
-                if (minH > 0 && height in 1 until minH) minH.toDouble() / height else 1.0)
-            if (grow > 1.0 && confMinSizeKeepsShape()) {
-                val gw = Math.ceil(width * grow).toInt()
-                val gh = Math.ceil(height * grow).toInt()
-                if ((maxW <= 0 || gw <= maxW) && (maxH <= 0 || gh <= maxH)) {
-                    width = gw
-                    height = gh
-                }
-            }
+            val (minW, maxW, minH, maxH) = up.sizeConstraints.toList()
             if (width < minW && minW > 0) width = minW
             if (width > maxW && maxW > 0) width = maxW
             if (height < minH && minH > 0) height = minH
@@ -503,57 +541,6 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         return result
     }
 
-    /**
-     * The fewest tiles across and down the program's smallest size needs (Spotify will not be
-     * smaller than 800 x 600): its tile is never made smaller than that (drawn smaller it came
-     * out squeezed or cut).
-     */
-    // The smallest size it really drew when asked for less (0: none seen beyond its own word).
-    private var smallestW = 0
-    private var smallestH = 0
-
-    // A size seen bigger than asked, to be learned if it stays so for a moment.
-    private var seenBigger: List<Int>? = null
-
-    /** It drew [dw] x [dh] when asked for [aw] x [ah]: bigger than asked (still so a moment later) is its real smallest size. */
-    fun learnSmallest(aw: Int, ah: Int, dw: Int, dh: Int) {
-        if (dw <= 0 || dh <= 0) return
-        if (!(dw > aw + 8 && dw > smallestW) && !(dh > ah + 8 && dh > smallestH)) return
-        val seen = listOf(aw, ah, dw, dh)
-        if (seenBigger == seen) return
-        seenBigger = seen
-        wm.caulis.after(400) {
-            if (seenBigger != seen) return@after
-            seenBigger = null
-            val now = Up(window, false).size
-            if (window.caughtUp && now == dw to dh && window.configuredSize == aw to ah) keepSmallest(aw, ah, dw, dh)
-        }
-    }
-
-    private fun keepSmallest(aw: Int, ah: Int, dw: Int, dh: Int) {
-        var changed = false
-        if (dw > aw + 8 && dw > smallestW) { smallestW = dw; changed = true }
-        if (dh > ah + 8 && dh > smallestH) { smallestH = dh; changed = true }
-        if (changed) {
-            log.info { "$this cannot be smaller than ${maxOf(smallestW, upState?.sizeConstraints?.get(0) ?: 0)} x ${maxOf(smallestH, upState?.sizeConstraints?.get(2) ?: 0)} (asked $aw x $ah, drew $dw x $dh)" }
-            wm.damage()
-        }
-    }
-
-    // Its smallest size: what it says, or what it was seen to need.
-    private fun smallest(up: Up): Pair<Int, Int> = maxOf(up.sizeConstraints[0], smallestW) to maxOf(up.sizeConstraints[2], smallestH)
-
-    fun minTiles(wsState: WorkspaceState): Pair<Double, Double> {
-        val up = upState ?: return 1.0 to 1.0
-        val size = wsState.sizeOrigin ?: wsState.size
-        // Drawn shrunk in its own shape (minSizeKeepsShape): down to this much of its smallest size.
-        val shrink = if (confMinSizeKeepsShape()) confMinSizeShrink().coerceIn(0.3, 1.0) else 1.0
-        val (sw, sh) = smallest(up)
-        val w = sw.toDouble() * shrink * size / wsState.usableWidth()
-        val h = sh.toDouble() * shrink * size / wsState.usableHeight()
-        return maxOf(kotlin.math.ceil(w - 0.05), 1.0) to maxOf(kotlin.math.ceil(h - 0.05), 1.0)
-    }
-
     internal fun showTiled(ws: Workspace, state: LayoutState, wsState: WorkspaceState): Pair<LayoutState?, LayoutState?> {
         log.trace { "Show - tiled: $this" }
         val up = upState
@@ -570,12 +557,12 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         }
         val referenceWsState = forFirstWindow(referenceState.workspaceState(ws))
 
-        // One ordinary tile (on a grid made finer: as many of the finer ones), or more if the program needs it.
-        val tile = pyRound(referenceWsState.newTile()).coerceAtLeast(1)
-        val w = max(ceil(minW), tile)
-        val h = max(ceil(minH), tile)
+        // One tile, or more if the program needs it.
+        val w = max(ceil(minW), 1)
+        val h = max(ceil(minH), 1)
 
-        val (i1, j1) = wm.placeInitial(ws, referenceWsState, w, h)
+        // (Room is made in the reference state: what moves aside glides there.)
+        val (i1, j1) = wm.placeNew(this, ws, referenceWsState, w, h)
 
         // It opens in its place, a little smaller and see-through, and grows to its size as it
         // appears (newm grew it out of a point in its middle while the view moved: it seemed to
@@ -604,8 +591,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     // The workspace as the first window sees it: zoomed in on one tile, if it is empty.
     private fun forFirstWindow(wsState: WorkspaceState): WorkspaceState {
         if (!confFillFirst() || wsState.viewStates.values.any { it.isTiled } || wsState.isInOverview() || wsState.isFullscreen()) return wsState
-        // (Empty: the grid starts coarse again.)
-        return wsState.copy(i = 0.0, j = 0.0, size = 1.0, sizeOrigin = null).also { it.unit = 1.0 }
+        return wsState.copy(i = 0.0, j = 0.0, size = 1.0, sizeOrigin = null)
     }
 
     // --- Init and map
@@ -691,6 +677,7 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         }
         if (result != (null to null)) {
             mapped = true
+            if (isFocused() || initialKind >= 2) wm.lastShownFocused = this
             // (A window kept over a restart goes back to its place.)
             val shownView = this
             wm.caulis.post { wm.session.shown(shownView) }
@@ -793,6 +780,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
     // closing one): held once, let go once (newm held them for good, so after a few windows
     // every frame was drawn anew, even with nothing moving).
     private var holdsDamage = false
+
+    /** Whether this view holds frames on now (for the log when they stay held). */
+    val holdsFrames: Boolean get() = holdsDamage
 
     private fun holdDamage() {
         if (holdsDamage) return

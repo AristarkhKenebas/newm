@@ -153,6 +153,9 @@ class NewmConfig(
     /** How windows look and where they go. */
     fun view(configure: ViewSection.() -> Unit) = section("view", ::ViewSection, configure)
 
+    /** Where new windows and a program's child windows (dialogs, viewers) open, and where the focus goes when they close. */
+    fun windows(configure: WindowsSection.() -> Unit) = section("windows", ::WindowsSection, configure)
+
     /** The line around the focused window. */
     fun focus(configure: FocusSection.() -> Unit) = section("focus", ::FocusSection, configure)
 
@@ -243,10 +246,21 @@ class NewmConfig(
      * "XF86AudioMute" and the like work on the lock screen too; "L-a L-b" is a sequence.
      */
     fun keys(configure: KeysSection.() -> Unit) {
-        val keys = KeysSection().apply(configure)
-        values["key_bindings"] = { layout: Layout -> keys.bindings.map { (combo, action) -> combo to { action.invoke(layout) } } }
-        values["key_help"] = keys.bindings.map { (combo, _) -> combo to keys.descriptions[combo].orEmpty() }
+        keySection.configure()
+        val keys = keySection
+        val now = keys.bindings.toList()
+        values["key_bindings"] = { layout: Layout -> now.map { (combo, action) -> combo to { action.invoke(layout) } } }
+        values["key_help"] = now.map { (combo, _) -> combo to keys.descriptions[combo].orEmpty() }
     }
+
+    // The keys of every keys { } (a later one adds to and changes an earlier one).
+    private val keySection = KeysSection()
+
+    /** A key and an action by its name, outside keys { } too: `bind("Super+Backspace", "close-window")`. */
+    fun bind(combination: String, action: String, vararg args: String) = keys { bind(combination, action, *args) }
+
+    /** The key does nothing any more: `unbind("Super+Q")`. */
+    fun unbind(combination: String) = keys { unbind(combination) }
 
     /** Runs once newm has started (start programs here). */
     fun onStartup(action: () -> Unit) {
@@ -345,6 +359,16 @@ class CompositorSection internal constructor(values: MutableMap<String, Any?>) :
 
     /** Programs started inside are asked to end when newm quits (default true). */
     var stopProgramsOnQuit by setting<Boolean>("stop_programs_on_quit")
+
+    /**
+     * The Java options of the short-lived Java that compiles config.kts (default
+     * "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"; for the next
+     * compilation — the first one of a start takes NEWM_CONFIG_COMPILER_OPTS).
+     */
+    var configCompilerJvmOptions by setting<String>("config_compiler_jvm_options")
+
+    /** At most this many seconds for compiling config.kts (180), then it is stopped and said (the start's first: NEWM_CONFIG_COMPILER_TIMEOUT). */
+    var configCompilerTimeoutSeconds by setting<Int>("config_compiler_timeout_seconds")
 }
 
 class CursorSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
@@ -391,25 +415,31 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
     /** A window being resized is drawn at its own size, not stretched: no flicker when its new picture comes (true). */
     var crispResize by setting<Boolean>("crisp_resize")
 
+    /** Gone (the screen split into finer tiles is gone): it does nothing. */
+    @Deprecated("Does nothing any more: windows are drawn as newm drew them (see fitDrawnSize)")
+    var minSizeKeepsShape: Boolean? = null
+
+    /** Gone with [minSizeKeepsShape]: it does nothing. */
+    @Deprecated("Does nothing any more")
+    var minSizeShrink: Double? = null
+
     /**
-     * A program in a place smaller than it can be (Spotify: 800 x 600) is asked for the shape of
-     * its place, bigger, and drawn shrunk to fill it (true); false: its smallest size, fitted inside.
+     * A program that drew another size than it was asked is drawn in its own shape inside its
+     * place, made smaller to fit (true); false (the default, as newm): stretched to its place.
      */
-    var minSizeKeepsShape by setting<Boolean>("min_size_keeps_shape")
+    var fitDrawnSize by setting<Boolean>("fit_drawn_size")
 
-    /** How far such a program may be shrunk: down to this part of its smallest size (0.6; 1: never smaller). */
-    var minSizeShrink by setting<Double>("min_size_shrink")
-
-    /** A window made wider or taller pushes its neighbours aside instead of stacking on them (default true). */
+    /** A window made wider or taller by keys pushes its neighbours aside (true); false (the default, as newm): it goes over them. */
     var resizePushes by setting<Boolean>("resize_pushes")
 
-    /** The first window of an empty workspace takes the whole screen (false: a quarter, as newm had it). */
+    /** The first window of an empty workspace takes the whole screen (true); false (the default, as newm): a quarter, zoomed out. */
     var fillFirst by setting<Boolean>("fill_first")
 
     /** Windows fade in when they open and out when they close. */
     var fade by setting<Boolean>("fade")
 
-    /** A new window goes right of the focused one (false: the original newm's first free place in view). */
+    /** Before windows { newPlacement }: true is "beside-focused", false "original". */
+    @Deprecated("windows { newPlacement = \"beside-focused\" } (true) or \"original\" (false)")
     var placeBesideFocused by setting<Boolean>("place_beside_focused")
 
     /** Windows' corners rounded, in pixels. */
@@ -475,6 +505,38 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
 
 /** Blur behind a window: how far it spreads, and how smooth (passes). */
 data class Blur(val radius: Int = 6, val passes: Int = 4)
+
+/**
+ * Where windows open: `windows { newPlacement = "right-of-focused"; childPlacement = "below" }`.
+ */
+class WindowsSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /**
+     * Where a new window opens: "right-of-focused" (the default: right of the focused window,
+     * the windows right of it move on), "beside-focused" (the first free tile right of it in its
+     * row, nothing moves), "end" (right of all windows, in the focused one's row), "original"
+     * (newm's: the first free tile in view, row by row).
+     */
+    var newPlacement by setting<String>("new_placement")
+
+    /**
+     * Where a program's child window opens (a dialog, a photo viewer): "below" (the default:
+     * tiled below its parent, what is below moves down), "right" (tiled right of it), "over"
+     * (floating over its middle, as newm).
+     */
+    var childPlacement by setting<String>("child_placement")
+
+    /** A child window closing gives the focus back to its parent, or to the window focused when it came (true); false: newm's nearest window. */
+    var returnFocusToParent by setting<Boolean>("return_focus_to_parent")
+
+    /**
+     * A window without a parent counts as the child of the focused window when the same program
+     * (connection and app id) opened it (Telegram's photo viewer): true by default.
+     */
+    var childBySameApp by setting<Boolean>("child_by_same_app")
+
+    /** Programs whose new windows are windows of their own even then (app ids: terminals, browsers by default). */
+    var childBySameAppExcept by setting<List<String>>("child_by_same_app_except")
+}
 
 /**
  * newm's animations (see [NewmAnimations]): on or off, the global time and curve, curves of your
@@ -957,8 +1019,14 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
     /** A toast when one is taken (true). */
     var toast by setting<Boolean>("toast")
 
-    /** What the chooser starts with: "region", "window" or "screen" (the one used last if not set). */
+    /** What the chooser starts with: "region" (the default), "window" or "screen". */
     var start by setting<String>("start")
+
+    /** The chooser starts with the kind used last (true: a window after a window); false (the default): with [start] each time. */
+    var rememberKind by setting<Boolean>("remember_kind")
+
+    /** A click (not a drag) while choosing a part takes the window under the pointer (true); false (the default): a window by its key, W, or button. */
+    var clickPicksWindow by setting<Boolean>("click_picks_window")
 
     /** Seconds to wait before taking it (0). */
     var delay by setting<Int>("delay")
@@ -999,6 +1067,12 @@ class SoundSection internal constructor(values: MutableMap<String, Any?>) : Sect
 
     /** A command saying the volume ("45%", or wpctl's "Volume: 0.45 [MUTED]"); unset: wpctl, else pactl. */
     var getVolume by setting<String>("get_volume")
+
+    /** How often the bar asks the volume, in seconds (10; a program run each time — with followVolume, six times rarer). */
+    var volumeEverySeconds by setting<Int>("volume_every_seconds")
+
+    /** The sound server's news of each change is followed (`pactl subscribe`): the bar's volume changes at once, without asking every few seconds (true). */
+    var followVolume by setting<Boolean>("follow_volume")
 }
 
 /** notifications { }: newm's own notification server (org.freedesktop.Notifications). */
@@ -1275,17 +1349,41 @@ class TuningSection internal constructor(values: MutableMap<String, Any?>) : Sec
 /** The keys: `"L-h" { move(-1, 0) }` — the action runs with the layout as `this`. */
 @NewmConfigDsl
 class KeysSection internal constructor() {
-    internal val bindings = ArrayList<Pair<String, Layout.() -> Unit>>()
+    // In newm's notation ("L-S-q"), the last binding of a key winning; with their words.
+    internal val bindings = LinkedHashMap<String, Layout.() -> Unit>()
     internal val descriptions = LinkedHashMap<String, String>()
 
-    operator fun String.invoke(action: Layout.() -> Unit) {
-        bindings += this to action
+    private fun put(combination: String, description: String?, action: Layout.() -> Unit) {
+        val key = KeyNotation.toNewm(combination)
+        bindings.remove(key)
+        bindings[key] = action
+        if (description != null) descriptions[key] = description else descriptions.remove(key)
     }
 
+    /** A key and what it does: `"Super+Backspace" { closeFocusedView() }` (or newm's "L-BackSpace"). */
+    operator fun String.invoke(action: Layout.() -> Unit) = put(this, null, action)
+
     /** A key with what it does in words: shown in the keys' help (Logo+/). */
-    operator fun String.invoke(description: String, action: Layout.() -> Unit) {
-        bindings += this to action
-        descriptions[this] = description
+    operator fun String.invoke(description: String, action: Layout.() -> Unit) = put(this, description, action)
+
+    /**
+     * A key and an action by its name, in one line: `bind("Super+Backspace", "close-window")`,
+     * `bind("Super+Return", "launch", "foot")`, `bind("Super+1", "go-to-window", "1")`. Every
+     * name: the guide's keys page ([KeyActions.ALL]). A name not known says so on screen.
+     */
+    fun bind(combination: String, action: String, vararg args: String, description: String? = null) {
+        val named = KeyActions.byName(action) ?: throw IllegalArgumentException(
+            "bind(\"$combination\", \"$action\"): there is no action \"$action\" (there are: ${KeyActions.names()})",
+        )
+        val list = args.toList()
+        put(combination, description ?: named.description) { named.run(this, list) }
+    }
+
+    /** The key does nothing any more (a binding of the template you do not want). */
+    fun unbind(combination: String) {
+        val key = KeyNotation.toNewm(combination)
+        bindings.remove(key)
+        descriptions.remove(key)
     }
 }
 

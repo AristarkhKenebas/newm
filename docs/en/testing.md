@@ -43,9 +43,11 @@ Tick what works; for what does not, write down what happened.
 - [ ] **Logo+0** makes the focused window fill the screen.
 - [ ] **Logo+S** puts two windows side by side; again: back.
 - [ ] **Logo+Shift+H/J/K/L** moves a window on the wall.
-- [ ] **Logo+Ctrl+H/J/K/L** makes a window narrower, taller, shorter, wider. Make a one-tile
-      window narrower still: it gets smaller, nothing jumps.
-- [ ] After that, open a new window: it gets one ordinary tile, not a small one.
+- [ ] **Logo+Ctrl+H/J/K/L** makes a window narrower, taller, shorter, wider, by whole tiles.
+- [ ] With a window focused, open another: it opens right of it, the windows right of it move on.
+- [ ] A program's dialog (Save as, a file chooser) or Telegram's photo viewer opens below its
+      window; closing it gives the focus back to that window.
+- [ ] `bind("Super+Backspace", "close-window")` in config.kts, saved: Super+Backspace closes a window.
 - [ ] **Logo+F** fullscreen and back.
 - [ ] **Logo+Shift+V** makes a window float and back.
 - [ ] **Logo+Q** closes a window.

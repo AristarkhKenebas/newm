@@ -26,6 +26,10 @@ private val confFileName = configuredValue("screenshots.file_name", "Screenshot 
 private val confFormat = configuredValue("screenshots.format", "png")
 private val confQuality = configuredValue("screenshots.quality", 92)
 private val confThen = configuredValue<String?>("screenshots.then", null)
+// screenshots { rememberKind = false }: the chooser starts choosing a part each time (true: the kind used last, a window after a window).
+private val confRememberKind = configuredValue("screenshots.remember_kind", false)
+// screenshots { clickPicksWindow = false }: a click (not a drag) while choosing a part takes the window under it (true).
+private val confClickPicksWindow = configuredValue("screenshots.click_picks_window", false)
 private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 
 /**
@@ -73,6 +77,8 @@ internal class Shots(private val wm: Layout) {
         shots.format = dev.caulis.screenshot.ShotFormat.parse(confFormat()) ?: dev.caulis.screenshot.ShotFormat.PNG.also { log.warn("screenshots.format \"${confFormat()}\" is not png or jpg: png") }
         shots.jpegQuality = confQuality().coerceIn(10, 100) / 100f
         shots.then = confThen()
+        // (A window is chosen by its key, W, or the toolbar's button; not by where the pointer happens to be.)
+        shots.chooser = shots.chooser.copy(rememberKind = confRememberKind(), clickPicksWindow = confClickPicksWindow())
         shots.style = style()
     }
 

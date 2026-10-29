@@ -242,7 +242,7 @@ internal class SessionKeeper(private val wm: Layout) {
                 "focused" to view.isFocused(),
             )
         }
-        val views = wm.workspaces.map { ws -> wm.state.workspaceState(ws).let { mapOf("i" to it.i, "j" to it.j, "size" to it.size, "unit" to it.unit) } }
+        val views = wm.workspaces.map { ws -> wm.state.workspaceState(ws).let { mapOf("i" to it.i, "j" to it.j, "size" to it.size) } }
         try {
             privateFolder(file.parent)
             // (Readable by you only: a command line may say more than it should.)
@@ -395,15 +395,13 @@ internal class SessionKeeper(private val wm: Layout) {
         }
     }
 
-    // [wsState] seen as the workspace at [index] was seen when kept: where, how far, its grid.
+    // [wsState] seen as the workspace at [index] was seen when kept: where and how far.
     private fun withView(wsState: WorkspaceState, index: Int): WorkspaceState {
         val v = viewsToRestore.getOrNull(index) ?: return wsState
         val i = (v["i"] as? Number)?.toDouble() ?: return wsState
         val j = (v["j"] as? Number)?.toDouble() ?: return wsState
         val size = (v["size"] as? Number)?.toDouble() ?: return wsState
-        // (Kept before the grid's unit was: one tile is one tile.)
-        val unit = (v["unit"] as? Number)?.toDouble() ?: 1.0
-        return wsState.copy(i = i, j = j, size = size, sizeOrigin = null).also { c -> c.unit = unit }
+        return wsState.copy(i = i, j = j, size = size, sizeOrigin = null)
     }
 
     // All back (or waited enough): each workspace's view as it was.
@@ -422,8 +420,7 @@ internal class SessionKeeper(private val wm: Layout) {
                 val i = (v["i"] as? Number)?.toDouble() ?: continue
                 val j = (v["j"] as? Number)?.toDouble() ?: continue
                 val size = (v["size"] as? Number)?.toDouble() ?: continue
-                val unit = (v["unit"] as? Number)?.toDouble() ?: 1.0
-                next = next.replacingWorkspaceState(ws) { copy(i = i, j = j, size = size).also { c -> c.unit = unit } }
+                next = next.replacingWorkspaceState(ws) { copy(i = i, j = j, size = size) }
             }
             null to next
         }, NewmAnimations.resolveSeconds("sessionRestore", 0.3))

@@ -18,11 +18,12 @@ Start here:
 
 Then, when you need them:
 
+- [Key bindings](keys.md): keys written as you say them ("Super+Backspace"), every action by name, ready-made sets.
 - [Every setting](settings.md): all sections and settings with their defaults, everything a
   key can do, and `newm cmd`.
 - [The start](startup.md): programs started with the session, the smooth start and its sound.
 - [newm as the login screen](greeter.md): greetd with newm's own lock screen asking for the user and password.
-- [Animations](animations.md): off by default; newm's look with one line, or each one by name as in Hyprland.
+- [Animations](animations.md): newm's look, on in the starting configuration; off with one line, or each one by name as in Hyprland.
 - [Bars](bars.md): newm's own bar and its popups, waybar and other bars, or no bar at all.
 - [Lua, JSON, Nix and the old config.py](other-formats.md): the configuration in another language.
 - [When something goes wrong](troubleshooting.md).

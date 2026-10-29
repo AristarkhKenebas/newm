@@ -151,6 +151,22 @@ does nothing (the rest works):
 - **A second monitor shows nothing, or the same picture**: the display key (F7 on many
   laptops) or `newm cmd displays extend` (or `mirror`, `laptop`, `other`).
 
+## Memory and the processor
+
+- **How much memory newm uses.** Idle with a few windows newm's Java takes about 400 MB
+  (`grep VmRSS /proc/$(pgrep -f newm.MainKt)/status`). Its heap is kept small (G1, aiming at under
+  96 MB, at most 1 GB); different memory options: `NEWM_GC_OPTS="-XX:+UseZGC -Xmx1g" newm`
+  (they replace newm's own), more options: `JAVA_OPTS`.
+- **config.kts** is compiled by a Java of its own that ends right after (a few seconds, the first
+  start and after each change); then newm only loads the compiled script from
+  `~/.cache/newm/config-kts`. Its options: `compositor { configCompilerJvmOptions;
+  configCompilerTimeoutSeconds }`.
+- **A processor busy while nothing moves.** Start newm with `CAULIS_LOG=render=2`: every 10
+  seconds in which something was drawn, `~/.local/state/newm/newm.log` says how many frames each
+  monitor drew and what kept moving ("director": the windows' animations; "drawing or widget
+  ...": a bar, a popup, a notice). With `render=3`, each frame says which part of the screen
+  changed. Please send these lines with a report.
+
 ## The touchpad
 
 - **Tapping does not click**: `input { tapToClick = true }`.
