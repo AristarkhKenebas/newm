@@ -34,6 +34,7 @@ Started from a text console, newm says what is missing before it gives up:
 | `Could not open the seat` | start it from a text console of a logged-in user |
 | `newm needs Java 26 or newer` | install Java 27 (on Arch: `sudo pacman -S jdk-openjdk`), or set `JAVA_HOME` to it |
 | `The GPU driver lacks ...` | the graphics driver is too old or missing |
+| `No D-Bus session bus` (a card, and the log) | no tray, notifications or portals: install D-Bus (the package with `dbus-run-session`); newm's start script then starts newm inside it by itself, unless `NEWM_DBUS=off` |
 
 More cases:
 

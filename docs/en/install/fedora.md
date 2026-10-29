@@ -96,6 +96,8 @@ sudo systemctl disable gdm       # or sddm: your current login screen
 sudo systemctl enable greetd
 ```
 
+Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md).
+
 The first start writes `~/.config/newm/config.kts`. Press **Logo+/** to see every key.
 Next: [Everyday use](../using.md).
 

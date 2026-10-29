@@ -118,21 +118,16 @@ org.freedesktop.impl.portal.Screenshot=wlr
 
 ## Start it
 
-Without systemd, nothing starts a D-Bus session for you. newm's bar (the tray, notifications,
-the portals) needs one, so start newm inside `dbus-run-session`. From a text console
-(Ctrl+Alt+F3, log in):
+From a text console (Ctrl+Alt+F3, log in), type `newm`; with a login screen, choose "newm".
 
-```sh
-dbus-run-session newm
-```
-
-**With a login screen**, do the same in the session file:
-
-```sh
-sudo sed -i 's|^Exec=|Exec=dbus-run-session |' /usr/share/wayland-sessions/newm.desktop
-```
-
-(`install.sh` writes this file again each time: run the line again after updating.)
+Without systemd, nothing starts a D-Bus session bus at login, and newm's bar (the tray,
+notifications, the portals) needs one. newm takes care of it by itself: `newm install-session`
+(which `install.sh` runs) writes the login screen's session as `dbus-run-session newm` when no
+systemd user session starts a bus, and newm's start script starts newm inside
+`dbus-run-session` when there is no bus, also from a text console. Only the `dbus` package
+must be installed (it has `dbus-run-session`). To decide it yourself:
+`newm install-session --dbus-run-session` (always) or `--no-dbus-run-session` (never; the same
+options for `install.sh`), and `NEWM_DBUS=off` in the environment stops the start script's.
 
 **greetd** with tuigreet:
 
@@ -145,7 +140,7 @@ the greeter as `_greeter`):
 
 ```toml
 [default_session]
-command = "tuigreet --time --remember --cmd 'dbus-run-session newm'"
+command = "tuigreet --time --remember --cmd newm"
 user = "_greeter"
 ```
 
@@ -153,7 +148,7 @@ Turn off the text console's `agetty` service on greetd's `vt` (for `vt = 7` noth
 needed; for `vt = 1`: `sudo rm /var/service/agetty-tty1`), then
 `sudo ln -s /etc/sv/greetd /var/service/`.
 
-SDDM works the same way (`/etc/sv/sddm`).
+SDDM works the same way (`/etc/sv/sddm`). Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md) (on Void its user is `_greeter`).
 
 The first start writes `~/.config/newm/config.kts`. Press **Logo+/** to see every key.
 Next: [Everyday use](../using.md).
@@ -175,6 +170,7 @@ Next: [Everyday use](../using.md).
 - `XDG_RUNTIME_DIR is not set`: elogind (or turnstile) is not running; see [step 2](#2-the-seat-elogind-or-seatd).
 - `Could not open the seat`: neither elogind nor seatd answers. Check
   `sudo sv status elogind` (or `seatd`), and that you are in `_seatd` when you use seatd.
-- No tray, no notifications: newm was started without `dbus-run-session`.
+- No tray, no notifications: no D-Bus session bus. Install `dbus`; newm's log says
+  `No D-Bus session bus` and why (`NEWM_DBUS=off`, `dbus-run-session` missing).
 
 More in [When something goes wrong](../troubleshooting.md).

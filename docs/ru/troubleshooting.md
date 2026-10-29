@@ -34,6 +34,7 @@
 | `Could not open the seat` | запускайте из текстовой консоли вошедшего пользователя |
 | `newm needs Java 26 or newer` | установите Java 27 (в Arch: `sudo pacman -S jdk-openjdk`) или укажите её в `JAVA_HOME` |
 | `The GPU driver lacks ...` | драйвер видеокарты слишком старый или его нет |
+| `No D-Bus session bus` (карточка и журнал) | нет трея, уведомлений и порталов: установите D-Bus (пакет с `dbus-run-session`); стартовый скрипт newm сам запустит newm внутри него, если не задано `NEWM_DBUS=off` |
 
 Ещё случаи:
 

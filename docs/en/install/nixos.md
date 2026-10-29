@@ -107,6 +107,8 @@ services.greetd = {
 };
 ```
 
+Or newm itself as the login screen: `programs.newm.greeter.enable = true;` sets greetd up with newm as its greeter, see [newm as the login screen](../greeter.md#nixos).
+
 (In older nixpkgs the package is `pkgs.greetd.tuigreet`.)
 
 **Keyboard layouts**: without a layout in newm's configuration, newm uses

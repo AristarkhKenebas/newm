@@ -118,21 +118,16 @@ org.freedesktop.impl.portal.Screenshot=wlr
 
 ## Запуск
 
-Без systemd сеансовую шину D-Bus за вас никто не запускает. Панели newm (трей, уведомления,
-порталы) она нужна, поэтому запускайте newm внутри `dbus-run-session`. Из текстовой консоли
-(Ctrl+Alt+F3, войдите):
+Из текстовой консоли (Ctrl+Alt+F3, войдите) наберите `newm`; с экраном входа выберите «newm».
 
-```sh
-dbus-run-session newm
-```
-
-**С экраном входа** сделайте то же в файле сеанса:
-
-```sh
-sudo sed -i 's|^Exec=|Exec=dbus-run-session |' /usr/share/wayland-sessions/newm.desktop
-```
-
-(`install.sh` каждый раз пишет этот файл заново: после обновления выполните строку снова.)
+Без systemd сеансовую шину D-Bus при входе никто не запускает, а панели newm (трею,
+уведомлениям, порталам) она нужна. newm делает это сам: `newm install-session` (его запускает
+`install.sh`) записывает сеанс экрана входа как `dbus-run-session newm`, если шину не запускает
+пользовательский сеанс systemd, а стартовый скрипт newm запускает newm внутри
+`dbus-run-session`, когда шины нет, — и из текстовой консоли тоже. Нужно только, чтобы был
+установлен пакет `dbus` (в нём `dbus-run-session`). Решить самому: `newm install-session
+--dbus-run-session` (всегда) или `--no-dbus-run-session` (никогда; те же ключи у `install.sh`),
+а `NEWM_DBUS=off` в окружении отключает это в стартовом скрипте.
 
 **greetd** с tuigreet:
 
@@ -145,7 +140,7 @@ sudo xbps-install -S greetd tuigreet
 
 ```toml
 [default_session]
-command = "tuigreet --time --remember --cmd 'dbus-run-session newm'"
+command = "tuigreet --time --remember --cmd newm"
 user = "_greeter"
 ```
 
@@ -153,7 +148,7 @@ user = "_greeter"
 нужно; для `vt = 1`: `sudo rm /var/service/agetty-tty1`), затем
 `sudo ln -s /etc/sv/greetd /var/service/`.
 
-SDDM подключается так же (`/etc/sv/sddm`).
+SDDM подключается так же (`/etc/sv/sddm`). Или сам newm как экран входа, со своим экраном блокировки: [newm как экран входа](../greeter.md) (в Void его пользователь — `_greeter`).
 
 Первый запуск запишет `~/.config/newm/config.kts`. **Logo+/** покажет все клавиши.
 Дальше: [Каждый день](../using.md).
@@ -176,6 +171,7 @@ SDDM подключается так же (`/etc/sv/sddm`).
   [шаг 2](#2-место-seat-elogind-или-seatd).
 - `Could not open the seat`: не отвечает ни elogind, ни seatd. Проверьте
   `sudo sv status elogind` (или `seatd`) и, если используете seatd, что вы в группе `_seatd`.
-- Нет трея и уведомлений: newm запущен без `dbus-run-session`.
+- Нет трея и уведомлений: нет сеансовой шины D-Bus. Установите `dbus`; в журнале newm будет
+  `No D-Bus session bus` и причина (`NEWM_DBUS=off`, нет `dbus-run-session`).
 
 Подробнее — в [Если что-то пошло не так](../troubleshooting.md).

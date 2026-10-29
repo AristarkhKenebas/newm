@@ -108,16 +108,18 @@ org.freedesktop.impl.portal.Screenshot=wlr
 
 ## Start it
 
-Nothing starts a D-Bus session for you on Alpine, and newm's bar needs one. From a text
-console:
+From a text console, type `newm`. For a login screen (`greetd` with `greetd-tuigreet` and
+`greetd-openrc`, or SDDM), choose "newm" there (with tuigreet: `--cmd newm`, as the
+[Void](void.md#start-it) page shows). Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md).
 
-```sh
-dbus-run-session newm
-```
-
-For a login screen (`greetd` with `greetd-tuigreet` and `greetd-openrc`, or SDDM), put
-`dbus-run-session` in front of `newm` the same way, as the [Void](void.md#start-it) page
-shows.
+Without systemd, nothing starts a D-Bus session bus at login, and newm's bar (the tray,
+notifications, the portals) needs one. newm takes care of it by itself: `newm install-session`
+(which `install.sh` runs) writes the login screen's session as `dbus-run-session newm` when no
+systemd user session starts a bus, and newm's start script starts newm inside
+`dbus-run-session` when there is no bus, also from a text console. The `dbus` package from the
+list above is all it needs (it has `dbus-run-session`). To decide it yourself:
+`newm install-session --dbus-run-session` (always) or `--no-dbus-run-session` (never; the same
+options for `install.sh`), and `NEWM_DBUS=off` in the environment stops the start script's.
 
 ## If something goes wrong
 

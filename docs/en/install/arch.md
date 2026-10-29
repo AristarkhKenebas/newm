@@ -94,6 +94,8 @@ user = "greeter"
 sudo systemctl enable greetd     # disable your other login screen first, if any
 ```
 
+Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md).
+
 The first start writes `~/.config/newm/config.kts`. Press **Logo+/** to see every key.
 Next: [Everyday use](../using.md).
 

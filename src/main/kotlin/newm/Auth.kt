@@ -186,7 +186,11 @@ private class GreetdBackend(private val auth: AuthBackend) : Backend {
         log.info { "Starting the session: ${command.joinToString(" ")}" }
         talk("starting the session") {
             try {
-                send(mapOf("type" to "start_session", "cmd" to command))
+                // greetd starts it once the greeter has ended; an error (no such program) is told in the
+                // log, and greetd then starts the greeter again.
+                val result = send(mapOf("type" to "start_session", "cmd" to command))
+                if (result["type"] == "success") log.info { "greetd starts the session once the greeter ends" }
+                else log.error("greetd did not take the session ${command.joinToString(" ")}: ${result["description"] ?: result["error_type"] ?: result["type"]} (greeter_command)")
             } finally {
                 auth.post(then)
             }
@@ -217,8 +221,16 @@ internal object Users {
         null
     }
 
-    /** True when newm runs as greetd's greeter (its user is greeter_user). */
-    fun isGreeter(): Boolean = current(currentUid()) == confGreeterUser()
+    /** True when newm runs as greetd's greeter (see [greeterMode]). */
+    fun isGreeter(): Boolean = greeterMode(current(currentUid()), confGreeterUser(), System.getenv("GREETD_SOCK"))
+
+    /**
+     * newm is greetd's greeter when greetd gave it its socket (GREETD_SOCK: greetd sets it for its
+     * greeter only, never for the sessions it starts), or when its [user] is [greeterUser] (the
+     * greeter_user setting; distributions name that user differently: Void's is _greeter).
+     */
+    internal fun greeterMode(user: String?, greeterUser: String, greetdSock: String?): Boolean =
+        !greetdSock.isNullOrBlank() || (user != null && user == greeterUser)
 
     /** This process's user id. */
     fun currentUid(): Int = Files.getAttribute(Path.of("/proc/self"), "unix:uid") as Int
@@ -286,14 +298,14 @@ class AuthBackend(private val layout: Layout) {
         layout.caulis.after(millis) { action() }
     }
 
-    fun isGreeter(): Boolean = currentUser != null && currentUser == greeterUser
+    fun isGreeter(): Boolean = Users.greeterMode(currentUser, greeterUser, System.getenv("GREETD_SOCK"))
 
     fun initSession() {
         state = "wait_user"
         log.trace { "Requesting user" }
         // (Asked of NSS on a thread of its own: it may take seconds, the greeter keeps drawing meanwhile.)
         Thread({
-            val users = Users.loginUsers().filter { (name, shell) -> name != greeterUser && "nologin" !in shell && !shell.endsWith("/false") }.map { it.first }
+            val users = Users.loginUsers().filter { (name, shell) -> name != greeterUser && name != currentUser && "nologin" !in shell && !shell.endsWith("/false") }.map { it.first }
             post { if (state == "wait_user") publish(AuthRequest(mapOf("kind" to "auth_request_user", "users" to users), ::onUser)) }
         }, "newm-users").apply { isDaemon = true }.start()
     }

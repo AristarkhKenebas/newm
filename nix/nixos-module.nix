@@ -4,6 +4,7 @@
 #     enable = true;
 #     package = newm.packages.${pkgs.system}.default;   # or a newm of your own
 #     settings = { view.corner_radius = 24; };          # /etc/newm/config.json (new users start from it)
+#     greeter.enable = true;                            # newm as the login screen too (greetd)
 #   };
 { config, lib, pkgs, ... }:
 
@@ -38,9 +39,13 @@ in
       default = { };
       description = "The system's newm configuration (/etc/newm/config.json): new users' start, and theirs while they have none.";
     };
+
+    greeter.enable = lib.mkEnableOption ''
+      newm as the login screen: greetd runs it as its greeter (user "greeter"), which asks for the
+      user and the password and then starts their newm. See docs/en/greeter.md'';
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf cfg.enable (lib.mkMerge [ {
     environment.systemPackages = [ cfg.package ];
     # The keyboard of services.xserver.xkb for newm too (it reads these when its configuration names none).
     environment.sessionVariables = lib.mkIf (config.services.xserver.xkb.layout or "" != "") {
@@ -66,5 +71,11 @@ in
         "org.freedesktop.impl.portal.Screenshot" = lib.mkDefault [ "wlr" ];
       };
     };
-  };
+  }
+  # The login screen: greetd with newm as its greeter (newm knows it is by greetd's socket).
+  (lib.mkIf cfg.greeter.enable {
+    services.greetd.enable = true;
+    services.greetd.settings.default_session.command = lib.mkDefault (lib.getExe cfg.package);
+  })
+  ]);
 }

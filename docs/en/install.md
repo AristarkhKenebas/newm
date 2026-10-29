@@ -142,13 +142,19 @@ build/install/newm/bin/newm install-session # optional: the login screen's entry
 
 - **From a text console** (Ctrl+Alt+F3, log in): type `newm`. This is the best way to try it
   the first time: if something is wrong, you see what newm says.
-- **From your login screen** (SDDM, GDM, ly, greetd): choose "newm".
+- **From your login screen** (SDDM, GDM, ly, greetd): choose "newm". newm can also be the
+  login screen itself: [newm as the login screen](greeter.md).
 - **Inside your current desktop, to try it**: run `newm` in a terminal there. It opens as a
   window, and nothing of your desktop changes. (Keys like Logo may be taken by your desktop
   first.)
 
-On a system without systemd, start it as `dbus-run-session newm` unless your login already
-gives you a session bus (see the [Void](install/void.md#start-it) page).
+On a system without systemd nothing starts a D-Bus session bus, which newm's tray,
+notifications and portals need. newm handles that by itself: `newm install-session` writes the
+login screen's session as `dbus-run-session newm` where no systemd user session starts a bus,
+and newm's start script starts newm inside `dbus-run-session` when there is no bus (with the
+`dbus` package installed). To decide it yourself: `newm install-session --dbus-run-session` or
+`--no-dbus-run-session` (also options of `install.sh`), and `NEWM_DBUS=off` in the environment
+for the start script.
 
 To leave: **Logo+Shift+Escape**, or "Log out" in the bar's power menu.
 
@@ -157,7 +163,7 @@ Other commands:
 ```sh
 newm --version          # which newm
 newm help               # what the newm command can do
-newm install-session    # add newm to the login screen (not needed on NixOS)
+newm install-session    # add newm to the login screen (not needed on NixOS); --dbus-run-session / --no-dbus-run-session
 newm cmd <command>      # talk to the running newm (see Every setting)
 ```
 

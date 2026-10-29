@@ -107,6 +107,8 @@ services.greetd = {
 };
 ```
 
+Или сам newm как экран входа: `programs.newm.greeter.enable = true;` настраивает greetd с newm в роли приветствия, см. [newm как экран входа](../greeter.md#nixos).
+
 (В старых nixpkgs пакет называется `pkgs.greetd.tuigreet`.)
 
 **Раскладки клавиатуры**: если в конфигурации newm раскладки нет, newm берёт

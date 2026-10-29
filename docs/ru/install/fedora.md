@@ -97,6 +97,8 @@ sudo systemctl disable gdm       # или sddm: ваш нынешний экра
 sudo systemctl enable greetd
 ```
 
+Или сам newm как экран входа, со своим экраном блокировки: [newm как экран входа](../greeter.md).
+
 Первый запуск запишет `~/.config/newm/config.kts`. **Logo+/** покажет все клавиши.
 Дальше: [Каждый день](../using.md).
 

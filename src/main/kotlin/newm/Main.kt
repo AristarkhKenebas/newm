@@ -10,7 +10,7 @@ import dev.caulis.wm.caulis
 fun main(args: Array<String>) {
     when (args.firstOrNull()) {
         "cmd" -> return newmCmd(args.drop(1))
-        "install-session" -> kotlin.system.exitProcess(installSession())
+        "install-session" -> kotlin.system.exitProcess(installSession(args.drop(1)))
         "-h", "--help", "help" -> return println(USAGE)
         "-v", "--version", "version" -> return println("newm ${Layout::class.java.`package`?.implementationVersion ?: "(from sources)"} on Caulis")
         null -> {}
@@ -55,6 +55,9 @@ fun main(args: Array<String>) {
         mode(LOCKED_MODE) {}
         lateinit var layout: Layout
         val config = ConfigLoader(this, DeferredApi { LayoutApi(layout) })
+        // No D-Bus session bus (a system without systemd, started without dbus-run-session): said in
+        // the log at once, and on the screen once newm runs.
+        SessionBus.checkAtStart()?.let { words -> onStart { notify(words, dev.caulis.core.NoticeLevel.WARNING, "newm") } }
         // Before newm's own start (on_startup): programs the configuration starts run inside newm.
         onStart { config.started() }
         // On the real screen and not among the login screen's sessions yet: told once how.

@@ -93,6 +93,8 @@ openSUSE starts its login screen through its own `display-manager` service, so s
 to greetd takes more than enabling it: follow openSUSE's documentation for that. Starting
 newm from a text console always works.
 
+Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md).
+
 The first start writes `~/.config/newm/config.kts`. Press **Logo+/** to see every key.
 Next: [Everyday use](../using.md).
 

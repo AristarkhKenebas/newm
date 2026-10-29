@@ -102,9 +102,14 @@ Type=Application
 DesktopNames=newm
 ```
 
-On a system without systemd, write `Exec=dbus-run-session /usr/local/bin/newm` instead,
-unless your login already starts a D-Bus session (newm's tray, notifications and the portals
-need one). `install.sh` writes the file anew each time, so change it again after updating.
+Without systemd, nothing starts a D-Bus session bus at login, and newm's bar (the tray,
+notifications, the portals) needs one. newm takes care of it by itself: `newm install-session`
+(which `install.sh` runs) writes the login screen's session as `dbus-run-session newm` when no
+systemd user session starts a bus, and newm's start script starts newm inside
+`dbus-run-session` when there is no bus, also from a text console. Only the `dbus` package
+must be installed (it has `dbus-run-session`). To decide it yourself:
+`newm install-session --dbus-run-session` (always) or `--no-dbus-run-session` (never; the same
+options for `install.sh`), and `NEWM_DBUS=off` in the environment stops the start script's.
 
 ## Login screens
 
@@ -120,6 +125,7 @@ need one). `install.sh` writes the file anew each time, so change it again after
 
   tuigreet can also offer the sessions of `/usr/share/wayland-sessions/` (its `--sessions`
   option).
+- **newm itself**: greetd with newm as its greeter, see [newm as the login screen](../greeter.md).
 - **None**: log in on a text console and type `newm`.
 
 ## Portals

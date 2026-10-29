@@ -142,13 +142,18 @@ build/install/newm/bin/newm install-session # по желанию: пункт н
 
 - **Из текстовой консоли** (Ctrl+Alt+F3, войдите): наберите `newm`. В первый раз это лучший
   способ: если что-то не так, вы увидите, что пишет newm.
-- **С экрана входа** (SDDM, GDM, ly, greetd): выберите «newm».
+- **С экрана входа** (SDDM, GDM, ly, greetd): выберите «newm». newm может быть и самим экраном
+  входа: [newm как экран входа](greeter.md).
 - **Внутри вашего рабочего стола, чтобы попробовать**: запустите `newm` в терминале. Он
   откроется окном, и в вашем рабочем столе ничего не изменится. (Клавиши вроде Logo может
   перехватывать ваш рабочий стол.)
 
-В системе без systemd запускайте `dbus-run-session newm`, если ваш вход в систему ещё не
-даёт сеансовую шину D-Bus (см. страницу [Void](install/void.md#запуск)).
+В системе без systemd сеансовую шину D-Bus никто не запускает, а она нужна трею, уведомлениям
+и порталам newm. newm справляется сам: `newm install-session` записывает сеанс экрана входа как
+`dbus-run-session newm`, если шину не запускает пользовательский сеанс systemd, а стартовый
+скрипт newm запускает newm внутри `dbus-run-session`, когда шины нет (нужен установленный пакет
+`dbus`). Решить самому: `newm install-session --dbus-run-session` или `--no-dbus-run-session`
+(те же ключи у `install.sh`), а `NEWM_DBUS=off` в окружении — для стартового скрипта.
 
 Выйти: **Logo+Shift+Escape** или «Выйти» в меню питания на панели.
 
@@ -157,7 +162,7 @@ build/install/newm/bin/newm install-session # по желанию: пункт н
 ```sh
 newm --version          # какая версия newm
 newm help               # что умеет команда newm
-newm install-session    # добавить newm на экран входа (в NixOS не нужно)
+newm install-session    # добавить newm на экран входа (в NixOS не нужно); --dbus-run-session / --no-dbus-run-session
 newm cmd <команда>      # обратиться к запущенному newm (см. «Все настройки»)
 ```
 

@@ -126,17 +126,17 @@ org.freedesktop.impl.portal.Screenshot=wlr
 Из текстовой консоли (Ctrl+Alt+F3, войдите):
 
 ```sh
-newm                    # systemd
-dbus-run-session newm   # OpenRC: панели newm нужна сеансовая шина D-Bus, а больше её никто не запустит
+newm
 ```
 
-**С экраном входа** в OpenRC добавьте `dbus-run-session` и в файл сеанса:
-
-```sh
-sudo sed -i 's|^Exec=|Exec=dbus-run-session |' /usr/share/wayland-sessions/newm.desktop
-```
-
-(`install.sh` каждый раз пишет этот файл заново: после обновления выполните строку снова.)
+С экраном входа выберите «newm». В OpenRC: без systemd сеансовую шину D-Bus при входе никто не запускает, а панели newm (трею,
+уведомлениям, порталам) она нужна. newm делает это сам: `newm install-session` (его запускает
+`install.sh`) записывает сеанс экрана входа как `dbus-run-session newm`, если шину не запускает
+пользовательский сеанс systemd, а стартовый скрипт newm запускает newm внутри
+`dbus-run-session`, когда шины нет, — и из текстовой консоли тоже. Нужно только, чтобы был
+установлен пакет `dbus` (в нём `dbus-run-session`). Решить самому: `newm install-session
+--dbus-run-session` (всегда) или `--no-dbus-run-session` (никогда; те же ключи у `install.sh`),
+а `NEWM_DBUS=off` в окружении отключает это в стартовом скрипте.
 
 **greetd** с tuigreet (`gui-libs/greetd`, `gui-apps/tuigreet`). В `/etc/greetd/config.toml`
 оставьте строку `user`, которая там есть, и задайте команду:
@@ -146,9 +146,9 @@ sudo sed -i 's|^Exec=|Exec=dbus-run-session |' /usr/share/wayland-sessions/newm.
 command = "tuigreet --time --remember --cmd newm"
 ```
 
-(В OpenRC: `--cmd 'dbus-run-session newm'`.) В systemd: `sudo systemctl enable greetd`.
+В systemd: `sudo systemctl enable greetd`.
 У пакета greetd в Gentoo нет своей службы OpenRC; вики Gentoo («greetd») показывает, как
-запускать его через `display-manager-init`.
+запускать его через `display-manager-init`. Или сам newm как экран входа, со своим экраном блокировки: [newm как экран входа](../greeter.md).
 
 Первый запуск запишет `~/.config/newm/config.kts`. **Logo+/** покажет все клавиши.
 Дальше: [Каждый день](../using.md).

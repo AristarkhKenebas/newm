@@ -118,6 +118,8 @@ user = "_greetd"
 sudo systemctl enable greetd     # disable your other login screen first, if any
 ```
 
+Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md).
+
 (`tuigreet` is packaged in Debian 13 and from Ubuntu 26.04 on. On Ubuntu 24.04 and its
 relatives, keep the login screen you have.)
 

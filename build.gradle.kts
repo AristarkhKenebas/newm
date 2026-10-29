@@ -94,6 +94,20 @@ tasks.startScripts {
             |    fi
             |    export JAVA_HOME
             |fi
+            |# newm needs a D-Bus session bus (its tray, notifications, the portals). Without systemd nothing
+            |# starts one at login: newm then starts again inside dbus-run-session, which makes one for as
+            |# long as newm runs. Only for newm itself (no arguments), not `newm cmd ...`. NEWM_DBUS=off:
+            |# never (newm then only warns in its log). (An environment variable, not a setting: this is
+            |# decided before newm reads its configuration.)
+            |# The compositor itself (no arguments), not `newm cmd ...` or `newm --version`: only it gets the
+            |# AOT cache (one made while `newm --version` ran would be the compositor's after) and the restart loop.
+            |newm_compositor=
+            |[ ${'$'}# -eq 0 ] && newm_compositor=1
+            |if [ -n "${'$'}newm_compositor" ] && [ "${'$'}{NEWM_DBUS:-auto}" != off ] && [ -z "${'$'}DBUS_SESSION_BUS_ADDRESS" ] \
+            |    && ! [ -S "${'$'}{XDG_RUNTIME_DIR:-/nonexistent}/bus" ] && command -v dbus-run-session >/dev/null 2>&1; then
+            |    echo "newm: no D-Bus session bus: starting inside dbus-run-session (NEWM_DBUS=off: not)" >&2
+            |    exec dbus-run-session -- "${'$'}0"
+            |fi
             |
             """.trimMargin()
         val script = unixScript
@@ -121,7 +135,7 @@ tasks.startScripts {
         val aot = """
             |newm_aot() {
             |    newm_aot_opt=
-            |    [ "${'$'}{NEWM_AOT:-1}" = 0 ] || [ -n "${'$'}newm_aot_off" ] && return
+            |    [ "${'$'}{NEWM_AOT:-1}" = 0 ] || [ -n "${'$'}newm_aot_off" ] || [ -z "${'$'}newm_compositor" ] && return
             |    newm_aot_dir="${'$'}{XDG_CACHE_HOME:-${'$'}HOME/.cache}/newm/aot"
             |    case "${'$'}newm_aot_dir" in *[:,]*) return ;; esac
             |    { mkdir -p "${'$'}newm_aot_dir" && [ -w "${'$'}newm_aot_dir" ]; } 2>/dev/null || return
@@ -159,7 +173,7 @@ tasks.startScripts {
             """.trimMargin()
         val restart = """
             |newm_aot
-            |if [ -n "${'$'}NEWM_SUPERVISED" ]; then newm_java "${'$'}@"; fi
+            |if [ -n "${'$'}NEWM_SUPERVISED" ] || [ -z "${'$'}newm_compositor" ]; then newm_java "${'$'}@"; fi
             |newm_child=
             |newm_stopped=
             |# (Sent a signal: passed on, and newm is not started again, whatever code it ends with.)

@@ -304,6 +304,8 @@ private val RU: Map<String, String> = mapOf(
     "No window has the focus" to "Нет окна в фокусе",
     "Screenshot in %s" to "Снимок через %s",
     "Welcome to newm" to "Добро пожаловать в newm",
+    "No D-Bus session bus: the tray, notifications and portals do not work. Install D-Bus (dbus-run-session), see newm's log." to
+        "Нет сеансовой шины D-Bus: трей, уведомления и порталы не работают. Установите D-Bus (dbus-run-session), подробности в журнале newm.",
     "%s, left from another session, was closed: notifications are newm's now" to "%s от прошлой сессии закрыт: уведомления теперь у newm",
     "To choose newm at login (ly, SDDM, GDM): run  newm install-session  in a terminal." to
         "Чтобы выбирать newm при входе (ly, SDDM, GDM), выполните в терминале  newm install-session.",

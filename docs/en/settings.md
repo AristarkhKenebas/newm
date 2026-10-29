@@ -22,7 +22,7 @@ setting in use.
 | `colorScheme` | `"auto"` | `"dark"`, `"light"`, or `"auto"`: the quick settings' last choice (dark until one) |
 | `language` | `"auto"` | newm's menus: `"auto"` (the system's), `"en"`, `"ru"` |
 | `enableUnlockCommand` | `false` | `newm cmd unlock` unlocks without the password: only on a computer for testing |
-| `greeterUser` | `"greeter"` | the user greetd runs its greeter as (newm as a login screen) |
+| `greeterUser` | `"greeter"` | the user greetd runs its greeter as (newm as a login screen, see [newm as the login screen](greeter.md)); started by greetd, newm knows it is the greeter by greetd's socket whatever the user is called |
 | `greeterCommand` | this newm | what greetd starts once the greeter let a user in; its words are split at spaces (no quotes: a path with spaces needs a script of its own) |
 | `timeFormat` | `"HH:mm"` | how a time of day is written (java.time: `"h:mm a"`): the notifications' history, the lock screen, the clipboard |
 | `terminal` | `$TERMINAL`, else the first installed (alacritty, foot, kitty, ...) | the terminal newm opens: the `"terminal"` action, `defaultTerminal()`, programs that run in one (Terminal=true); `"foot"`, `"kitty -1"` |

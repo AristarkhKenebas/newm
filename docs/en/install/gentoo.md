@@ -124,17 +124,17 @@ org.freedesktop.impl.portal.Screenshot=wlr
 From a text console (Ctrl+Alt+F3, log in):
 
 ```sh
-newm                    # systemd
-dbus-run-session newm   # OpenRC: newm's bar needs a D-Bus session, and nothing else starts one
+newm
 ```
 
-**With a login screen** on OpenRC, put `dbus-run-session` into the session file too:
-
-```sh
-sudo sed -i 's|^Exec=|Exec=dbus-run-session |' /usr/share/wayland-sessions/newm.desktop
-```
-
-(`install.sh` writes this file again each time: run the line again after updating.)
+With a login screen, choose "newm". On OpenRC: without systemd, nothing starts a D-Bus session bus at login, and newm's bar (the tray,
+notifications, the portals) needs one. newm takes care of it by itself: `newm install-session`
+(which `install.sh` runs) writes the login screen's session as `dbus-run-session newm` when no
+systemd user session starts a bus, and newm's start script starts newm inside
+`dbus-run-session` when there is no bus, also from a text console. Only the `dbus` package
+must be installed (it has `dbus-run-session`). To decide it yourself:
+`newm install-session --dbus-run-session` (always) or `--no-dbus-run-session` (never; the same
+options for `install.sh`), and `NEWM_DBUS=off` in the environment stops the start script's.
 
 **greetd** with tuigreet (`gui-libs/greetd`, `gui-apps/tuigreet`). In
 `/etc/greetd/config.toml`, keep the `user` line that is there and set the command:
@@ -144,9 +144,9 @@ sudo sed -i 's|^Exec=|Exec=dbus-run-session |' /usr/share/wayland-sessions/newm.
 command = "tuigreet --time --remember --cmd newm"
 ```
 
-(On OpenRC: `--cmd 'dbus-run-session newm'`.) On systemd: `sudo systemctl enable greetd`.
+On systemd: `sudo systemctl enable greetd`.
 Gentoo's greetd package has no OpenRC service of its own; Gentoo's wiki ("greetd") shows how
-to start it through `display-manager-init`.
+to start it through `display-manager-init`. Or newm itself as the login screen, with its own lock screen: [newm as the login screen](../greeter.md).
 
 The first start writes `~/.config/newm/config.kts`. Press **Logo+/** to see every key.
 Next: [Everyday use](../using.md).

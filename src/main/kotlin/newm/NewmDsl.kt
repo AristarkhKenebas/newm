@@ -84,7 +84,10 @@ class NewmConfig(
     /** The language of newm's menus: "auto" (the system's), "en" or "ru". */
     var language by setting<String>("language")
 
-    /** The user of greetd's greeter (newm as the login screen). */
+    /**
+     * The user of greetd's greeter (newm as the login screen). Started by greetd, newm knows it is
+     * the greeter by greetd's socket (GREETD_SOCK) whatever the user is called; this is for the rest.
+     */
     var greeterUser by setting<String>("greeter_user")
 
     /** What greetd starts once the greeter let a user in ("newm", a script of your own); unset: this newm. */
