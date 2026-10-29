@@ -2,65 +2,65 @@
  "!comment": "This is a nixpkgs Gradle dependency lockfile. For more details, refer to the Gradle section in the nixpkgs manual.",
  "!version": 1,
  "https://aristarkhkenebas.github.io/caulis/maven/io/github": {
-  "aristarkhkenebas#caulis-compose/0.1.4": {
-   "jar": "sha256-dHxKusVHTkU+4q1cgBTXvu7W/x6fWAR5qA5Tz9xSS5Y=",
-   "module": "sha256-zJWaVCD7KkTkZRSAeGl8eB0dRqBWSVe6Ga6OIekrckM=",
-   "pom": "sha256-lPLBowbhQhRtkDAy/Ys1NX7/A+XacwB1iXsA9xb4uAs="
+  "aristarkhkenebas#caulis-compose/0.1.5": {
+   "jar": "sha256-RfuTM5rRHHmk7ooZwROlWyP8uCtPSbjGFtFUM0kr28E=",
+   "module": "sha256-TcC6yKj1uvscQTPmpm09xapWCMACLIMnhTLSWQfNgmQ=",
+   "pom": "sha256-0jDu8fVG0qOFp2OVxzrKRCQGGujdHR27evrUpZUt/U4="
   },
-  "aristarkhkenebas#caulis-core/0.1.4": {
-   "jar": "sha256-/rc23doo9PAswyRIn1NTVerFsElk4OdFvYrI91JW0fs=",
-   "module": "sha256-Ajs/ZsCVCJ1tT0ZNdODMVR0dTg8FHb9noyh/IliP02I=",
-   "pom": "sha256-Uj1hPWQPpmRhv7YrDJhFhG2yZBCeq/4CiEoJo/8bDwc="
+  "aristarkhkenebas#caulis-core/0.1.5": {
+   "jar": "sha256-z62vq9q8B5aBwfiACrAqyrrACenYtN+yqOmDqrNn3ek=",
+   "module": "sha256-rUGleHcTpSuBohk4wG9T3HWCFH9kNJedRrtuUt4EI9c=",
+   "pom": "sha256-gOGG3NORQQMtAfk7BzAy/0StQ3yHULh6WyTW//tUdDY="
   },
-  "aristarkhkenebas#caulis-geometry/0.1.4": {
-   "jar": "sha256-Xbgt7jFfc/SG0MM20/A2mMFDWL5JcvvCEMJqg8PmBiM=",
-   "module": "sha256-qWqB5jXd2i03xy2l979vCCBbHU3Wzrtsngqnv6/Ac5A=",
-   "pom": "sha256-dZpW1ADp/EEjpKaPtDdA1hEZwQMUCoDcgNIGeiLkHcE="
+  "aristarkhkenebas#caulis-geometry/0.1.5": {
+   "jar": "sha256-kxtD/QtCMlk4gW1TxOXO1R+uKs5Gvf/yMN8nTzRd90Q=",
+   "module": "sha256-Q4ceq4XIPOuYW3zs9m6pqyyR/1No0B0ttTurL57k5tY=",
+   "pom": "sha256-53kjjOzlfHB2cReoPRW3bB6A4QgqVkdIiitHUSIgOCI="
   },
-  "aristarkhkenebas#caulis-ipc/0.1.4": {
-   "jar": "sha256-E047GMfruncCpZrOhoN8mmbDsunn0D7Iom5UJoqxPno=",
-   "module": "sha256-hK5OiMv38q3xdGup7K+MkFjYWdCWdrwWlWQY6Jcz2GA=",
-   "pom": "sha256-3aZJ7jfQLCYtbVOFaGH+nl7NXFAIxAmjMJFNdqFoQZY="
+  "aristarkhkenebas#caulis-ipc/0.1.5": {
+   "jar": "sha256-IxyDSS7gScH8zp7gnyy7g8Pn4o9465KLxkLVq2NQnMI=",
+   "module": "sha256-ESNE2+iVDsjg0+d2rfQvo+jxV11nfxVLDVt414404IA=",
+   "pom": "sha256-Z6Ua7pWSCPMt/4ITX0DtrbDDSeDSkSzeIcQZIqDOQQo="
   },
-  "aristarkhkenebas#caulis-log/0.1.4": {
-   "jar": "sha256-Gar4uVcO6EyERfPTxYOM8PS7Jaie6bfNpR/suNYkdVY=",
-   "module": "sha256-EhM9WPB6hgA4dMDkIPI9W8qaBuPaGhXFBlBS+xWsfHE=",
-   "pom": "sha256-umFatp5g5fyTynNU7upAElONzSwj0i74AI7tuQv3mZs="
+  "aristarkhkenebas#caulis-log/0.1.5": {
+   "jar": "sha256-/rc8tMEXrMY3OhIbVwQALJBJ7rDJ/UY9tZIAl4+94Kg=",
+   "module": "sha256-YPQccYc82JpqGfcnfx08PXuK+PiA1bhJSXXGmEUKmWM=",
+   "pom": "sha256-56kwBgPcHlMO2o+tgpthc+aRRlucstVUA2Xk0a+RBb0="
   },
-  "aristarkhkenebas#caulis-native/0.1.4": {
-   "jar": "sha256-tMS1VCejZtS/8527L9zjMQgvq/bTOHoz4CyNwOeI5nM=",
-   "module": "sha256-8fWadOFP2rSrZGb307lPVGIDGKLD9ucCyGWpIKvOcZE=",
-   "pom": "sha256-CXsIQBtyctY5u+C80foHUn8LA4fAf7tpDD0CM2Ucbr0="
+  "aristarkhkenebas#caulis-native/0.1.5": {
+   "jar": "sha256-RdO4bgwS1imOAe/gRHWdZZljgp3tP6SIvYjuGx4bo1w=",
+   "module": "sha256-Arv1LuOO0G6dI1yM5zcyQJztP1TOsu5z0ZDrKxh8Rog=",
+   "pom": "sha256-rokB9+inReAMYUyVBQ8L/PBKSZPOLJ4eiQ1xMDSSd5c="
   },
-  "aristarkhkenebas#caulis-protocol/0.1.4": {
-   "jar": "sha256-ZPm/iU+uENV8fCQh/LC7/ok97d4HzkndqMXSMxi+82A=",
-   "module": "sha256-tHMml8Ghi1s4O1LeYp10unEHHIol7nsQvuVShmnL0J4=",
-   "pom": "sha256-WYdVOworJhrEtZsiT4uzTdmUIx8hYPnkQytl6US/gVs="
+  "aristarkhkenebas#caulis-protocol/0.1.5": {
+   "jar": "sha256-ww/jwEpbiN5nVaxHs4nU/pSQh/oYOXwv5e0cDN3zkyU=",
+   "module": "sha256-rIv5+UMJ6lSTxQPoClWRZkKWp0uYo2JsqlIuZeKcI3E=",
+   "pom": "sha256-D7BqrrtwrO8mrxWCAKbcDWjBM6tSA1ME+rxvyAEDWMs="
   },
-  "aristarkhkenebas#caulis-render/0.1.4": {
-   "jar": "sha256-cwoQkSTUYzbdMaH2xbuPeAU5tW1SdKg/x1w9GUD3iVc=",
-   "module": "sha256-wLaQ42k9wCzMoNNK/Fmhlw7LjVu697fum/mZxc5cjwU=",
-   "pom": "sha256-6yJAiwWYGtWDVN8Wy1dzZPXCTwEO2b690eZMoTrmmKo="
+  "aristarkhkenebas#caulis-render/0.1.5": {
+   "jar": "sha256-CCEEgWM0xnfqhZB6i6oKfzToU+pBtFCmkvSQXS1yXhM=",
+   "module": "sha256-hbG6a2kwH8PatWi6i80c8oglTcem+eec50SCsJGPtMM=",
+   "pom": "sha256-L0DkhC5Y9J3bsDVfmQDvfNlm+m64Vl6y51qrb+KudT8="
   },
-  "aristarkhkenebas#caulis-screenshot/0.1.4": {
-   "jar": "sha256-m508MCmyxp+tLSl2/s4U59kUucq4+OCoruDwvk2UWLc=",
-   "module": "sha256-ZJPzrs0/MEfZlKDnG4zhyAtIvqC/5P/3fjArHj+3gSE=",
-   "pom": "sha256-6hapzf2Qlir3Zf8KcHMk6VFC9XIQ124J9GDN+ZuoVdY="
+  "aristarkhkenebas#caulis-screenshot/0.1.5": {
+   "jar": "sha256-emW7bH1/HT9UfRZn/DQiul9RePV0OHDWzu6T7EQQu+0=",
+   "module": "sha256-QwbGzdQHM31I8WVaCzuJwf2o72qmGcfSeJq7QIhMbrs=",
+   "pom": "sha256-xe4fL0dq1zR9icf4DvJeGREmxH/Pby7yWayGVo6DsPU="
   },
-  "aristarkhkenebas#caulis-tiling/0.1.4": {
-   "jar": "sha256-bHJMpxFbo5NkEqO67ED3jaUkgpEH6plPwOJTHkREr9E=",
-   "module": "sha256-1TrqRtsToyUNHEgPOy+DIwWkA7VNrmY98ht9XOTguJk=",
-   "pom": "sha256-xPO5Tj483FCHIQJNkkFWkkOPj/B1VntkcLkG8seYNHg="
+  "aristarkhkenebas#caulis-tiling/0.1.5": {
+   "jar": "sha256-h13T4ZCt2aZflQlkDV33B7rtolxUG68K9tOl3KTZit0=",
+   "module": "sha256-/z39Osu06dGF5QcuRE9WCJzYt0b/3H+7NkdObZcaNmU=",
+   "pom": "sha256-PnrZSLyvpy6ONrYkPxmpHKzDofYvnINJo2t8cJW/oUo="
   },
-  "aristarkhkenebas#caulis-wm/0.1.4": {
-   "jar": "sha256-clOwWeqZ1gaXwTRfD2gjWF3lU7DbJhagg5yaCDUNvSs=",
-   "module": "sha256-vBEIzb0v1+sz5c+eU3nARNadg/yxdMbtfWVjrYT0nxI=",
-   "pom": "sha256-Yp1kuvHokV2Qh/7uVQK2dHk3KZLeoRRlY1PPBT+ySRk="
+  "aristarkhkenebas#caulis-wm/0.1.5": {
+   "jar": "sha256-Itv8VgK3FdMv9tH9R6TeC5dbIUp76eiGxKPNib46XGg=",
+   "module": "sha256-RqPhUhNFjLZiKyYbFtobVGVYcJNxQCpUcHOCAzJEKyI=",
+   "pom": "sha256-lYLflSzWHFiOjnydzDPok0XWtjxLmoXDf0A9vxAKqwI="
   },
-  "aristarkhkenebas#caulis-xwayland/0.1.4": {
-   "jar": "sha256-2U+rEOad+2h2rRbOWvmuE0MdZJNDrYB+/pOFIgGY9kY=",
-   "module": "sha256-OWHSGaZJN/8O9VaTQtodhjP3yH5EO3R2p7fw5XLPGvQ=",
-   "pom": "sha256-m0+o2kPRAUjedGV2IvtFMl6LnVMyIHKeZDkd9tOilNA="
+  "aristarkhkenebas#caulis-xwayland/0.1.5": {
+   "jar": "sha256-gIsYvb7QTaFQLoJyZMMMh5KiIzUY1AXrcp0Wl4GisWI=",
+   "module": "sha256-j/CsibhHTpjSg6IVR0RHkFPxfiW1fU13ZnD6AMwz+6M=",
+   "pom": "sha256-MJkIQoWFuS/adVAbra0QvSTE0WVJh8jTY8hyynnDUf4="
   }
  },
  "https://dl.google.com/dl/android/maven2/androidx": {
