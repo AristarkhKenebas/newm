@@ -1,6 +1,68 @@
 {
  "!comment": "This is a nixpkgs Gradle dependency lockfile. For more details, refer to the Gradle section in the nixpkgs manual.",
  "!version": 1,
+ "https://aristarkhkenebas.github.io/caulis/maven/io/github": {
+  "aristarkhkenebas#caulis-compose/0.1.4": {
+   "jar": "sha256-dHxKusVHTkU+4q1cgBTXvu7W/x6fWAR5qA5Tz9xSS5Y=",
+   "module": "sha256-zJWaVCD7KkTkZRSAeGl8eB0dRqBWSVe6Ga6OIekrckM=",
+   "pom": "sha256-lPLBowbhQhRtkDAy/Ys1NX7/A+XacwB1iXsA9xb4uAs="
+  },
+  "aristarkhkenebas#caulis-core/0.1.4": {
+   "jar": "sha256-/rc23doo9PAswyRIn1NTVerFsElk4OdFvYrI91JW0fs=",
+   "module": "sha256-Ajs/ZsCVCJ1tT0ZNdODMVR0dTg8FHb9noyh/IliP02I=",
+   "pom": "sha256-Uj1hPWQPpmRhv7YrDJhFhG2yZBCeq/4CiEoJo/8bDwc="
+  },
+  "aristarkhkenebas#caulis-geometry/0.1.4": {
+   "jar": "sha256-Xbgt7jFfc/SG0MM20/A2mMFDWL5JcvvCEMJqg8PmBiM=",
+   "module": "sha256-qWqB5jXd2i03xy2l979vCCBbHU3Wzrtsngqnv6/Ac5A=",
+   "pom": "sha256-dZpW1ADp/EEjpKaPtDdA1hEZwQMUCoDcgNIGeiLkHcE="
+  },
+  "aristarkhkenebas#caulis-ipc/0.1.4": {
+   "jar": "sha256-E047GMfruncCpZrOhoN8mmbDsunn0D7Iom5UJoqxPno=",
+   "module": "sha256-hK5OiMv38q3xdGup7K+MkFjYWdCWdrwWlWQY6Jcz2GA=",
+   "pom": "sha256-3aZJ7jfQLCYtbVOFaGH+nl7NXFAIxAmjMJFNdqFoQZY="
+  },
+  "aristarkhkenebas#caulis-log/0.1.4": {
+   "jar": "sha256-Gar4uVcO6EyERfPTxYOM8PS7Jaie6bfNpR/suNYkdVY=",
+   "module": "sha256-EhM9WPB6hgA4dMDkIPI9W8qaBuPaGhXFBlBS+xWsfHE=",
+   "pom": "sha256-umFatp5g5fyTynNU7upAElONzSwj0i74AI7tuQv3mZs="
+  },
+  "aristarkhkenebas#caulis-native/0.1.4": {
+   "jar": "sha256-tMS1VCejZtS/8527L9zjMQgvq/bTOHoz4CyNwOeI5nM=",
+   "module": "sha256-8fWadOFP2rSrZGb307lPVGIDGKLD9ucCyGWpIKvOcZE=",
+   "pom": "sha256-CXsIQBtyctY5u+C80foHUn8LA4fAf7tpDD0CM2Ucbr0="
+  },
+  "aristarkhkenebas#caulis-protocol/0.1.4": {
+   "jar": "sha256-ZPm/iU+uENV8fCQh/LC7/ok97d4HzkndqMXSMxi+82A=",
+   "module": "sha256-tHMml8Ghi1s4O1LeYp10unEHHIol7nsQvuVShmnL0J4=",
+   "pom": "sha256-WYdVOworJhrEtZsiT4uzTdmUIx8hYPnkQytl6US/gVs="
+  },
+  "aristarkhkenebas#caulis-render/0.1.4": {
+   "jar": "sha256-cwoQkSTUYzbdMaH2xbuPeAU5tW1SdKg/x1w9GUD3iVc=",
+   "module": "sha256-wLaQ42k9wCzMoNNK/Fmhlw7LjVu697fum/mZxc5cjwU=",
+   "pom": "sha256-6yJAiwWYGtWDVN8Wy1dzZPXCTwEO2b690eZMoTrmmKo="
+  },
+  "aristarkhkenebas#caulis-screenshot/0.1.4": {
+   "jar": "sha256-m508MCmyxp+tLSl2/s4U59kUucq4+OCoruDwvk2UWLc=",
+   "module": "sha256-ZJPzrs0/MEfZlKDnG4zhyAtIvqC/5P/3fjArHj+3gSE=",
+   "pom": "sha256-6hapzf2Qlir3Zf8KcHMk6VFC9XIQ124J9GDN+ZuoVdY="
+  },
+  "aristarkhkenebas#caulis-tiling/0.1.4": {
+   "jar": "sha256-bHJMpxFbo5NkEqO67ED3jaUkgpEH6plPwOJTHkREr9E=",
+   "module": "sha256-1TrqRtsToyUNHEgPOy+DIwWkA7VNrmY98ht9XOTguJk=",
+   "pom": "sha256-xPO5Tj483FCHIQJNkkFWkkOPj/B1VntkcLkG8seYNHg="
+  },
+  "aristarkhkenebas#caulis-wm/0.1.4": {
+   "jar": "sha256-clOwWeqZ1gaXwTRfD2gjWF3lU7DbJhagg5yaCDUNvSs=",
+   "module": "sha256-vBEIzb0v1+sz5c+eU3nARNadg/yxdMbtfWVjrYT0nxI=",
+   "pom": "sha256-Yp1kuvHokV2Qh/7uVQK2dHk3KZLeoRRlY1PPBT+ySRk="
+  },
+  "aristarkhkenebas#caulis-xwayland/0.1.4": {
+   "jar": "sha256-2U+rEOad+2h2rRbOWvmuE0MdZJNDrYB+/pOFIgGY9kY=",
+   "module": "sha256-OWHSGaZJN/8O9VaTQtodhjP3yH5EO3R2p7fw5XLPGvQ=",
+   "pom": "sha256-m0+o2kPRAUjedGV2IvtFMl6LnVMyIHKeZDkd9tOilNA="
+  }
+ },
  "https://dl.google.com/dl/android/maven2/androidx": {
   "annotation#annotation-jvm/1.9.1": {
    "jar": "sha256-HjQ5F+vye6lv5NxSscrX/TK3OPvGNVu2zVs7MF1yEtA=",
@@ -312,66 +374,6 @@
   },
   "com/google/protobuf#protobuf-parent/4.36.2": {
    "pom": "sha256-rKdv5XH8kEU2fRTkWm+theKmuPH1tBHSo4bfCJ4hEbI="
-  },
-  "io/github/aristarkhkenebas#caulis-compose/0.1.2": {
-   "jar": "sha256-Yf4zOp9PWUj4fmlQlflNWofeGlv33LTd35KBTQ6ohjM=",
-   "module": "sha256-PdaAOPVn0TUYMjFG5VmNEpVLdqu0JUn4xqtwKP8r+/k=",
-   "pom": "sha256-wqADpWum9D3SetpXeuo6aqQp0i9GHCRjA5RkD4O7Imc="
-  },
-  "io/github/aristarkhkenebas#caulis-core/0.1.2": {
-   "jar": "sha256-B0SSQUlXMI3Bvfx9NwgJUMimdxxo414AWDq/Bw3U/08=",
-   "module": "sha256-zkX2kyHRBc9Gv5I/TfsFdJGq2Pj5fbZOzZVgI8cxlDo=",
-   "pom": "sha256-RqmzGCXPcwoJbh/JxzUlHyh41ikMHzJ5BafrzpIWr/U="
-  },
-  "io/github/aristarkhkenebas#caulis-geometry/0.1.2": {
-   "jar": "sha256-HCFgWaRQ7XmpHS+XIU2Aq02z2bS9WSTNZmqf4eNLxAU=",
-   "module": "sha256-Ik387ND/UM1inKISVf56GobZ0a2itL1mEriu0JZBoRw=",
-   "pom": "sha256-Qkibh1jJVxzUXR2rb5TWXXZoY/YhR+x7LH2HB+GtYnU="
-  },
-  "io/github/aristarkhkenebas#caulis-ipc/0.1.2": {
-   "jar": "sha256-sZA8riJI+gainqDoOhFSgfgellj+6c+MSxbjAFmHSSM=",
-   "module": "sha256-ioGrl3Cr+aeq1MfiZU3HLag6V7vQ1mfRv6C04A+BcZc=",
-   "pom": "sha256-3J44EARtQxv2Gl154cn2hJ8A6VF/46ZIwbWGgZscPcM="
-  },
-  "io/github/aristarkhkenebas#caulis-log/0.1.2": {
-   "jar": "sha256-dwLNgBgvgo1viXz1nQxfKT74XjwzU5tERlws74kAuvA=",
-   "module": "sha256-Xceqe8HYVYFb0UPZ1Hn4swzidDhLs/jKpVWQFETwBKI=",
-   "pom": "sha256-BiWajCdm6r0pdN8TE93KsjO/4ZEXfie3wgF7gnN6CeU="
-  },
-  "io/github/aristarkhkenebas#caulis-native/0.1.2": {
-   "jar": "sha256-OdxU+LfgIw2DFSIIx0mIYO/IMcOB7XFp4GmPQRWHR6k=",
-   "module": "sha256-EtA3mwIIU9/ErjNLhAMBXViif5DIP3q5mgvSjQL1s1k=",
-   "pom": "sha256-Y7Rx/l04La60qIBjuhKEjDwuxktXZ7a+CFlHLW7UxH8="
-  },
-  "io/github/aristarkhkenebas#caulis-protocol/0.1.2": {
-   "jar": "sha256-yh3NZor/bQkEi3w+1xym/TMPsoUcW5aK1gD904C8w40=",
-   "module": "sha256-H4Sfo21DVb2oJVU14YaYc1CpTCKhaiHWxQBLqmtvfek=",
-   "pom": "sha256-x4PBwBemqAKTA159BWpUKrhlbWBqdVDU3FTzxiY++4w="
-  },
-  "io/github/aristarkhkenebas#caulis-render/0.1.2": {
-   "jar": "sha256-0iigQsHWAYN/iJfpspRQmbOJcfH1qbpZhbLrKVYC8ug=",
-   "module": "sha256-CGisa4o7LTypFox8MaAUdARpge5Gh8WAM6FDhmEp9vA=",
-   "pom": "sha256-vGzo5XCRCih4MnNF5ODXaDP1Qza9jV0sVR1W3543qtY="
-  },
-  "io/github/aristarkhkenebas#caulis-screenshot/0.1.2": {
-   "jar": "sha256-l7V4yGTE5GxCRLzwgtEqmz77lnil/R8pXb0owqw7RWc=",
-   "module": "sha256-oythb62SS6ObFg6WZ6ICewogzwqaqscZE5cxs+gFaTg=",
-   "pom": "sha256-mxihYlQf5YZ6m+ccy/9flK8l/ZMdm0uhQ0OaUErzw9Y="
-  },
-  "io/github/aristarkhkenebas#caulis-tiling/0.1.2": {
-   "jar": "sha256-QVA0eS1P4TSGuHG7AU+Ri0FgtDnNuetq9/HQJY7VVSE=",
-   "module": "sha256-GmH/GYoaZmnQroGHTzI4adIOGtOXKLDufB4hSCiYXCQ=",
-   "pom": "sha256-1lkuJ2hIy0HzXncQ55SoGnV20DAuT9sBsNQdnFPTCbo="
-  },
-  "io/github/aristarkhkenebas#caulis-wm/0.1.2": {
-   "jar": "sha256-Zauy9uiOH2g9DhhHQU6buF9mk8a3PmswkqlIiS7iRXU=",
-   "module": "sha256-sGpCi2KKcdrPMIkqzpMhnMgUFj8PqPXqEhr80tT8/QY=",
-   "pom": "sha256-mUis9G8plp+K51pVfJHkfAElcFYm8nteJHvCTHXkwiE="
-  },
-  "io/github/aristarkhkenebas#caulis-xwayland/0.1.2": {
-   "jar": "sha256-p4mNZM3cZLarT2l3qCqsgv0kAT00O9G/H+7byDX5q24=",
-   "module": "sha256-JmA/SUhVCPopWkwmkLDmowT4I2CMcpvuuelpA5p2t7o=",
-   "pom": "sha256-mcBRXuRnPDskS+537f/+xMFs97j2HinlVZhXV6yBNBY="
   },
   "org/apiguardian#apiguardian-api/1.1.2": {
    "jar": "sha256-tQlEisUG1gcxnxglN/CzXXEAdYLsdBgyofER5bW3Czg=",
