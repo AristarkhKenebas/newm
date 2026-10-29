@@ -293,16 +293,19 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
     val fading: Boolean get() = shownAt == 0L || System.nanoTime() - shownAt < NewmAnimations["backgroundIn"].effectiveMillis * 1_000_000L
 
     companion object {
-        // The picture read from [path] (slow for a big one: not on the compositor's thread).
+        // The picture read from [path] (slow for a big one: not on the compositor's thread). Decoded
+        // by Skia into native memory ([WallpaperImage]); Java's own reader only for what Skia cannot read.
         fun read(path: String): BufferedImage? = try {
             val t0 = System.nanoTime()
-            val image = if (path.startsWith("resource:")) {
-                Wallpaper::class.java.getResourceAsStream("/newm/templates/${path.removePrefix("resource:")}")?.use { javax.imageio.ImageIO.read(it) }
+            val bytes = if (path.startsWith("resource:")) {
+                Wallpaper::class.java.getResourceAsStream("/newm/templates/${path.removePrefix("resource:")}")?.use { it.readAllBytes() }
             } else {
-                val file = java.io.File(expandHome(path))
-                if (file.name.lowercase().endsWith(".svg")) svg(file.readBytes()) else javax.imageio.ImageIO.read(file)
-            } ?: error("not a picture")
-            log.info { "Wallpaper $path: ${image.width}x${image.height}, read in ${(System.nanoTime() - t0) / 1_000_000} ms" }
+                java.io.File(expandHome(path)).readBytes()
+            } ?: error("not found")
+            val svg = path.lowercase().endsWith(".svg")
+            val image = (if (svg) svg(bytes) else decoded(bytes)) ?: javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(bytes)) ?: error("not a picture")
+            val (w, h) = (image as? WallpaperImage)?.let { it.fullWidth to it.fullHeight } ?: (image.width to image.height)
+            log.info { "Wallpaper $path: ${w}x$h, read in ${(System.nanoTime() - t0) / 1_000_000} ms" }
             image
         } catch (e: Exception) {
             log.warn("The wallpaper $path cannot be shown: $e")
@@ -311,6 +314,21 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
 
         // The long side an SVG wallpaper is drawn at: sharp on a 4K screen and when zoomed in a little (newm issue 86).
         private const val SVG_LONG_SIDE = 5120
+
+        // [bytes] (JPEG, PNG, WebP, GIF, BMP) decoded by Skia, or null if it cannot.
+        private fun decoded(bytes: ByteArray): WallpaperImage? {
+            val image = runCatching { org.jetbrains.skia.Image.makeFromEncoded(bytes) }.getOrNull() ?: return null
+            try {
+                val bitmap = org.jetbrains.skia.Bitmap()
+                if (!bitmap.allocPixels(org.jetbrains.skia.ImageInfo.makeN32Premul(image.width, image.height)) || !image.readPixels(bitmap)) {
+                    bitmap.close()
+                    return null
+                }
+                return WallpaperImage.of(bitmap)
+            } finally {
+                image.close()
+            }
+        }
 
         // An SVG drawn by Skia at [SVG_LONG_SIDE] pixels along its long side, in its own proportions.
         private fun svg(bytes: ByteArray): BufferedImage? {
@@ -325,21 +343,94 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
             val height = (h * scale).toInt().coerceAtLeast(1)
             dom.setContainerSize(width.toFloat(), height.toFloat())
             val bitmap = org.jetbrains.skia.Bitmap()
-            bitmap.allocPixels(org.jetbrains.skia.ImageInfo(width, height, org.jetbrains.skia.ColorType.BGRA_8888, org.jetbrains.skia.ColorAlphaType.UNPREMUL))
+            if (!bitmap.allocPixels(org.jetbrains.skia.ImageInfo.makeN32Premul(width, height))) {
+                bitmap.close()
+                return null
+            }
             org.jetbrains.skia.Canvas(bitmap).use { canvas ->
                 canvas.clear(0xFF000000.toInt())
                 dom.render(canvas)
             }
-            val bytesOut = bitmap.readPixels() ?: return null
-            bitmap.close()
             dom.close()
-            val ints = IntArray(width * height)
-            java.nio.ByteBuffer.wrap(bytesOut).order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(ints)
-            return BufferedImage(width, height, BufferedImage.TYPE_INT_RGB).also { it.setRGB(0, 0, width, height, ints, 0, width) }
+            return WallpaperImage.of(bitmap)
         }
 
         /** The picture of [image] on the GPU (on the compositor's thread). */
-        fun of(renderer: Renderer, image: BufferedImage) = Wallpaper(textureOf(renderer, image), image.width, image.height)
+        fun of(renderer: Renderer, image: BufferedImage): Wallpaper {
+            if (image is WallpaperImage) image.texture(renderer)?.let { return Wallpaper(it, image.fullWidth, image.fullHeight) }
+            return Wallpaper(textureOf(renderer, image), image.width, image.height)
+        }
+    }
+}
+
+/**
+ * A wallpaper as [Wallpaper.read] read it: its pixels decoded by Skia into native memory (BGRA,
+ * premultiplied: as the GPU takes them) — not through Java's heap: Java's JPEG reader went
+ * through ~300 MB of heap for newm's own 3674x2454 picture, Java's heap grew that big and
+ * stayed so for a minute; and turning it into the GPU's order took the compositor's thread for
+ * a moment. As a picture it is only a small copy of itself ([THUMB] pixels along its long side):
+ * enough for the colours made from it (Palette.seedOf looks at ~96 x 96 points of it).
+ */
+class WallpaperImage private constructor(
+    private var pixels: org.jetbrains.skia.Bitmap?,
+    val fullWidth: Int,
+    val fullHeight: Int,
+    width: Int,
+    height: Int,
+) : BufferedImage(width, height, TYPE_INT_RGB) {
+
+    /** Its pixels on the GPU (then let go: once only), or null if they are gone. */
+    internal fun texture(renderer: Renderer): GpuTexture? {
+        val bitmap = pixels ?: return null
+        pixels = null
+        try {
+            val pixmap = bitmap.peekPixels() ?: return null
+            val texture = renderer.createTexture(fullWidth, fullHeight)
+            val rowBytes = pixmap.rowBytes.toLong()
+            val all = MemorySegment.ofAddress(pixmap.addr).reinterpret(rowBytes * fullHeight)
+            if (rowBytes == fullWidth * 4L) {
+                texture.upload(all, 0, fullHeight)
+            } else {
+                // (Rows with room after them: one at a time.)
+                for (y in 0 until fullHeight) texture.upload(all.asSlice(y * rowBytes, fullWidth * 4L), y, 1)
+            }
+            return texture
+        } finally {
+            bitmap.close()
+        }
+    }
+
+    companion object {
+        /** The long side of the small copy. */
+        const val THUMB = 192
+
+        internal fun of(bitmap: org.jetbrains.skia.Bitmap): WallpaperImage {
+            val w = bitmap.width
+            val h = bitmap.height
+            val s = minOf(1.0, THUMB.toDouble() / maxOf(w, h))
+            val tw = (w * s).toInt().coerceAtLeast(1)
+            val th = (h * s).toInt().coerceAtLeast(1)
+            val image = WallpaperImage(bitmap, w, h, tw, th)
+            // (Not changed any more: Skia then looks at its pixels instead of copying them.)
+            bitmap.setImmutable()
+            // The small copy: Skia scales it down (smoothly), Java keeps it as RGB.
+            val small = org.jetbrains.skia.Bitmap()
+            try {
+                if (small.allocPixels(org.jetbrains.skia.ImageInfo.makeN32Premul(tw, th))) {
+                    org.jetbrains.skia.Image.makeFromBitmap(bitmap).use { full ->
+                        small.peekPixels()?.let { full.scalePixels(it, org.jetbrains.skia.FilterMipmap(org.jetbrains.skia.FilterMode.LINEAR, org.jetbrains.skia.MipmapMode.NONE), false) }
+                    }
+                    small.readPixels()?.let { bytes ->
+                        val ints = IntArray(tw * th)
+                        java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(ints)
+                        image.setRGB(0, 0, tw, th, ints, 0, tw)
+                    }
+                }
+            } finally {
+                small.close()
+            }
+            return image
+        }
     }
 }
 
@@ -442,7 +533,7 @@ private val confModules = BarSetting<Map<String, Any?>>("modules", emptyMap())
 private val confOn = BarSetting<Map<String, Any?>>("on", emptyMap())
 
 // The configuration's label of layout [name] ("us", "de(neo)"), else "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
-private fun layoutLabel(name: String, labels: Map<String, Any?>): String {
+internal fun layoutLabel(name: String, labels: Map<String, Any?>): String {
     val code = name.substringBefore('(').trim().lowercase()
     (labels[name] ?: labels[code])?.let { return it.toString() }
     return when (code) {

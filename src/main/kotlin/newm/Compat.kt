@@ -33,6 +33,17 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
                 caulis.input.pointers.naturalScroll = it
             }
             "focus_follows_mouse" -> flag { caulis.focusFollowsMouse = it }
+            // input { pointerSpeed, accelProfile, ... } for every pointer, touchpad { } and device("name") { } (Misc.kt).
+            "pointer_speed", "accel_profile", "left_handed", "scroll_factor", "scroll_method", "scroll_button", "middle_button_emulation" ->
+                applyDeviceSettings(caulis.input.pointers, mapOf(key to value), "input")
+            "touchpad" -> (value as? Map<*, *>)?.let { applyDeviceSettings(caulis.input.touchpads, it, "input.touchpad") } ?: wrong("a table")
+            "devices" -> (value as? Map<*, *>)?.forEach { (name, d) ->
+                val settings = caulis.input.devices.getOrPut(name.toString()) { dev.caulis.core.input.DeviceSettings() }
+                (d as? Map<*, *>)?.let { applyDeviceSettings(settings, it, "input.device(\"$name\")") }
+            } ?: wrong("a table")
+            // keyboard { repeatRate, repeatDelay }.
+            "repeat_rate" -> number { caulis.repeatRate = it.coerceIn(0, 1000) }
+            "repeat_delay" -> number { caulis.repeatDelayMillis = it.toLong().coerceIn(1, 10_000) }
             // input { tablet { } }: Caulis' settings of every drawing tablet.
             "tablet" -> (value as? Map<*, *>)?.let { applyTablet(caulis, it) } ?: wrong("a table")
             // newm's own (not pywm's): from keyboard { numLock } and cursor { hideAfter }.
@@ -52,6 +63,13 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
                 dev.caulis.ffi.Processes.Method.entries.firstOrNull { it.name.equals(v, ignoreCase = true) }?.let { caulis.processStart = it } ?: wrong("\"native\" or \"java\"")
             }
             "java_updated_notice" -> text { caulis.javaUpdatedNotice = it.ifEmpty { null } }
+            // compositor { stallReportMillis, trimMemory, trimMemoryEveryMinutes, mallocPools, quickCursor, widgetThreads }: Caulis' performance { }.
+            "stall_report_ms" -> number { caulis.stallReportMillis = it.toLong().coerceIn(0, 60_000) }
+            "trim_memory" -> flag { caulis.trimMemory = it }
+            "trim_memory_every_minutes" -> number { caulis.trimMemoryEveryMinutes = it.coerceIn(0, 1440) }
+            "malloc_pools" -> number { caulis.mallocPools = it.coerceIn(0, 64) }
+            "quick_cursor" -> flag { caulis.quickCursorMoves = it }
+            "widget_threads" -> number { caulis.widgetThreads = it.coerceIn(0, 16) }
             // newm's own: compositor { configCompilerJvmOptions, configCompilerTimeoutSeconds } (the next compilation of config.kts).
             "config_compiler_jvm_options" -> text { KtsConfig.jvmOptions = it.trim().split(Regex("\\s+")).filter(String::isNotEmpty).ifEmpty { KtsConfig.DEFAULT_JVM_OPTIONS } }
             "config_compiler_timeout_seconds" -> number { KtsConfig.timeoutSeconds = it.toLong().coerceIn(5, 3600) }

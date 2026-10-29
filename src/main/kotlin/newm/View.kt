@@ -399,6 +399,16 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
      */
     private fun initTiled(up: Up, ws: Workspace): ViewDown {
         val wsState = forFirstWindow(wm.state.workspaceState(ws))
+        // On screens: the place it will get, asked for at once (a half, a quarter of the screen).
+        if (Screens.on()) {
+            val placed = runCatching { wm.placeOnScreen(this, ws, wsState.copy()) }.getOrNull()
+            if (placed != null) {
+                val result = reducerTiled(up, wm.state, ViewState(i = placed.i, j = placed.j, w = placed.w, h = placed.h), ws, wsState.focusingScreen(placed.page), ignoreMinSize = true)
+                result.box = Box.ZERO
+                result.floating = false
+                return result
+            }
+        }
         val minW = up.sizeConstraints[0]
         val minH = up.sizeConstraints[2]
         var w = 1.0
@@ -535,6 +545,10 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
         result.workspace = if (selfState.moveOrigin != null && selfState.scaleOrigin == null) {
             null // No fixed output during a move
+        } else if (!confWindowsUnderBar()) {
+            // Cut at the bars' edge: under a bar only the bar shows (the window above or below
+            // the one in view showed through it, newm's wall going on under the bars).
+            Box(ws.posX + wsState.leftExcluded, ws.posY + wsState.topExcluded, usableWidth, usableHeight)
         } else {
             Box(ws.posX.toDouble(), ws.posY.toDouble(), ws.width.toDouble(), ws.height.toDouble())
         }
@@ -556,6 +570,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             else -> state.copy()
         }
         val referenceWsState = forFirstWindow(referenceState.workspaceState(ws))
+
+        // On screens: its place on a screen (the others there make room, gliding).
+        if (Screens.on()) return showOnScreen(ws, state, wsState, referenceState, referenceWsState)
 
         // One tile, or more if the program needs it.
         val w = max(ceil(minW), 1)
@@ -588,9 +605,29 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
         return state1 to state2
     }
 
-    // The workspace as the first window sees it: zoomed in on one tile, if it is empty.
+    private fun showOnScreen(ws: Workspace, state: LayoutState, wsState: WorkspaceState, referenceState: LayoutState, referenceWsState: WorkspaceState): Pair<LayoutState?, LayoutState?> {
+        val placed = wm.placeOnScreen(this, ws, referenceWsState)
+        val (i1, j1, w, h) = listOf(placed.i, placed.j, placed.w, placed.h)
+        val start = if (confFade()) 0.85 else 0.0
+        val wsState1 = wsState.withViewState(
+            this,
+            placed.copy(
+                i = i1 + (1 - start) / 2 * w, j = j1 + (1 - start) / 2 * h, w = start * w, h = start * h,
+                scaleOrigin = w to h, moveOrigin = MoveOrigin(i1, j1, ws), stackIdx = handle, appear = 0.0,
+            ),
+        )
+        val wsState2 = referenceWsState.focusingView(this)
+        val state1 = state.settingWorkspaceState(ws, wsState1)
+        val state2 = referenceState.settingWorkspaceState(ws, wsState2)
+        log.info { "$appId on screen ${placed.page + 1}, place ${placed.slot + 1}" }
+        focus()
+        wm.focusBorders.updateFocus(this, state1 to state2)
+        return state1 to state2
+    }
+
+    // The workspace as the first window sees it: zoomed in on one tile, if it is empty (on screens: always, the first screen).
     private fun forFirstWindow(wsState: WorkspaceState): WorkspaceState {
-        if (!confFillFirst() || wsState.viewStates.values.any { it.isTiled } || wsState.isInOverview() || wsState.isFullscreen()) return wsState
+        if (!(confFillFirst() || Screens.on()) || wsState.viewStates.values.any { it.isTiled } || wsState.isInOverview() || wsState.isFullscreen()) return wsState
         return wsState.copy(i = 0.0, j = 0.0, size = 1.0, sizeOrigin = null)
     }
 
@@ -681,6 +718,8 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             // (A window kept over a restart goes back to its place.)
             val shownView = this
             wm.caulis.post { wm.session.shown(shownView) }
+            // (misc { swallow }: a window started from a terminal takes its place.)
+            wm.caulis.post { Swallowing.shown(wm, shownView) }
         }
         return result
     }

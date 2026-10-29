@@ -33,6 +33,14 @@ fun defaultConfig(layout: Layout): Map<String, Any?> {
         Triple("L-S-k", "Move the window up") { moveFocusedView(0, -1) },
         Triple("L-S-l", "Move the window right") { moveFocusedView(1, 0) },
 
+        Triple("L-space", "Next layout of the screen") { nextScreenLayout() },
+        Triple("L-S-space", "Swap the window with the next one on its screen") { swapOnScreen(1) },
+        Triple("L-C-Return", "Make the window the screen's master") { promoteToMaster() },
+        Triple("L-Next", "Next screen") { focusScreen(1) },
+        Triple("L-Prior", "Previous screen") { focusScreen(-1) },
+        Triple("L-S-Next", "Move the window onto the next screen") { moveFocusedViewToScreen(1) },
+        Triple("L-S-Prior", "Move the window onto the previous screen") { moveFocusedViewToScreen(-1) },
+
         Triple("L-C-h", "Window narrower") { resizeFocusedView(-1, 0) },
         Triple("L-C-l", "Window wider") { resizeFocusedView(1, 0) },
         Triple("L-C-k", "Window shorter") { resizeFocusedView(0, -1) },

@@ -701,7 +701,24 @@ class NotificationCenter(private val model: BarModel) {
     }
 
     /** [id] out of the history and off the screen; the program is told why. */
+    // newm's own questions waiting for a button (by their number): what each answer does (null: closed unanswered).
+    private val questions = HashMap<Int, (String?) -> Unit>()
+
+    /**
+     * newm's own question (a permission): a card that stays until one of [buttons] (key to
+     * label) is chosen — [answer] gets its key, or null when the card is closed without one.
+     */
+    fun ask(summary: String, body: String, buttons: List<Pair<String, String>>, answer: (String?) -> Unit): Int {
+        val n = history.add(Notification(0, app = "newm", icon = "dialog-question", summary = summary, body = body, actions = buttons, urgency = 2, at = System.currentTimeMillis()))
+        questions[n.id] = answer
+        log.info { "Question ${n.id} shown (${buttons.size} answers)" }
+        showCard(n)
+        changed()
+        return n.id
+    }
+
     fun close(id: Int, why: ClosedBecause) {
+        questions.remove(id)?.invoke(null)
         closeCard(id)
         history.remove(id)?.let { closed(it, why) }
         pictures.remove(id)
@@ -728,6 +745,13 @@ class NotificationCenter(private val model: BarModel) {
      * a button (or a click in the history) is the end of it — out of the history too.
      */
     fun invoke(id: Int, action: String = "default", fromHistory: Boolean = false) {
+        // newm's own question: a button answers it (a click on the card itself does not).
+        if (id in questions) {
+            if (action == "default") return
+            questions.remove(id)?.invoke(action)
+            close(id, ClosedBecause.DISMISSED)
+            return
+        }
         val n = history.find(id) ?: return
         val offered = n.actions.any { it.first == action }
         if (n.live && offered && serving) {

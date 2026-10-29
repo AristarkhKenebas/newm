@@ -61,6 +61,12 @@ data class ViewState(
 
     // How far it has appeared (0: just opening, see-through; 1: there).
     var appear: Double = 1.0,
+
+    // - On screens (screens { }): the screen it is on (from 0; -1: none yet) and its place there (0 first: the master).
+    var page: Int = -1,
+    var slot: Int = 0,
+    // Resized by hand on its screen: its part of the screen (0..1), kept while the screen's windows and layout stay the same.
+    var sized: PageRect? = null,
 ) {
     fun ijwh(): DoubleArray {
         var i = this.i
@@ -72,6 +78,9 @@ data class ViewState(
         return doubleArrayOf(i, j, w, h)
     }
 }
+
+/** A window's part of its screen (0..1 each way), resized by hand; [key]: the screen's windows and layout it was made for. */
+data class PageRect(val i: Double, val j: Double, val w: Double, val h: Double, val key: Int)
 
 /** state_before_fullscreen: i, j, size before, and i, j, size in fullscreen. */
 data class BeforeFullscreen(val i: Double, val j: Double, val size: Double, val fi: Double, val fj: Double, val fsize: Double)
@@ -100,6 +109,9 @@ class WorkspaceState(
     var rightExcluded: Double = 0.0,
 ) {
     internal var viewStates: MutableMap<Int, ViewState> = LinkedHashMap()
+
+    /** The screens' own layouts, by screen (changed while running: Super+Space); the others take screens { layout }. */
+    internal var pageLayouts: MutableMap<Int, String> = HashMap()
 
     // --- Register / Unregister
 
@@ -135,6 +147,7 @@ class WorkspaceState(
             topBarDy, bottomBarDy, topExcluded, bottomExcluded, stateBeforeOverview, leftExcluded, rightExcluded,
         )
         res.viewStates = viewStates.mapValuesTo(LinkedHashMap()) { it.value.copy() }
+        res.pageLayouts = HashMap(pageLayouts)
         return res
     }
 
@@ -267,6 +280,8 @@ class WorkspaceState(
     }
 
     fun constrain() {
+        // On screens: the windows tiled on theirs (no rows or columns to close: a screen left empty goes).
+        if (Screens.on()) tileScreens() else untileScreens()
         var (minI, minJ, maxI, maxJ) = extent().toList()
         val minIi = floor(minI)
         val minJi = floor(minJ)
@@ -286,6 +301,15 @@ class WorkspaceState(
         } else {
             if (j < minJi) j = minJi.toDouble()
             if (j + size - 1 > maxJi) j = maxJi - size + 1
+        }
+
+        if (Screens.on()) {
+            // Whole screens in view (not in the overview, nor while a gesture zooms between sizes).
+            if (!isInOverview() && abs(size - Math.round(size)) < 1e-6) {
+                i = Math.round(i).toDouble()
+                j = Math.round(j).toDouble()
+            }
+            return
         }
 
         val usedRows = HashSet<Int>()
@@ -391,6 +415,8 @@ class WorkspaceState(
         // to the window there). None tiled: the view stays.
         val tiled = generateSequence(view) { it.parent }.firstOrNull { viewStates[it.handle]?.isTiled == true } ?: return this
         val state = viewStates[tiled.handle] ?: return this
+        // On screens: the view on its screen, whole (one step to the next screen, none within one).
+        if (Screens.on() && state.page >= 0) return focusingScreen(state.page)
         var targetSize = max(max(size, state.w), state.h)
         var targetI = min(i, state.i)
         var targetJ = min(j, state.j)
@@ -401,6 +427,7 @@ class WorkspaceState(
 
     fun withFullscreen(view: View): WorkspaceState {
         val state = viewState(view)
+        if (Screens.on() && state.page >= 0) return withScreenFullscreen(view, state)
         val i = pyRound(state.i)
         val j = pyRound(state.j)
         val w = pyRound(state.w)
@@ -439,6 +466,8 @@ class WorkspaceState(
         }
         val result = copy(stateBeforeFullscreen = null, i = i, j = j, size = size)
         result.clearIntermediate()
+        // (The window back in its place on its screen.)
+        if (Screens.on()) result.tileScreens()
         return result
     }
 
@@ -504,7 +533,8 @@ class WorkspaceState(
         intermediateCols == other.intermediateCols && stateBeforeFullscreen == other.stateBeforeFullscreen &&
         topBarDy == other.topBarDy && bottomBarDy == other.bottomBarDy && topExcluded == other.topExcluded &&
         bottomExcluded == other.bottomExcluded && leftExcluded == other.leftExcluded &&
-        rightExcluded == other.rightExcluded && stateBeforeOverview == other.stateBeforeOverview && viewStates == other.viewStates
+        rightExcluded == other.rightExcluded && stateBeforeOverview == other.stateBeforeOverview && viewStates == other.viewStates &&
+        pageLayouts == other.pageLayouts
 
     override fun hashCode() = java.util.Objects.hash(ws.handle, i, j, size)
 }

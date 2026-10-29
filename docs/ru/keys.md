@@ -72,6 +72,13 @@ bind("Super+A Super+B", "launch", "firefox")   // последовательно
 | `move-window-right` |  | сдвинуть окно вправо |
 | `move-window-up` |  | сдвинуть окно вверх |
 | `move-window-down` |  | сдвинуть окно вниз |
+| `next-screen` |  | следующий экран |
+| `previous-screen` |  | предыдущий экран |
+| `window-to-next-screen` |  | окно на следующий экран |
+| `window-to-previous-screen` |  | окно на предыдущий экран |
+| `swap-on-screen` |  | окно меняется местами со следующим на своём экране |
+| `promote-to-master` |  | окно становится главным на экране |
+| `next-layout` | `[name]` | следующая раскладка экрана |
 | `window-narrower` |  | окно уже |
 | `window-wider` |  | окно шире |
 | `window-shorter` |  | окно ниже ростом |
@@ -98,6 +105,13 @@ bind("Super+A Super+B", "launch", "firefox")   // последовательно
 
 `unbind("Super+S")` убирает клавишу (из шаблона, если она вам не нужна); новое назначение
 клавиши заменяет прежнее.
+
+Клавиши экранов в шаблоне (screens { }): Super+Space `next-layout`, Super+Shift+Space
+`swap-on-screen`, Super+Ctrl+Return `promote-to-master`, Super+PageDown / Super+PageUp
+`next-screen` / `previous-screen`, Super+Shift+PageDown / Super+Shift+PageUp
+`window-to-next-screen` / `window-to-previous-screen`. На экранах Super+Shift+стрелки меняют
+окно местами с соседом по экрану (у края экрана — переносят на следующий экран), а
+Super+Ctrl+стрелки меняют размер в пределах экрана.
 
 ## Со своим кодом
 

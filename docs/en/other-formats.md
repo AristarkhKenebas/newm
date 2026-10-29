@@ -104,6 +104,10 @@ names of newm, on the right, keep working):
 | `launcher { keys { "C-n" { next() } } }` | `launcher.keys = { ["C-n"] = "next" }`: `next`, `previous`, `first`, `last`, `start`, `run_typed`, `close` | |
 | `panels { topBarProgram { cmd } }` | `panels.top_bar.cmd` (next to newm's own bar's settings) | |
 | `terminal = "foot"` | `terminal = "foot"` | |
+| `val menu = "wofi"`, then `menu` in a key | `variables = { menu = "wofi --show drun" }`, then `"$menu"` in any text or key (`"L-d": "launch $menu"`); a variable may use those before it; other `$NAME`s (`$HOME`) stay as they are | |
+| `env("XCURSOR_SIZE", "24")` | `env = { XCURSOR_SIZE = "24" }` | |
+| `permissions { rule("/usr/bin/grim", "screencopy", "allow"); default("screencopy", "ask") }` | `permissions = { rules = { { program = "/usr/bin/grim", feature = "screencopy", mode = "allow" } }, defaults = { screencopy = "ask" } }` | |
+| `misc { swallow = true; vrr = true }` | `misc = { swallow = true, vrr = true }` (`swallow_apps`, `swallow_except_titles`, `focus_on_activate`, `wake_on_input`, `middle_click_paste`, `background_color`) | |
 
 ## Nix
 

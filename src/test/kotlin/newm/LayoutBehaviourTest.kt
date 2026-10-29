@@ -204,6 +204,292 @@ class LayoutBehaviourTest {
         }
     }
 
+    // --- screens (screens { })
+
+    private fun screens(vararg extra: Pair<String, Any?>, windows: Map<String, Any?> = emptyMap()): Map<String, Any?> =
+        mapOf("screens" to mapOf("enabled" to true, *extra), "windows" to windows)
+
+    @Test
+    fun `screens - two windows share a screen, the third opens on the next one`() = withNewm(screens()) { t ->
+        t.open("w1")
+        t.eventually { assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w1")); assertEquals(listOf(0.0, 0.0, 1.0), t.view()) }
+        t.open("w2")
+        t.eventually {
+            assertEquals(listOf(0.0, 0.0, 0.5, 1.0), t.tile("w1"))
+            assertEquals(listOf(0.5, 0.0, 0.5, 1.0), t.tile("w2"))
+            assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+        }
+        t.open("w3")
+        t.eventually {
+            assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w3"))
+            assertEquals(listOf(1.0, 0.0, 1.0), t.view(), "exactly one screen on")
+        }
+        t.assertCleanView()
+    }
+
+    @Test
+    fun `screens - each layout, one to five windows, exact places`() {
+        // (Fractions of a screen, to a hundredth; the headless monitor is wider than tall.)
+        val expected = mapOf(
+            "columns" to listOf(
+                listOf(listOf(0.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.5, 1.0), listOf(0.5, 0.0, 0.5, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.33, 1.0), listOf(0.33, 0.0, 0.33, 1.0), listOf(0.67, 0.0, 0.33, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.25, 1.0), listOf(0.25, 0.0, 0.25, 1.0), listOf(0.5, 0.0, 0.25, 1.0), listOf(0.75, 0.0, 0.25, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.2, 1.0), listOf(0.2, 0.0, 0.2, 1.0), listOf(0.4, 0.0, 0.2, 1.0), listOf(0.6, 0.0, 0.2, 1.0), listOf(0.8, 0.0, 0.2, 1.0)),
+            ),
+            "rows" to listOf(
+                listOf(listOf(0.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 1.0, 0.5), listOf(0.0, 0.5, 1.0, 0.5)),
+                listOf(listOf(0.0, 0.0, 1.0, 0.33), listOf(0.0, 0.33, 1.0, 0.33), listOf(0.0, 0.67, 1.0, 0.33)),
+                listOf(listOf(0.0, 0.0, 1.0, 0.25), listOf(0.0, 0.25, 1.0, 0.25), listOf(0.0, 0.5, 1.0, 0.25), listOf(0.0, 0.75, 1.0, 0.25)),
+                listOf(listOf(0.0, 0.0, 1.0, 0.2), listOf(0.0, 0.2, 1.0, 0.2), listOf(0.0, 0.4, 1.0, 0.2), listOf(0.0, 0.6, 1.0, 0.2), listOf(0.0, 0.8, 1.0, 0.2)),
+            ),
+            // Hyprland's halves and quarters.
+            "grid" to listOf(
+                listOf(listOf(0.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.5, 1.0), listOf(0.5, 0.0, 0.5, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.5, 1.0), listOf(0.5, 0.0, 0.5, 0.5), listOf(0.5, 0.5, 0.5, 0.5)),
+                listOf(listOf(0.0, 0.0, 0.5, 0.5), listOf(0.0, 0.5, 0.5, 0.5), listOf(0.5, 0.0, 0.5, 0.5), listOf(0.5, 0.5, 0.5, 0.5)),
+                listOf(listOf(0.0, 0.0, 0.33, 1.0), listOf(0.33, 0.0, 0.33, 0.5), listOf(0.33, 0.5, 0.33, 0.5), listOf(0.67, 0.0, 0.33, 0.5), listOf(0.67, 0.5, 0.33, 0.5)),
+            ),
+            // i3's master and strips (masterRatio 0.6, at the left).
+            "master" to listOf(
+                listOf(listOf(0.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.6, 1.0), listOf(0.6, 0.0, 0.4, 1.0)),
+                listOf(listOf(0.0, 0.0, 0.6, 1.0), listOf(0.6, 0.0, 0.4, 0.5), listOf(0.6, 0.5, 0.4, 0.5)),
+                listOf(listOf(0.0, 0.0, 0.6, 1.0), listOf(0.6, 0.0, 0.4, 0.33), listOf(0.6, 0.33, 0.4, 0.33), listOf(0.6, 0.67, 0.4, 0.33)),
+                listOf(listOf(0.0, 0.0, 0.6, 1.0), listOf(0.6, 0.0, 0.4, 0.25), listOf(0.6, 0.25, 0.4, 0.25), listOf(0.6, 0.5, 0.4, 0.25), listOf(0.6, 0.75, 0.4, 0.25)),
+            ),
+            // One a screen: each on its own.
+            "monocle" to listOf(
+                listOf(listOf(0.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 1.0, 1.0), listOf(1.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 1.0, 1.0), listOf(1.0, 0.0, 1.0, 1.0), listOf(2.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 1.0, 1.0), listOf(1.0, 0.0, 1.0, 1.0), listOf(2.0, 0.0, 1.0, 1.0), listOf(3.0, 0.0, 1.0, 1.0)),
+                listOf(listOf(0.0, 0.0, 1.0, 1.0), listOf(1.0, 0.0, 1.0, 1.0), listOf(2.0, 0.0, 1.0, 1.0), listOf(3.0, 0.0, 1.0, 1.0), listOf(4.0, 0.0, 1.0, 1.0)),
+            ),
+        )
+        for ((layout, steps) in expected) withNewm(screens("windows_per_screen" to 5, "layout" to layout)) { t ->
+            for ((n, places) in steps.withIndex()) {
+                t.open("w${n + 1}")
+                t.eventually {
+                    for ((k, place) in places.withIndex()) assertEquals(place, t.tile("w${k + 1}"), "$layout, ${n + 1} windows: w${k + 1}")
+                }
+            }
+            t.assertCleanView()
+        }
+    }
+
+    @Test
+    fun `screens - moving within a screen leaves the view, to the next one moves exactly one screen`() = withNewm(screens()) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("w3")
+        t.focus("w1")
+        t.eventually { assertEquals(listOf(0.0, 0.0, 1.0), t.view()) }
+        t.onLoop { t.layout.move(1, 0) }
+        t.eventually { assertEquals("w2", t.focused()); assertEquals(listOf(0.0, 0.0, 1.0), t.view(), "within the screen: the view stays") }
+        t.assertCleanView()
+        t.onLoop { t.layout.move(1, 0) }
+        t.eventually { assertEquals("w3", t.focused()); assertEquals(listOf(1.0, 0.0, 1.0), t.view(), "the next screen: one screen on") }
+        t.assertCleanView()
+        t.onLoop { t.layout.move(-1, 0) }
+        t.eventually { assertEquals("w2", t.focused()); assertEquals(listOf(0.0, 0.0, 1.0), t.view()) }
+        // Three fingers snap to whole screens (i = 0 - 4 * 1 * delta_x: a quarter left is one screen on).
+        t.fingers("swipe-3", -0.25, 0.0)
+        t.eventually { assertEquals(listOf(1.0, 0.0, 1.0), t.view()) }
+        t.assertCleanView()
+    }
+
+    @Test
+    fun `screens - the lower window shows nothing of the upper one through the bar`() =
+        withNewm(screens("overflow" to "down", "windows_per_screen" to 1) + bar()) { t ->
+            t.open("upper")
+            t.open("lower")
+            t.eventually {
+                assertEquals(listOf(0.0, 1.0, 1.0, 1.0), t.tile("lower"))
+                assertEquals(listOf(0.0, 1.0, 1.0), t.view())
+                assertTrue(t.onLoop { t.wsState().topExcluded } > 0.0, "a bar at the top")
+            }
+            t.assertCleanView()
+            t.assertBarFree()
+        }
+
+    @Test
+    fun `newm's wall too - the window above is cut at the bar, unless windowsUnderBar`() {
+        for (under in listOf(false, true)) withNewm(mapOf("screens" to mapOf("enabled" to false, "windows_under_bar" to under)) + bar()) { t ->
+            val upper = t.open("upper")
+            t.open("lower", parent = upper)
+            t.eventually { assertEquals(listOf(0.0, 1.0, 1.0, 1.0), t.tile("lower")) }
+            t.focus("lower")
+            t.onLoop { t.layout.fitFocusedView() }
+            t.eventually { assertEquals(listOf(0.0, 1.0, 1.0), t.view()) }
+            val zone = t.barZone()
+            val inBar = t.onLoop { t.layout.shownArea(t.layout.viewOf(t.window("upper"))!!)?.intersect(zone) }
+            if (under) assertTrue(inBar != null, "under the bar, as newm") else assertEquals(null, inBar, "nothing of the upper window under the bar")
+        }
+    }
+
+    @Test
+    fun `screens - closing pulls the next screen's window back, or not`() {
+        withNewm(screens()) { t ->
+            t.open("w1")
+            val w2 = t.open("w2")
+            t.open("w3")
+            t.focus("w2")
+            w2.close()
+            t.eventually {
+                assertEquals(listOf(0.0, 0.0, 0.5, 1.0), t.tile("w1"))
+                assertEquals(listOf(0.5, 0.0, 0.5, 1.0), t.tile("w3"))
+                assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+            }
+            t.assertCleanView()
+        }
+        withNewm(screens("pull_back" to false)) { t ->
+            t.open("w1")
+            val w2 = t.open("w2")
+            t.open("w3")
+            t.focus("w2")
+            w2.close()
+            t.eventually {
+                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w1"))
+                assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w3"))
+            }
+        }
+    }
+
+    @Test
+    fun `screens - keys move a window between screens, swap, promote, change the layout`() = withNewm(screens()) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("w3")
+        t.onLoop { t.layout.moveFocusedViewToScreen(-1) }
+        // The screen before is full: w3 and its last window change places.
+        t.eventually {
+            assertEquals(listOf(0.5, 0.0, 0.5, 1.0), t.tile("w3"))
+            assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w2"))
+            assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+        }
+        t.onLoop { t.layout.swapOnScreen() }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.5, 1.0), t.tile("w3")); assertEquals(listOf(0.5, 0.0, 0.5, 1.0), t.tile("w1")) }
+        t.focus("w1")
+        t.onLoop { t.layout.promoteToMaster() }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.5, 1.0), t.tile("w1")) }
+        t.onLoop { t.layout.nextScreenLayout() }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 1.0, 0.5), t.tile("w1")); assertEquals(listOf(0.0, 0.5, 1.0, 0.5), t.tile("w3")) }
+        t.onLoop { t.layout.nextScreenLayout("monocle") }
+        // One a screen: w3 goes on a screen of its own right after.
+        t.eventually {
+            assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w1"))
+            assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w3"))
+            assertEquals(listOf(2.0, 0.0, 1.0, 1.0), t.tile("w2"))
+        }
+        t.assertCleanView()
+    }
+
+    @Test
+    fun `screens - resizing by keys stays within the screen, the neighbour making way`() = withNewm(screens()) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("alone")
+        t.focus("w1")
+        t.onLoop { t.layout.resizeFocusedView(1, 0) }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.6, 1.0), t.tile("w1")); assertEquals(listOf(0.6, 0.0, 0.4, 1.0), t.tile("w2")) }
+        repeat(8) { t.onLoop { t.layout.resizeFocusedView(1, 0) } }
+        // Never past the screen; the neighbour keeps its smallest part (resize { minSize } 0.1).
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.9, 1.0), t.tile("w1")); assertEquals(listOf(0.9, 0.0, 0.1, 1.0), t.tile("w2")) }
+        t.onLoop { t.layout.resizeFocusedView(0, 1) }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.9, 1.0), t.tile("w1"), "taller than the screen: no") }
+        // The right one wider: its left edge (the split) goes left.
+        t.focus("w2")
+        repeat(2) { t.onLoop { t.layout.resizeFocusedView(1, 0) } }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.7, 1.0), t.tile("w1")); assertEquals(listOf(0.7, 0.0, 0.3, 1.0), t.tile("w2")) }
+        // Zoomed out it still stays within its screen.
+        t.onLoop { t.layout.basicScale(1) }
+        t.focus("alone")
+        t.onLoop { t.layout.resizeFocusedView(1, 0) }
+        t.eventually { assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("alone")) }
+        t.onLoop { t.layout.basicScale(-1) }
+        t.eventually { assertEquals(1.0, t.view()[2]) }
+        t.assertCleanView()
+    }
+
+    @Test
+    fun `screens - the mouse resizes by the quarter grabbed, within the screen, not in the overview`() =
+        withNewm(screens() + mapOf("gesture_bindings" to mapOf("move_resize" to listOf(null, "move-1", "swipe-2")))) { t ->
+            t.open("w1")
+            t.open("w2")
+            val ws = t.onLoop { t.layout.workspaces.first().let { it.width to it.height } }
+            // The top right quarter of w1, dragged right: w1 wider, w2 narrower.
+            t.onLoop { t.caulis.simulatePointer(ws.first * 0.4, ws.second * 0.2) }
+            t.fingers("swipe-2", 0.1 / 2.0, 0.0)
+            t.eventually { assertTrue(t.tile("w1")[2] > 0.55, "w1 wider: ${t.tile("w1")}"); assertEquals(1.0, t.tile("w1")[2] + t.tile("w2")[2], 0.011) }
+            // Far right: never past its neighbour's smallest part, nothing leaves the screen.
+            t.fingers("swipe-2", 5.0, 0.0)
+            t.eventually { assertEquals(listOf(0.0, 0.0, 0.9, 1.0), t.tile("w1")); assertEquals(listOf(0.9, 0.0, 0.1, 1.0), t.tile("w2")) }
+            // In the overview: nothing.
+            t.onLoop { t.layout.toggleOverview() }
+            t.eventually { assertTrue(t.onLoop { t.wsState().isInOverview() }) }
+            t.fingers("swipe-2", -2.0, 0.0)
+            t.eventually { assertEquals(listOf(0.0, 0.0, 0.9, 1.0), t.tile("w1")) }
+        }
+
+    @Test
+    fun `screens - the room between two windows dragged resizes them`() = withNewm(screens()) { t ->
+        t.open("w1")
+        t.open("w2")
+        val ws = t.onLoop { t.layout.workspaces.first().let { it.width to it.height } }
+        // Between the two (each is view { padding } inside its half): no window under the pointer.
+        t.onLoop { t.caulis.simulatePointer(ws.first / 2.0, ws.second / 2.0) }
+        t.onLoop { t.caulis.simulateButton(272, true) }
+        t.settle()
+        repeat(10) { t.onLoop { t.caulis.simulateMotion(-ws.first * 0.02, 0.0) }; Thread.sleep(16) }
+        t.onLoop { t.caulis.simulateButton(272, false) }
+        t.eventually { assertEquals(listOf(0.0, 0.0, 0.3, 1.0), t.tile("w1")); assertEquals(listOf(0.3, 0.0, 0.7, 1.0), t.tile("w2")) }
+    }
+
+    @Test
+    fun `screens - the next screen below, and off gives newm's wall again`() = withNewm(screens("overflow" to "down")) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("w3")
+        t.eventually { assertEquals(listOf(0.0, 1.0, 1.0, 1.0), t.tile("w3")); assertEquals(listOf(0.0, 1.0, 1.0), t.view()) }
+        t.assertCleanView()
+        t.onLoop { Config.loadConfig(mapOf("screens" to mapOf("enabled" to false))); t.layout.command("clean") }
+        t.eventually {
+            assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w1"))
+            assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w2"))
+            assertEquals(listOf(2.0, 0.0, 1.0, 1.0), t.tile("w3"))
+        }
+    }
+
+    @Test
+    fun `screens - a window swallowing its terminal takes its place, and the terminal comes back there`() =
+        withNewm(screens() + mapOf("misc" to mapOf("swallow" to true))) { t ->
+            // (One window besides: newm finds the swallower by the process, and the test's windows share one.)
+            t.open("term", appId = "foot")
+            t.eventually { assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("term")) }
+            val gui = t.open("player", appId = "mpv")
+            fun swallowed() = t.onLoop { t.layout.state.viewState(t.layout.viewOf(t.window("term"))!!).swallowed }
+            // The player in the terminal's place on its screen (the whole of it), the terminal hidden.
+            t.eventually {
+                assertTrue(swallowed() != null, "swallowed")
+                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("player"))
+                assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+            }
+            gui.close()
+            t.eventually {
+                assertEquals(null, swallowed())
+                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("term"))
+                assertTrue(t.onLoop { t.layout.shownArea(t.layout.viewOf(t.window("term"))!!) } != null, "the terminal shows again")
+                assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+            }
+            t.assertCleanView()
+        }
+
+    private fun bar(): Map<String, Any?> = mapOf("panels" to mapOf("top_bar" to mapOf("native" to mapOf("enabled" to true))))
+
     // --- the harness
 
     private class T(val caulis: Caulis, val layout: Layout, val client: Client) {
@@ -234,6 +520,36 @@ class LayoutBehaviourTest {
         }
 
         fun focused(): String? = onLoop { caulis.desktop.focusedWindow?.title }
+
+        /** The monitor's bar zone at the top (the room the bar keeps). */
+        fun barZone(): dev.caulis.geometry.Rect = onLoop {
+            val ws = layout.workspaces.first()
+            dev.caulis.geometry.Rect(ws.posX, ws.posY, ws.width, wsState().topExcluded.toInt().coerceAtLeast(1))
+        }
+
+        /** On screens: only the windows of the screen in view show, and only within it (the bars' room free). */
+        fun assertCleanView() = eventually {
+            onLoop {
+                val ws = layout.workspaces.first()
+                val s = wsState()
+                val usable = dev.caulis.geometry.Rect(
+                    (ws.posX + s.leftExcluded).toInt(), (ws.posY + s.topExcluded).toInt(), s.usableWidth().toInt(), s.usableHeight().toInt(),
+                )
+                val page = Screens.pageAt(s.i + .5, s.j + .5)
+                for (v in layout.tiles(ws)) {
+                    val shown = layout.shownArea(v) ?: continue
+                    val vs = s.viewState(v)
+                    if (vs.page == page) assertTrue(usable.intersect(shown) == shown, "${v.title} of the screen in view, within it: $shown in $usable")
+                    else assertEquals(null, shown.intersect(dev.caulis.geometry.Rect(ws.posX, ws.posY, ws.width, ws.height)), "${v.title} of screen ${vs.page + 1} not in view (screen ${page + 1})")
+                }
+            }
+        }
+
+        /** No window shows in the bar's room. */
+        fun assertBarFree() = eventually {
+            val zone = barZone()
+            onLoop { for (v in layout.tiles()) assertEquals(null, layout.shownArea(v)?.intersect(zone), "${v.title} under the bar") }
+        }
 
         fun wsState() = layout.state.workspaceState(layout.workspaces.first())
 
@@ -283,7 +599,8 @@ class LayoutBehaviourTest {
     private fun withNewm(settings: Map<String, Any?>, test: (T) -> Unit) {
         assumeTrue(Files.isDirectory(Path.of("/dev/dri")), "no GPU")
         val dir = Files.createTempDirectory("newm-layout-test")
-        Config.loadConfig(settings)
+        // (The tests of newm's own wall without screens; those of screens say so.)
+        Config.loadConfig(if ("screens" in settings) settings else settings + ("screens" to mapOf("enabled" to false)))
         val caulis = Caulis().apply {
             useConfigFile = false
             mode = Caulis.Mode.HEADLESS

@@ -36,6 +36,18 @@ setting in use.
 | `anim` | `true` | `false` is the same as `mode = "static"` |
 | `timeScale` | `0.15` | how quickly it follows, seconds (the animation `backgroundMove`) |
 
+## warmup { }
+
+The start's work done ahead, and the memory given back after it. (Turn them off only to see
+what they change: each costs a little at the start and saves a stutter later.)
+
+| Setting | Default | What |
+|---|---|---|
+| `enabled` | `true` | newm's menus drawn once, off screen, a moment after the start: their first opening is quick |
+| `restMillis` | `800` | each menu is drawn ahead only once the pointer rested this long (ms): drawing one holds the compositor a moment, and the pointer would stand still |
+| `compose` | `true` | Compose (the bar, the menus) made ready on a thread of its own while newm starts (else the bar's first frame holds the compositor ~0.7 s) |
+| `collect` | `true` | after drawing ahead, Java's heap made small again: one full collection (10-50 ms, while the pointer rests) |
+
 ## view { }
 
 | Setting | Default | What |
@@ -67,6 +79,51 @@ Where new windows and a program's child windows open (see [Everyday use](using.m
 | `returnFocusToParent` | `true` | a child window closing gives the focus back to its parent (or to the window focused when it came); `false`: the nearest window, as newm |
 | `childBySameApp` | `true` | a window without a parent, opened by the program of the focused window (the same connection and app id, as Telegram's photo viewer), counts as its child |
 | `childBySameAppExcept` | terminals, browsers | app ids whose new windows are never children that way (`["foot", "kitty", "firefox", ...]`) |
+
+## screens { }
+
+The wall in whole screens: a screen is exactly the monitor's room left by the bars; it holds
+up to `windowsPerScreen` windows, tiled by its layout, and the next window opens on the next
+screen. Moving between windows of one screen leaves the view where it is; to a window of
+another screen the view moves by exactly one screen. Swipes snap to whole screens; zooming
+out and the overview show the screens side by side.
+
+| Setting | Default | What |
+|---|---|---|
+| `enabled` | `true` | screens; `false`: newm's free wall of tiles (the original's behaviour) |
+| `windowsPerScreen` | `2` | how many windows share a screen (4: halves and quarters as Hyprland's) |
+| `layout` | `"columns"` | `"columns"` (side by side), `"rows"`, `"grid"` (halves, then quarters), `"dwindle"`, `"spiral"`, `"master"` (one big window and strips, as i3/xmonad), `"centered-master"`, `"monocle"` (one window a screen, as the original), or one of `customLayout(...)` |
+| `masterRatio` | `0.6` | the master's share (`"master"`, `"centered-master"`) |
+| `masterSide` | `"left"` | `"left"`, `"right"`, `"top"`, `"bottom"` |
+| `gaps` | `0` | more room between and around the windows, pixels (`view { padding }` is there anyway) |
+| `overflow` | `"right"` | where the next screen is: `"right"` or `"down"` |
+| `pullBack` | `true` | a window closing: windows of the following screens move up to fill its screen |
+| `windowsUnderBar` | `false` | `true`: windows go on under the bars (newm's wall: the window above showed through the bar) |
+| `cycle` | columns, rows, grid, master, monocle | the layouts `next-layout` (Super+Space) goes through |
+| `customLayout(name, layout)` | — | a layout of your own: any `dev.caulis.tiling.Layout` (`MasterStack(ratio = 0.7)`, your own) |
+
+Within a screen a new window goes right after the focused one (`windows { newPlacement }`:
+`"end"` the last screen, `"original"` the first with room), a child window right after its
+window; a full screen sends it to a new screen right after. Each screen can have a layout of
+its own while newm runs (Super+Space).
+
+## resize { }
+
+Resizing windows on screens: a window grows only within its screen, its neighbours there
+making way; for more room zoom out first (it still stays within its screen). In the
+overview nothing is resized. A screen keeps its sizes until its windows or layout change.
+
+| Setting | Default | What |
+|---|---|---|
+| `quarters` | `true` | the quarter grabbed (Super + right drag) decides the corner that moves, as Hyprland; `false`: the bottom right one |
+| `onBorder` | `true` | the room right beside a window, dragged without Super, resizes it |
+| `borderGrabSize` | `10` | how far from a window its border can be grabbed, pixels |
+| `borderButton` | `"left"` | the button that drags a border |
+| `mouseButton` | unset | the button that resizes with Super held (unset: `mouse { resizeButton }`) |
+| `clampToScreen` | `true` | nothing grows past its screen's edges |
+| `keepAspect` | `false` | a corner dragged keeps the window's shape |
+| `minSize` | `0.1` | the smallest a window gets, as a part of its screen |
+| `keyStep` | `0.1` | how far Super+Ctrl+arrows move an edge, as a part of its screen |
 
 ## focus { }
 
@@ -221,6 +278,11 @@ newm's own lock screen:
 | `pamService` | `"login"` | the PAM service the password is checked with (`/etc/pam.d/<name>`) |
 | `checkTimeout` | `60` | seconds a password check may take before the lock screen asks again. With pam_fprintd before pam_unix in the PAM service, PAM waits for a finger first (30 s): keep this longer |
 | `sleepWait` | `3` | seconds sleep waits for the lock screen (or `program`) to show before it goes on anyway (0..30) |
+| `layoutOnLock` | `"keep"` | the keyboard layout when the screen locks: `"keep"` (the one in use) or `"first"` (the first of `keyboard { layouts }`, back to the one before after unlocking). Either way the lock screen shows it ("EN", "RU": a click switches) and the layout keys work there; after a wrong password typed in another layout than the first it says so |
+| `revealButton` | `true` | an eye beside the password shows it while held |
+| `onScreenKeyboard` | `false` | a small keyboard on the lock screen (letters and digits of the layout in use, Shift, Backspace, the layout, Enter): touch screens, a broken keyboard |
+| `faillock` | `true` | pam_faillock's state is read: after too many wrong passwords the lock screen counts down until the account unlocks and takes no password meanwhile (one would only make the lock longer). It also shows the wrong passwords since locking, how many more lock the account, and Caps Lock |
+| `faillockConf` | `"/etc/security/faillock.conf"` | where pam_faillock's settings are (`deny`, `unlock_time`, `fail_interval`, `dir`) |
 
 newm's own launcher:
 
@@ -248,6 +310,8 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `model` | `"pc105"` | the keyboard's model |
 | `numLock` | `false` | Num Lock on from the start |
 | `bindingModifiers` | `"xkb"` | modifiers in key bindings as the layout and its options say (`caps:super`), or `"physical"`: the printed keys |
+| `repeatRate` | `25` | held keys repeat this many times a second (0: never) |
+| `repeatDelay` | `600` | after being held this long, milliseconds |
 
 ## compositor { }
 
@@ -261,6 +325,12 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `javaUpdatedNotice` | `"Java was updated: restart newm when convenient (newm cmd restart keep)"` | said once when Java was updated under the running newm (`""`: only logged) |
 | `configCompilerJvmOptions` | `"-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"` | the Java options of the short-lived Java that compiles config.kts (the Kotlin compiler never runs inside newm); for the next compilation — a start's first takes the environment's `NEWM_CONFIG_COMPILER_OPTS` |
 | `configCompilerTimeoutSeconds` | `180` | at most this long for compiling config.kts, then it is stopped and said (a start's first: `NEWM_CONFIG_COMPILER_TIMEOUT`) |
+| `stallReportMillis` | `50` | newm's loop busy this long (ms) with one thing is logged with what it was (`CAULIS_LOG=native=2`); `0`: not watched |
+| `trimMemory` | `true` | memory the C library freed (Skia, the GPU driver, fonts) given back after the start and now and then |
+| `trimMemoryEveryMinutes` | `10` | how often after the start; `0`: only after the start |
+| `mallocPools` | `2` | at most this many of glibc's malloc pools for newm itself (programs keep glibc's own); `0`: glibc's own; only at the start |
+| `quickCursor` | `true` | the cursor (on the monitor's cursor plane) moves the moment the pointer does, not with the next frame |
+| `widgetThreads` | `2` | threads the bar and the menus are drawn into pixels on (they are composed on newm's own); `0`: all on newm's own |
 
 ## cursor { }
 
@@ -279,6 +349,15 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `focusFollowsMouse` | `true` | the window under the pointer gets the keys (`false`: a click) |
 | `xwayland` | `true` | X11 programs |
 | `titleBars` | `false` | programs draw their own title bars |
+| `pointerSpeed` | `0.0` | every mouse and touchpad: -1.0 (slow) to 1.0 (fast) — Hyprland's `sensitivity` |
+| `accelProfile` | the device's | `"adaptive"` (faster when moved fast) or `"flat"` |
+| `leftHanded` | `false` | buttons swapped |
+| `scrollFactor` | `1.0` | scrolling this many times faster |
+| `scrollMethod` | the device's | `"two-finger"`, `"edge"`, `"button"` (moving with `scrollButton` held), `"none"` |
+| `scrollButton` | | the button for `"button"`: a Linux code, `274` the middle one |
+| `middleButtonEmulation` | the device's | left and right together are the middle button |
+| `touchpad { }` | | touchpads only: `naturalScroll`, `scrollFactor`, `pointerSpeed`, `disableWhileTyping`, `tapAndDrag`, `dragLock`, `clickFinger` (two fingers: right, three: middle), `tapButtons` (`"lrm"` or `"lmr"`), `offWithMouse` |
+| `device("name") { }` | | one device by its name (`*` matches anything: `"Logitech*"`): `enabled` (false: not used — a keyboard you do not trust), `pointerSpeed`, `accelProfile`, `naturalScroll`, `leftHanded`, `scrollFactor`, `middleButtonEmulation`, `tapToClick`, `disableWhileTyping` |
 
 ## output("name") { }
 
@@ -416,6 +495,9 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `screensOffAfter` | `0` | seconds until the screens go dark (0: never) |
 | `suspendCommand` | `"systemctl suspend"` | how to suspend |
 | `onIdle { what -> }` | | told `"idle"`, `"idle-lock"`, `"idle-presuspend"`, `"idle-suspend"`, `"active"`, `"sleep"`, `"wakeup"` |
+| `inhibitFrom` | `listOf("wayland", "dbus", "logind", "mpris")` | what keeps the computer awake: programs' idle-inhibit; D-Bus `org.freedesktop.ScreenSaver` / `PowerManagement.Inhibit` (browsers playing a video); logind's idle inhibitors; a media player playing (MPRIS) while a window of its own shows. The bar says what holds now |
+| `mprisIgnore` | music players: `spotify`, `rhythmbox`, `lollypop`, `amberol`, `elisa`, `strawberry`, `audacious`, ... | players whose playing keeps nothing awake (bus name or name, any case) |
+| `logindCheckSeconds` | `10` | how often logind is asked for its idle inhibitors |
 
 ## gestures { }
 
@@ -523,6 +605,72 @@ play-startup-sound` (or `play-startup-sound glass`) plays it now, to try.
 | `delayMillis` | `0` | wait this long more (`delay_ms`) |
 | `at` | `"reveal"` | `"reveal"` (as newm fades in) or `"start"` (right away) |
 | `player` | pw-play, paplay, aplay | your player's words: `listOf("mpv", "--no-video", "{file}")` (`{volume}`, `{percent}` too) |
+
+## env("NAME", "value")
+
+An environment variable for every program newm starts from then on, also handed to the
+session's services at the start (portals, programs systemd starts) — Hyprland's `env`:
+`env("XCURSOR_SIZE", "24")`, `env("QT_QPA_PLATFORMTHEME", "qt6ct")`. Programs already running
+keep theirs; a variable taken out of the file is gone for the next ones. Lua and JSON:
+`env = { XCURSOR_SIZE = "24" }`.
+
+## permissions { }
+
+Which programs may use what sees or steers more than their own windows — Hyprland's
+permissions. Nothing said (the default): every program may, as before.
+
+| Call | What |
+|---|---|
+| `rule(program, feature, mode)` | programs whose path (`"/usr/bin/grim"`) or name (`"grim"`) matches `program` (a regular expression) get `mode` — `"allow"`, `"ask"` or `"deny"` — for `feature`; the first rule that matches decides |
+| `default(feature, mode)` | what programs no rule is about get (Hyprland's `enforce_permissions`: `default("screencopy", "ask")`) |
+
+The features: `screencopy` (pictures and recordings of the screen or a window: grim,
+wf-recorder, the screen-sharing portal), `window-list` (docks and taskbars), `clipboard`
+(clipboard managers reading what others copy), `panels` (bars, wallpapers, launchers,
+notification programs), `lock` (screen lockers), `monitors` (arranging monitors, switching
+them off: kanshi, wlr-randr), `gamma` (night light: wlsunset, gammastep).
+
+`"ask"` is for `screencopy`: the program's pictures wait while a card asks — *Allow*
+(while that program runs), *Allow until newm quits*, *Deny* (closing the card is no). The
+other features are decided as a program connects, so they are `"allow"` or `"deny"`. The
+rules count for programs that connect after a change. Lua and JSON:
+`permissions = { rules = { { program = "/usr/bin/grim", feature = "screencopy", mode = "allow" } }, defaults = { screencopy = "ask" } }`.
+
+## misc { }
+
+Hyprland's `misc` settings newm has.
+
+| Setting | Default | What |
+|---|---|---|
+| `swallow` | `false` | window swallowing: a window started from a terminal (a video player, an image viewer) takes the terminal's place, and the terminal comes back when it closes (Hyprland's `enable_swallow`; the key action `swallow` does the reverse for one window) |
+| `swallowApps` | common terminals (foot, alacritty, kitty, wezterm, ghostty, konsole, GNOME's, xterm, ...) | the terminals that swallow: a regular expression for their app id (`swallow_regex`) |
+| `swallowExceptTitles` | `""` | a terminal whose title matches this does not swallow (`swallow_exception_regex`): `"wev|vim"` |
+| `focusOnActivate` | `true` | a window asking for the focus with a good reason (a link opened in a browser) gets it; `false`: only marked (`focus_on_activate`) |
+| `wakeOnInput` | `true` | a key, a click or the mouse moving switches dark screens on again (`key_press_enables_dpms`, `mouse_move_enables_dpms`) |
+| `vrr` | `false` | variable refresh rate (FreeSync, Adaptive-Sync) on every monitor that has it (`vrr`) |
+| `middleClickPaste` | `true` | what is selected is pasted with the middle button (`middle_click_paste`); taken on at the next start |
+| `backgroundColor` | dark grey | the colour under everything where no wallpaper is (`background_color`) |
+
+## windowRule { }, layerRule { }
+
+Caulis' rules, for what newm's `view { rules }` does not have (Hyprland's window rules on how
+a window behaves). Where windows go stays newm's: `view { rules }`.
+
+```kotlin
+windowRule { appId("mpv"); keepAwake = true }                         // idle_inhibit
+windowRule { appId(Regex(".*")); ignore(WindowRequest.MAXIMIZE) }   // suppress_event maximize
+windowRule { title("Firefox — Sharing Indicator"); hiddenFromCapture = true }   // no_screen_share
+windowRule { appId("steam"); takesFocus = false }                     // no_initial_focus
+windowRule { appId("org.gnome.Calculator"); minSize(300, 400) }       // min_size
+layerRule { namespace("fuzzel"); blur = true; dimAround = 0.4f }     // layerrule blur, dim_around
+```
+
+Which windows: `appId(...)`, `title(...)` (a text or a `Regex`), `program(...)`,
+`initialAppId`, `initialTitle`, `isXwayland()`, `isFloating()`, `isFullscreen()`, `unless { }`,
+`anyOf { }`, `where { window -> ... }`. What they do: `keepAwake`, `ignore(WindowRequest.FULLSCREEN,
+MAXIMIZE, MINIMIZE, ACTIVATE, RESTORE)`, `hiddenFromCapture`, `takesFocus`, `minSize`, `maxSize`,
+`tags(...)`. Panels: `namespace(...)`, `layer(...)`; `blur`, `cornerRadius`, `shadow`,
+`opacity`, `dimAround`, `hiddenFromCapture`. config.kts only for now.
 
 ## Events
 

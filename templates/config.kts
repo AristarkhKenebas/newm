@@ -12,7 +12,65 @@
 // The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/README.md
 // Every setting: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/settings.md
 
-// --- Looks -----------------------------------------------------------------------------------
+// --- Your programs --------------------------------------------------------------------------
+// The programs you use, each by a name of your own (as Hyprland's $terminal, $menu): the keys
+// at the end start them, bind("Super+E", "launch", fileManager). Any Kotlin works in this file.
+
+val terminal = defaultTerminal()             // $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
+val fileManager = "nautilus"                 // Super+E
+val browser = "firefox"                      // Super+B
+// val menu = "fuzzel"                       // a launcher of your own for Super+D ("wofi --show drun"); without: newm's own
+
+// --- Monitors -------------------------------------------------------------------------------
+// Unset: each monitor at its best mode, side by side. A monitor of its own (connectors: `newm cmd debug`):
+// output("eDP-1") { scale = 1.25 }
+// output("HDMI-A-1") { width = 2560; height = 1440; refreshHz = 144.0; x = 1920; y = 0 }
+// output("DP-1") { transform = 1 }         // turned (1: 90°, 2: 180°, 3: 270°)
+
+// --- Environment ----------------------------------------------------------------------------
+// Variables for the programs newm starts, also handed to the session's services (Hyprland's env).
+// env("XCURSOR_SIZE", "24")
+// env("QT_QPA_PLATFORMTHEME", "qt6ct")
+// env("MOZ_ENABLE_WAYLAND", "1")
+
+// --- Autostart ------------------------------------------------------------------------------
+// Programs started with the session: one after another once newm is shown, once per session
+// (saving this file starts only what you added). `newm cmd autostart` lists them.
+autostart {
+    // app("waybar")                                          // a bar of your own
+    // app("nm-applet", "--indicator") { delay = 2.seconds; ifNotRunning = true; restart = OnCrash(maxTimes = 3, within = 1.minutes) }
+    // app("telegram-desktop", "-startintray") { delay = 3.seconds }
+    // shell("sleep 1; notify-send 'Hello'")                  // a piece of shell
+    // desktopEntries = true                                  // also the programs of ~/.config/autostart
+}
+
+// Dark until newm is ready, then it fades in.
+reveal {
+    enabled = true
+    // fadeMillis = 600
+}
+
+// A sound as newm fades in: "airy", "classic", "glass", "soft", or a file of yours.
+startupSound {
+    enabled = true                                            // false: silent
+    preset = "airy"
+    volume = 0.8
+    // file = "~/sounds/hello.ogg"
+}
+
+// The windows opened again after `newm cmd restart keep` (and, if you like, after logging in).
+session {
+    // restoreAtLogin = false                                 // true: your last session's windows come back at login
+    // exclude = listOf("org.keepassxc.KeePassXC")            // programs never started again
+}
+
+onStartup {
+    // launch("nm-applet --indicator")      // (or in autostart { } above)
+}
+
+// onReconfigure { launch("notify-send newm 'Configuration loaded'") }
+
+// --- Look -----------------------------------------------------------------------------------
 
 background {
     path = "resource:wallpaper.jpg"         // newm's own; or "~/Pictures/wallpaper.jpg" (an SVG stays sharp)
@@ -32,7 +90,38 @@ cornerRadius = 24                           // the screen's own corners rounded 
 //     style = "tonal"                      // "tonal", "vibrant", "expressive", "neutral", "monochrome"
 // }
 
-// --- Animations ------------------------------------------------------------------------------
+// Windows: the gaps, corners and see-through (Hyprland's general and decoration)
+view {
+    cornerRadius = 14.0                     // windows' corners (bigger cuts into what programs draw at their edges)
+    padding = 8.0                           // the gap around each window
+    // fullscreenPadding = 0.0              // the gap around a fullscreen window
+    // unfocusedOpacity = 0.92              // windows without the focus a little see-through (1.0: not)
+    // fade = true                          // windows fade in and out
+    // sendFullscreen = true                // programs are told when they are fullscreen
+    // acceptFullscreen = true              // programs may ask for it (a video's button)
+    // floatingMinSize = true               // floating windows open at their smallest size
+    // fillFirst = false                    // true: the first window fills the screen (false: a quarter, as newm)
+    // resizePushes = false                 // true: a window made bigger by keys pushes its neighbours aside
+    // crispResize = false                  // true: a window being resized is drawn at its own size, not stretched
+    // fitDrawnSize = false                 // true: a program that drew another size is fitted in its shape, not stretched
+    // stickyFullscreen = false             // true: fullscreen stays when the view moves away
+}
+
+// The line around the focused window (Hyprland's border; a gradient as col.active_border).
+focus {
+    enabled = true                          // a line around the focused window
+    color = "auto"                          // "auto": the colours' accent; or "#RRGGBB" / "#RRGGBBAA" (see-through)
+    distance = 4.0                          // how far outside the window
+    width = 2.0
+    // animateOnChange = false              // the line glides to the next window
+    // color = "rgba(33ccffee) rgba(00ff99ee) 45deg"   // a gradient, written as Hyprland's col.active_border
+    // urgentColor = "rgb(ff5555)"          // a window wanting attention, not focused
+    // shader = "border.glsl"               // your own GLSL (next to this file), read again when saved;
+    //                                      // with vec4 paint(vec2 at): progress, time, size and colors are at hand
+    // animate = true                       // false: the shader's own time stands still
+}
+
+// --- Animations -----------------------------------------------------------------------------
 //
 // newm's usual animations are on: windows glide to their places, the view glides when it moves.
 // Turn them off with preset = "none" (every change is there at once; fingers are still followed).
@@ -86,79 +175,7 @@ animations {
 }
 // blendTime = 1.0                          // fading in at the start, out at the end (seconds)
 
-// --- Windows ---------------------------------------------------------------------------------
-
-view {
-    cornerRadius = 14.0                     // windows' corners (bigger cuts into what programs draw at their edges)
-    padding = 8.0                           // the gap around each window
-    // fullscreenPadding = 0.0              // the gap around a fullscreen window
-    // unfocusedOpacity = 0.92              // windows without the focus a little see-through (1.0: not)
-    // fade = true                          // windows fade in and out
-    // sendFullscreen = true                // programs are told when they are fullscreen
-    // acceptFullscreen = true              // programs may ask for it (a video's button)
-    // floatingMinSize = true               // floating windows open at their smallest size
-    // fillFirst = false                    // true: the first window fills the screen (false: a quarter, as newm)
-    // resizePushes = false                 // true: a window made bigger by keys pushes its neighbours aside
-    // crispResize = false                  // true: a window being resized is drawn at its own size, not stretched
-    // fitDrawnSize = false                 // true: a program that drew another size is fitted in its shape, not stretched
-    // stickyFullscreen = false             // true: fullscreen stays when the view moves away
-
-    // Rules for some windows, decided when they open (their app id: `newm cmd debug` lists them).
-    rules { view ->
-        when (view.appId) {
-            "pavucontrol", "mpv", "imv", "org.gnome.Calculator" -> rule(float = true)
-            // See-through terminals with what is behind them blurred (set the terminal's own
-            // opacity too, for alacritty that is window.opacity = 0.85).
-            "Alacritty", "foot", "kitty", "org.wezfurlong.wezterm" -> rule(blur = Blur(radius = 6, passes = 4))
-            // "org.keepassxc.KeePassXC" -> rule(float = true, floatSize = 900 to 600)
-            // "firefox" -> rule(opacity = 0.97)
-            else -> null
-        }
-    }
-}
-
-// Where windows open.
-windows {
-    newPlacement = "right-of-focused"       // right of yours, the rest move on; "beside-focused", "end", "original" (newm's)
-    childPlacement = "below"                // a dialog or a photo viewer: "below" its window, "right", "over" (floating, as newm)
-    returnFocusToParent = true              // closing it gives the focus back to its window
-    // childBySameApp = true                // a window of the focused program without a parent (Telegram's viewer) is its child
-    // childBySameAppExcept = listOf("foot", "kitty", "firefox")   // but not for these: their windows are their own
-}
-
-focus {
-    enabled = true                          // a line around the focused window
-    color = "auto"                          // "auto": the colours' accent; or "#RRGGBB" / "#RRGGBBAA" (see-through)
-    distance = 4.0                          // how far outside the window
-    width = 2.0
-    // animateOnChange = false              // the line glides to the next window
-    // color = "rgba(33ccffee) rgba(00ff99ee) 45deg"   // a gradient, written as Hyprland's col.active_border
-    // urgentColor = "rgb(ff5555)"          // a window wanting attention, not focused
-    // shader = "border.glsl"               // your own GLSL (next to this file), read again when saved;
-    //                                      // with vec4 paint(vec2 at): progress, time, size and colors are at hand
-    // animate = true                       // false: the shader's own time stands still
-}
-
-// The overview (Logo alone): every window at once.
-overview {
-    input = false                           // true: the windows take clicks there
-    choose = true                           // a click chooses a window and ends the overview
-    followPointer = true                    // the window under the pointer is the chosen one
-}
-
-// Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own,
-// shown with the keys below (Logo+grave).
-specialWorkspace {
-    dim = 0.4                               // the wall behind darker
-    // blurRadius = 8                       // and blurred (0: not)
-    gap = 40                                // room to the screen's edges
-    // size = 1.0                           // how much of the screen
-    // hideWhenEmpty = true
-    // newWindowsJoin = true                // windows opening while it is shown go into it
-    // clickOutsideHides = true
-}
-
-// --- The bar and panels ----------------------------------------------------------------------
+// --- The bar, notifications, screenshots ----------------------------------------------------
 
 panels {
     // newm's own bar at the top: see-through islands floating at the edge — the focused window,
@@ -193,6 +210,8 @@ panels {
         w = 0.6; h = 0.6                    // its size: parts of the screen
         cornerRadius = 32.0
         // clock = "HH:mm"
+        // layoutOnLock = "first"           // the first keyboard layout while locked ("keep": the one in use; shown either way)
+        // onScreenKeyboard = true          // a small keyboard on the lock screen (touch screens)
     }
     launcher {
         w = 0.7; h = 0.7
@@ -237,13 +256,14 @@ screenshots {
     // then = "satty --filename {file}"     // a command run with each file saved
 }
 
-// --- Keyboard, mouse, monitors -----------------------------------------------------------
+// --- Input ----------------------------------------------------------------------------------
 
 keyboard {
     // Unset: the system's layouts (with Alt+Shift switching). Your own:
     // layouts = "us,ru"
     // options = "grp:alt_shift_toggle"     // Alt+Shift switches; "grp:caps_toggle": Caps Lock
     // numLock = true                       // Num Lock on from the start
+    // repeatRate = 25; repeatDelay = 600   // held keys: how fast they repeat, and after how long (ms)
 }
 
 input {
@@ -251,6 +271,10 @@ input {
     naturalScroll = false
     focusFollowsMouse = true                // the window under the mouse gets the keyboard (false: a click)
     // xwayland = true                      // X11 programs
+    // pointerSpeed = 0.0                   // -1.0 to 1.0 (Hyprland's sensitivity)
+    // accelProfile = "adaptive"            // or "flat": no acceleration
+    // touchpad { disableWhileTyping = true; clickFinger = false; scrollFactor = 1.0 }
+    // device("epic-mouse-v1") { pointerSpeed = -0.5 }   // one device by its name (libinput list-devices)
 }
 
 mouse {
@@ -260,11 +284,136 @@ mouse {
 
 // cursor { theme = "Adwaita"; size = 24; hideAfter = 5 }   // hideAfter: seconds the mouse is still
 
-// A monitor of its own (connectors: `newm cmd debug`):
-// output("eDP-1") { scale = 1.25 }
-// output("HDMI-A-1") { width = 2560; height = 1440; refreshHz = 144.0; x = 1920; y = 0 }
+// --- Gestures (touchpads) ----------------------------------------------------------------------
 
-// --- Keys ------------------------------------------------------------------------------------
+gestures {
+    // Three fingers move over the wall, four zoom (up and down), five open the launcher,
+    // Logo with one finger moves a window and with two resizes it.
+    // bind(GestureAction.SWIPE, null, "swipe-3")                    // move over the wall
+    // bind(GestureAction.SWIPE_TO_ZOOM, null, "swipe-4")            // up and down: zoom
+    // bind(GestureAction.MOVE_RESIZE, "L", "move-1", "swipe-2")     // Logo + fingers: move, resize
+    // bind(GestureAction.LAUNCHER, null, "swipe-5")
+    hints = true                                                     // what a gesture does, shown at the bottom while it runs
+    // lpInertia = 0.8                                               // smoother (and slower) feel
+    // Gestures of your own: the way the fingers go first decides; other ways stay newm's own.
+    // on("swipe-4", "left", "Next monitor") { moveWorkspace(1) }
+    // on("swipe-4", "right", "Previous monitor") { moveWorkspace(-1) }
+}
+
+// --- Layout ---------------------------------------------------------------------------------
+// newm's wall: tiles on an endless wall, or whole screens of a few windows each.
+
+// Where windows open.
+windows {
+    newPlacement = "right-of-focused"       // right of yours, the rest move on; "beside-focused", "end", "original" (newm's)
+    childPlacement = "below"                // a dialog or a photo viewer: "below" its window, "right", "over" (floating, as newm)
+    returnFocusToParent = true              // closing it gives the focus back to its window
+    // childBySameApp = true                // a window of the focused program without a parent (Telegram's viewer) is its child
+    // childBySameAppExcept = listOf("foot", "kitty", "firefox")   // but not for these: their windows are their own
+}
+
+// The wall in whole screens: each screen holds a few windows, the next one opens on the next screen.
+screens {
+    windowsPerScreen = 2                    // how many windows share a screen (4: as Hyprland's quarters)
+    layout = "columns"                      // "rows", "grid" (halves, quarters), "master" (as i3), "dwindle", "monocle"
+    // masterRatio = 0.6                    // the master's share ("master")
+    // masterSide = "left"                  // "right", "top", "bottom"
+    // gaps = 0                             // more room between windows, pixels
+    // overflow = "right"                   // where the next screen is: "right" or "down"
+    // pullBack = true                      // a window closing: windows of the next screens move up
+    // windowsUnderBar = false              // true: the wall goes on under the bar, as newm
+    // cycle = listOf("columns", "rows", "grid", "master", "monocle")   // what Super+Space goes through
+    // enabled = false                      // newm's free wall of tiles instead
+}
+
+// Resizing windows on screens: only within their screen; zoom out for room.
+resize {
+    quarters = true                         // the quarter grabbed decides the corner, as Hyprland
+    onBorder = true                         // the room beside a window, dragged, resizes it
+    // borderGrabSize = 10                  // how far from a window, pixels
+    // clampToScreen = true                 // nothing grows past its screen
+    // keepAspect = false                   // a corner keeps the window's shape
+    // mouseButton = "right"                // with Super held
+}
+
+// The overview (Logo alone): every window at once.
+overview {
+    input = false                           // true: the windows take clicks there
+    choose = true                           // a click chooses a window and ends the overview
+    followPointer = true                    // the window under the pointer is the chosen one
+}
+
+// --- Window rules ---------------------------------------------------------------------------
+view {
+    // Rules for some windows, decided when they open (their app id: `newm cmd debug` lists them).
+    rules { view ->
+        when (view.appId) {
+            "pavucontrol", "mpv", "imv", "org.gnome.Calculator" -> rule(float = true)
+            // See-through terminals with what is behind them blurred (set the terminal's own
+            // opacity too, for alacritty that is window.opacity = 0.85).
+            "Alacritty", "foot", "kitty", "org.wezfurlong.wezterm" -> rule(blur = Blur(radius = 6, passes = 4))
+            // "org.keepassxc.KeePassXC" -> rule(float = true, floatSize = 900 to 600)
+            // "firefox" -> rule(opacity = 0.97)
+            else -> null
+        }
+    }
+}
+
+// Caulis' rules for how windows behave (Hyprland's windowrule): stay awake, ignore requests, ...
+// windowRule { appId("mpv"); keepAwake = true }                              // the screen stays on (idle_inhibit)
+// windowRule { appId(Regex(".*")); ignore(WindowRequest.MAXIMIZE) }       // suppress_event maximize
+// windowRule { title("Firefox — Sharing Indicator"); hiddenFromCapture = true }   // not in screen sharing
+// layerRule { namespace("fuzzel"); blur = true; dimAround = 0.4f }        // panels and launchers (Hyprland's layerrule)
+
+// --- Workspaces -----------------------------------------------------------------------------
+// newm has one wall per monitor instead of numbered workspaces (Hyprland's workspace rules:
+// docs/en/hyprland.md).
+
+// Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own,
+// shown with the keys below (Logo+grave).
+specialWorkspace {
+    dim = 0.4                               // the wall behind darker
+    // blurRadius = 8                       // and blurred (0: not)
+    gap = 40                                // room to the screen's edges
+    // size = 1.0                           // how much of the screen
+    // hideWhenEmpty = true
+    // newWindowsJoin = true                // windows opening while it is shown go into it
+    // clickOutsideHides = true
+}
+
+// --- Permissions ----------------------------------------------------------------------------
+// Which programs may take pictures of the screen, see the window list, read the clipboard, show
+// panels, lock, arrange monitors (as Hyprland's permissions). Nothing said: every program may.
+// A program is its path or its name (regular expressions); "ask" shows a card (screencopy only).
+permissions {
+    // rule("/usr/bin/grim", "screencopy", "allow")
+    // rule("/usr/(lib|libexec)/xdg-desktop-portal-wlr", "screencopy", "allow")
+    // rule(".*", "clipboard", "deny")      // features: screencopy, window-list, clipboard, panels, lock, monitors, gamma
+    // default("screencopy", "ask")         // programs no rule is about (Hyprland's enforce_permissions)
+}
+
+// --- Misc -----------------------------------------------------------------------------------
+misc {
+    // swallow = true                       // a window opened from a terminal takes its place (enable_swallow)
+    // swallowApps = "foot|kitty|Alacritty"  // the terminals that do (a regular expression for the app id)
+    // swallowExceptTitles = "wev"          // not when the terminal's title matches
+    // focusOnActivate = true               // a window asking for the focus gets it (false: only marked)
+    // wakeOnInput = true                   // keys and the mouse switch dark screens on again
+    // vrr = false                          // variable refresh rate (FreeSync) on every monitor that has it
+    // middleClickPaste = true              // paste what is selected with the middle button (at the next start)
+    // backgroundColor = "#1e1e2e"          // under everything, where no wallpaper is
+}
+
+energy {
+    idleTimes = listOf(120, 300, 600)       // seconds without input: dim, lock, suspend
+    screensOffAfter = 330                   // and the screens go dark (0: never)
+    // suspendCommand = "systemctl suspend"
+    // after(1800) { ensureLocked() }       // something of your own after so many seconds
+    // inhibitFrom = listOf("wayland", "dbus", "logind", "mpris")   // what keeps the screen on (videos): all by default
+}
+// lockOnWakeup = true
+
+// --- Keybindings ----------------------------------------------------------------------------
 // A key in one line: bind("Super+Backspace", "close-window"). Keys are written as you say them:
 // Super (also Logo, Win), Ctrl, Alt, Shift and a key: a letter, a digit, Return, Space, Tab,
 // Escape, Backspace, Delete, Left, F1, Print and so on (case does not matter). "Super" alone is
@@ -272,13 +421,13 @@ mouse {
 // Logo+/ shows them. unbind("Super+Q") takes a key away. newm's own way works too, with any of
 // newm's functions inside { }: see the last lines of this block.
 
-val terminal = defaultTerminal()             // $TERMINAL, else the first installed: alacritty, foot, kitty, ...; or "foot"
-
 keys {
     // Programs
     bind("Super+Return",          "launch", terminal, description = "Open a terminal")
     bind("Super+D",               "launcher")                  // find and start a program
-    // bind("Super+B",            "launch", "firefox", description = "Firefox")
+    // bind("Super+D",            "launch", menu)              // your own launcher instead
+    bind("Super+E",               "launch", fileManager, description = "Files")
+    bind("Super+B",               "launch", browser, description = "Web browser")
 
     // Going around: the window beside
     bind("Super+H",               "focus-left")
@@ -312,7 +461,16 @@ keys {
     bind("Super+Shift+Up",        "move-window-up")
     bind("Super+Shift+Right",     "move-window-right")
 
-    // Its size, in tiles (one tile: a screen at zoom 1)
+    // Screens: a few windows each
+    bind("Super+Space",           "next-layout")               // the screen's next layout
+    bind("Super+Shift+Space",     "swap-on-screen")            // the window changes places with the next one
+    bind("Super+Ctrl+Return",     "promote-to-master")         // the window becomes the screen's master
+    bind("Super+PageDown",        "next-screen")
+    bind("Super+PageUp",          "previous-screen")
+    bind("Super+Shift+PageDown",  "window-to-next-screen")
+    bind("Super+Shift+PageUp",    "window-to-previous-screen")
+
+    // Its size (on screens: within its screen; else in tiles, one tile: a screen at zoom 1)
     bind("Super+Ctrl+H",          "window-narrower")
     bind("Super+Ctrl+L",          "window-wider")
     bind("Super+Ctrl+K",          "window-shorter")
@@ -365,7 +523,6 @@ keys {
     // bind("Super+C",            "close-window")
     // bind("Super+Backspace",    "close-window")
     // bind("Super+R",            "launcher")
-    // bind("Super+E",            "launch", "nautilus", description = "Files")
     // bind("Super+1",            "go-to-window", "1")         // the first window, and so on
     // bind("Super+2",            "go-to-window", "2")
     // bind("Super+3",            "go-to-window", "3")
@@ -381,67 +538,3 @@ keys {
     // Or with code of your own inside { }:
     // "Super+Shift+Return"("A terminal in my projects") { launch("foot -D ~/projects") }
 }
-
-// --- Gestures (touchpads) ----------------------------------------------------------------------
-
-gestures {
-    // Three fingers move over the wall, four zoom (up and down), five open the launcher,
-    // Logo with one finger moves a window and with two resizes it.
-    // bind(GestureAction.SWIPE, null, "swipe-3")                    // move over the wall
-    // bind(GestureAction.SWIPE_TO_ZOOM, null, "swipe-4")            // up and down: zoom
-    // bind(GestureAction.MOVE_RESIZE, "L", "move-1", "swipe-2")     // Logo + fingers: move, resize
-    // bind(GestureAction.LAUNCHER, null, "swipe-5")
-    hints = true                                                     // what a gesture does, shown at the bottom while it runs
-    // lpInertia = 0.8                                               // smoother (and slower) feel
-    // Gestures of your own: the way the fingers go first decides; other ways stay newm's own.
-    // on("swipe-4", "left", "Next monitor") { moveWorkspace(1) }
-    // on("swipe-4", "right", "Previous monitor") { moveWorkspace(-1) }
-}
-
-// --- The start ------------------------------------------------------------------------------------
-
-// Programs started with the session: one after another once newm is shown, once per session
-// (saving this file starts only what you added). `newm cmd autostart` lists them.
-autostart {
-    // app("waybar")                                          // a bar of your own
-    // app("nm-applet", "--indicator") { delay = 2.seconds; ifNotRunning = true; restart = OnCrash(maxTimes = 3, within = 1.minutes) }
-    // app("telegram-desktop", "-startintray") { delay = 3.seconds }
-    // shell("sleep 1; notify-send 'Hello'")                  // a piece of shell
-    // desktopEntries = true                                  // also the programs of ~/.config/autostart
-}
-
-// Dark until newm is ready, then it fades in.
-reveal {
-    enabled = true
-    // fadeMillis = 600
-}
-
-// A sound as newm fades in: "airy", "classic", "glass", "soft", or a file of yours.
-startupSound {
-    enabled = true                                            // false: silent
-    preset = "airy"
-    volume = 0.8
-    // file = "~/sounds/hello.ogg"
-}
-
-// The windows opened again after `newm cmd restart keep` (and, if you like, after logging in).
-session {
-    // restoreAtLogin = false                                 // true: your last session's windows come back at login
-    // exclude = listOf("org.keepassxc.KeePassXC")            // programs never started again
-}
-
-// --- When things happen --------------------------------------------------------------------------
-
-onStartup {
-    // launch("nm-applet --indicator")      // (or in autostart { } above)
-}
-
-// onReconfigure { launch("notify-send newm 'Configuration loaded'") }
-
-energy {
-    idleTimes = listOf(120, 300, 600)       // seconds without input: dim, lock, suspend
-    screensOffAfter = 330                   // and the screens go dark (0: never)
-    // suspendCommand = "systemctl suspend"
-    // after(1800) { ensureLocked() }       // something of your own after so many seconds
-}
-// lockOnWakeup = true

@@ -49,6 +49,8 @@ internal class MoveOverlay(private val layout: Layout, private val view: View) :
 
     private val iGrid: Grid
     private val jGrid: Grid
+    // What the window snaps to while it moves: whole tiles; on screens quarters of a screen (a window there is a part of one).
+    private val unit = if (Screens.on()) 4.0 else 1.0
     private var lastDx = 0.0
     private var lastDy = 0.0
     private var closed = false
@@ -67,8 +69,8 @@ internal class MoveOverlay(private val layout: Layout, private val view: View) :
         } else {
             log.warn("Unexpected: Could not access view $view state")
         }
-        iGrid = Grid("i", pyRound(i - 3), pyRound(i + 3), i, confMoveGridOvr(), confMoveGridM())
-        jGrid = Grid("j", pyRound(j - 3), pyRound(j + 3), j, confMoveGridOvr(), confMoveGridM())
+        iGrid = Grid("i", pyRound((i - 3) * unit), pyRound((i + 3) * unit), i * unit, confMoveGridOvr(), confMoveGridM())
+        jGrid = Grid("j", pyRound((j - 3) * unit), pyRound((j + 3) * unit), j * unit, confMoveGridOvr(), confMoveGridM())
     }
 
     override fun resetGesture() {
@@ -83,8 +85,8 @@ internal class MoveOverlay(private val layout: Layout, private val view: View) :
         val dy = values["delta_y"] ?: 0.0
         i += factor * (dx - lastDx)
         j += factor * (dy - lastDy)
-        var i0 = iGrid.at(i)
-        var j0 = jGrid.at(j)
+        var i0 = iGrid.at(i * unit) / unit
+        var j0 = jGrid.at(j * unit) / unit
         lastDx = dx
         lastDy = dy
         i0 += di
@@ -116,11 +118,14 @@ internal class MoveOverlay(private val layout: Layout, private val view: View) :
         workspace = layout.workspaces.first { it.handle == wsHandle }
         val (fi0, ti) = iGrid.final()
         val (fj0, tj) = jGrid.final()
-        val (ws, box) = view.transformToClosestWs(workspace, fi0 + di, fj0 + dj, w, h)
-        val fi = pyRound(box[0]).toDouble()
-        val fj = pyRound(box[1]).toDouble()
-        w = maxOf(1, pyRound(w)).toDouble()
-        h = maxOf(1, pyRound(h)).toDouble()
+        val (ws, box) = view.transformToClosestWs(workspace, fi0 / unit + di, fj0 / unit + dj, w, h)
+        val fi = if (Screens.on()) box[0] else pyRound(box[0]).toDouble()
+        val fj = if (Screens.on()) box[1] else pyRound(box[1]).toDouble()
+        // (On screens it keeps its size until it is let go: its place there decides it then.)
+        if (!Screens.on()) {
+            w = maxOf(1, pyRound(w)).toDouble()
+            h = maxOf(1, pyRound(h)).toDouble()
+        }
         if (ws !== workspace) {
             log.trace { "Move - switching workspace ${workspace.handle} -> ${ws.handle}" }
             layout.state.moveViewState(view, workspace, ws)
@@ -447,6 +452,13 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
             log.warn("Unexpected: Error accessing view $view state")
             return null to null
         }
+        // On screens: onto the screen and the place under its middle (a resize changes nothing: the layout sizes it).
+        if (Screens.on() && vs.isTiled) {
+            val wsState = layout.state.workspaceState(workspace).replacingViewState(view) { scaleOrigin = null; moveOrigin = null }
+            wsState.dropOnScreen(view.handle, vs.i + vs.w / 2, vs.j + vs.h / 2)
+            wsState.validateStackIndices(view)
+            return layout.state.settingWorkspaceState(workspace, wsState.focusingView(view)) to NewmAnimations["moveResize"]
+        }
         val i = pyRound(vs.i).toDouble()
         val j = pyRound(vs.j).toDouble()
         val w = pyRound(vs.w).toDouble()
@@ -475,3 +487,60 @@ internal fun modBit(letter: String?): Int = when (letter) {
 }
 
 private operator fun DoubleArray.component6() = this[5]
+
+/**
+ * On screens: a window's edges follow the pointer (Super + right drag, two fingers, or its
+ * border dragged), its neighbours on the screen making way; nothing leaves the screen (resize
+ * { clampToScreen }). Which edges: [edgeX] (-1 left, 1 right) and [edgeY] (-1 top, 1 bottom),
+ * from the quarter grabbed. Driven by a gesture, or (a border dragged) by the pointer itself
+ * until [button] is let go.
+ */
+class ScreenResizeOverlay(layout: Layout, private val view: View, private val edgeX: Int, private val edgeY: Int, private val button: Int? = null) : Overlay(layout) {
+    private val found = layout.state.findViewOrNull(view)
+    private val workspace = found?.third?.let { h -> layout.workspaces.firstOrNull { it.handle == h } }
+    // The workspace as it was at the start: each step is made from it (never step on step).
+    private val start = found?.second?.copy()
+    private var hasGesture = false
+    private var px = 0.0
+    private var py = 0.0
+
+    init {
+        log.info { "Resizing ${view.appId} on its screen from its ${if (edgeY < 0) "top" else "bottom"} ${if (edgeX < 0) "left" else "right"} corner" }
+    }
+
+    private fun apply(dx: Double, dy: Double) {
+        val ws = workspace ?: return
+        val next = start?.copy() ?: return
+        next.resizeOnScreen(view.handle, edgeX, edgeY, dx, dy)
+        next.validateStackIndices(view)
+        layout.update(layout.state.settingWorkspaceState(ws, next))
+    }
+
+    override fun onGesture(gesture: NewmGesture): Boolean {
+        if (hasGesture || button != null) return false
+        hasGesture = true
+        LowpassGesture(gesture, NewmAnimations.gestureInertia(confLpInertia(), confLpFreq()), confLpFreq(), layout::every).listener(GestureListener({ values ->
+            // (A gesture's 1 is moveResizeFactor() screens wide, times the view's size: as the pointer moves.)
+            val f = moveResizeFactor() * (start?.size ?: 1.0)
+            apply((values["delta_x"] ?: 0.0) * f, (values["delta_y"] ?: 0.0) * f)
+        }) { layout.exitOverlay() })
+        return true
+    }
+
+    override fun onMotion(timeMillis: Int, dx: Double, dy: Double): Boolean {
+        if (button == null) return false
+        val s = start ?: return true
+        px += dx / s.usableWidth().coerceAtLeast(1.0) * s.size
+        py += dy / s.usableHeight().coerceAtLeast(1.0) * s.size
+        apply(px, py)
+        return true
+    }
+
+    override fun onButton(timeMillis: Int, button: Int, pressed: Boolean): Boolean {
+        if (this.button == null || button != this.button) return false
+        if (!pressed) layout.exitOverlay()
+        return true
+    }
+
+    override fun onAxis(timeMillis: Int, vertical: Boolean, delta: Double, steps: Double): Boolean = false
+}

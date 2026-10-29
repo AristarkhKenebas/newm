@@ -37,6 +37,18 @@
 | `anim` | `true` | `false` — то же, что `mode = "static"` |
 | `timeScale` | `0.15` | как быстро обои следуют за видом, секунды (анимация `backgroundMove`) |
 
+## warmup { }
+
+Работа старта, сделанная заранее, и память, отданная после неё. (Выключать их стоит только
+чтобы увидеть, что они меняют: каждая чуть стоит на старте и избавляет от рывка потом.)
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | меню newm один раз рисуются заранее, вне экрана, вскоре после старта: первое открытие быстрое |
+| `restMillis` | `800` | каждое меню рисуется заранее только когда указатель стоит столько (мс): рисование ненадолго занимает композитор, и указатель бы замер |
+| `compose` | `true` | Compose (панель, меню) готовится в отдельном потоке, пока newm стартует (иначе первый кадр панели занимает композитор ~0,7 с) |
+| `collect` | `true` | после рисования заранее куча Java снова становится маленькой: одна полная сборка (10–50 мс, пока указатель стоит) |
+
 ## view { }
 
 | Настройка | По умолчанию | Что |
@@ -68,6 +80,52 @@
 | `returnFocusToParent` | `true` | при закрытии дочернего окна фокус возвращается родителю (или окну, бывшему в фокусе, когда оно открылось); `false`: ближайшему окну, как в newm |
 | `childBySameApp` | `true` | окно без родителя, открытое программой окна в фокусе (то же соединение и app id, как просмотр фото Telegram), считается его дочерним |
 | `childBySameAppExcept` | терминалы, браузеры | app id, чьи новые окна так дочерними не считаются (`["foot", "kitty", "firefox", ...]`) |
+
+## screens { }
+
+Стена из целых экранов: экран — ровно место монитора, оставленное панелями; на нём до
+`windowsPerScreen` окон, разложенных его раскладкой, а следующее окно открывается на
+следующем экране. Переход между окнами одного экрана не двигает вид; к окну другого экрана
+вид сдвигается ровно на один экран. Свайпы встают на целые экраны; отдаление и обзор
+показывают экраны рядом.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `enabled` | `true` | экраны; `false` — свободная стена плиток newm (как в оригинале) |
+| `windowsPerScreen` | `2` | сколько окон делят экран (4 — половины и четверти, как в Hyprland) |
+| `layout` | `"columns"` | `"columns"` (рядом), `"rows"`, `"grid"` (половины, потом четверти), `"dwindle"`, `"spiral"`, `"master"` (одно большое окно и полосы, как в i3/xmonad), `"centered-master"`, `"monocle"` (одно окно на экран, как в оригинале) или одна из `customLayout(...)` |
+| `masterRatio` | `0.6` | доля главного окна (`"master"`, `"centered-master"`) |
+| `masterSide` | `"left"` | `"left"`, `"right"`, `"top"`, `"bottom"` |
+| `gaps` | `0` | больше места между окнами и вокруг них, в пикселях (`view { padding }` есть и так) |
+| `overflow` | `"right"` | где следующий экран: `"right"` или `"down"` |
+| `pullBack` | `true` | окно закрылось — окна следующих экранов подтягиваются и заполняют его экран |
+| `windowsUnderBar` | `false` | `true` — окна продолжаются под панелями (стена newm: верхнее окно было видно сквозь панель) |
+| `cycle` | columns, rows, grid, master, monocle | раскладки, которые перебирает `next-layout` (Super+Space) |
+| `customLayout(name, layout)` | — | своя раскладка: любой `dev.caulis.tiling.Layout` (`MasterStack(ratio = 0.7)`, свой) |
+
+На экране новое окно встаёт сразу после окна в фокусе (`windows { newPlacement }`: `"end"` —
+на последний экран, `"original"` — на первый со свободным местом), дочернее — сразу после
+своего окна; если экран полон, окно уходит на новый экран сразу после него. У каждого экрана
+может быть своя раскладка, пока newm работает (Super+Space).
+
+## resize { }
+
+Размер окон на экранах: окно растёт только в пределах своего экрана, соседи по экрану
+уступают место; чтобы места было больше, сначала отдалите вид (окно всё равно остаётся в
+пределах экрана). В обзоре размер не меняется. Экран хранит размеры, пока не изменятся его
+окна или раскладка.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `quarters` | `true` | четверть, за которую взяли (Super + правая кнопка), выбирает угол, как в Hyprland; `false` — всегда правый нижний |
+| `onBorder` | `true` | промежуток рядом с окном, если тянуть его без Super, меняет размер окна |
+| `borderGrabSize` | `10` | насколько далеко от окна можно взять его край, в пикселях |
+| `borderButton` | `"left"` | кнопка, которой тянут край |
+| `mouseButton` | не задано | кнопка размера с зажатой Super (не задано: `mouse { resizeButton }`) |
+| `clampToScreen` | `true` | ничто не вырастает за края своего экрана |
+| `keepAspect` | `false` | угол сохраняет форму окна |
+| `minSize` | `0.1` | самое маленькое окно, доля экрана |
+| `keyStep` | `0.1` | на сколько Super+Ctrl+стрелки двигают край, доля экрана |
 
 ## focus { }
 
@@ -222,6 +280,11 @@ vec4 paint(vec2 at) {
 | `pamService` | `"login"` | служба PAM, которой проверяется пароль (`/etc/pam.d/<имя>`) |
 | `checkTimeout` | `60` | сколько секунд может идти проверка пароля, прежде чем экран блокировки спросит снова. Если в службе PAM pam_fprintd стоит перед pam_unix, PAM сначала ждёт палец (30 с): оставьте это время больше |
 | `sleepWait` | `3` | сколько секунд сон ждёт, пока экран блокировки (или `program`) появится (0..30) |
+| `layoutOnLock` | `"keep"` | раскладка при блокировке: `"keep"` (текущая) или `"first"` (первая из `keyboard { layouts }`, после разблокировки — прежняя). В обоих случаях экран блокировки её показывает («EN», «RU»: щелчок переключает), и клавиши смены раскладки на нём работают; после неверного пароля, набранного не в первой раскладке, он об этом говорит |
+| `revealButton` | `true` | глаз рядом с паролем показывает его, пока его держат |
+| `onScreenKeyboard` | `false` | маленькая клавиатура на экране блокировки (буквы и цифры текущей раскладки, Shift, Backspace, раскладка, Enter): сенсорные экраны, сломанная клавиатура |
+| `faillock` | `true` | читать состояние pam_faillock: после слишком многих неверных паролей экран блокировки показывает обратный отсчёт до разблокировки учётной записи и пароли не принимает (каждый лишь продлил бы блокировку). Ещё он показывает число неверных паролей с блокировки, сколько осталось до блокировки учётной записи, и Caps Lock |
+| `faillockConf` | `"/etc/security/faillock.conf"` | где настройки pam_faillock (`deny`, `unlock_time`, `fail_interval`, `dir`) |
 
 Свой лаунчер newm:
 
@@ -249,6 +312,8 @@ vec4 paint(vec2 at) {
 | `model` | `"pc105"` | модель клавиатуры |
 | `numLock` | `false` | Num Lock включён с самого начала |
 | `bindingModifiers` | `"xkb"` | модификаторы в сочетаниях клавиш — как велят раскладка и её параметры (`caps:super`), или `"physical"`: клавиши, как на них написано |
+| `repeatRate` | `25` | удерживаемая клавиша повторяется столько раз в секунду (0: никогда) |
+| `repeatDelay` | `600` | после стольких миллисекунд удержания |
 
 ## compositor { }
 
@@ -262,6 +327,12 @@ vec4 paint(vec2 at) {
 | `javaUpdatedNotice` | `"Java was updated: restart newm when convenient (newm cmd restart keep)"` | сообщается один раз, когда Java обновили под работающим newm (`""`: только в журнал) |
 | `configCompilerJvmOptions` | `"-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"` | параметры Java короткоживущего процесса, компилирующего config.kts (компилятор Kotlin никогда не работает внутри newm); для следующей компиляции — первая при запуске берёт переменную окружения `NEWM_CONFIG_COMPILER_OPTS` |
 | `configCompilerTimeoutSeconds` | `180` | сколько секунд самое большее на компиляцию config.kts, затем она останавливается, и об этом сообщается (первая при запуске: `NEWM_CONFIG_COMPILER_TIMEOUT`) |
+| `stallReportMillis` | `50` | если цикл newm занят одним делом столько (мс) или дольше, это пишется в журнал с тем, что это было (`CAULIS_LOG=native=2`); `0`: не следить |
+| `trimMemory` | `true` | память, освобождённая библиотекой C (Skia, драйвер GPU, шрифты), отдаётся системе после старта и время от времени |
+| `trimMemoryEveryMinutes` | `10` | как часто после старта; `0`: только после старта |
+| `mallocPools` | `2` | самое большее столько пулов malloc glibc для самого newm (у программ — свои, как у glibc); `0`: как у glibc; только при запуске |
+| `quickCursor` | `true` | курсор (на аппаратной плоскости монитора) двигается в тот же миг, что и указатель, а не со следующим кадром |
+| `widgetThreads` | `2` | в скольких потоках панель и меню рисуются в пиксели (составляются они в потоке newm); `0`: всё в потоке newm |
 
 ## cursor { }
 
@@ -280,6 +351,15 @@ vec4 paint(vec2 at) {
 | `focusFollowsMouse` | `true` | клавиатуру получает окно под указателем (`false`: по щелчку) |
 | `xwayland` | `true` | программы X11 |
 | `titleBars` | `false` | программы рисуют свои заголовки окон |
+| `pointerSpeed` | `0.0` | каждая мышь и тачпад: от -1.0 (медленно) до 1.0 (быстро) — `sensitivity` в Hyprland |
+| `accelProfile` | как у устройства | `"adaptive"` (быстрее при быстром движении) или `"flat"` |
+| `leftHanded` | `false` | кнопки поменяны местами |
+| `scrollFactor` | `1.0` | прокрутка во столько раз быстрее |
+| `scrollMethod` | как у устройства | `"two-finger"`, `"edge"`, `"button"` (движение с зажатой `scrollButton`), `"none"` |
+| `scrollButton` | | кнопка для `"button"`: код Linux, `274` — средняя |
+| `middleButtonEmulation` | как у устройства | левая и правая вместе — средняя кнопка |
+| `touchpad { }` | | только тачпады: `naturalScroll`, `scrollFactor`, `pointerSpeed`, `disableWhileTyping`, `tapAndDrag`, `dragLock`, `clickFinger` (два пальца — правая, три — средняя), `tapButtons` (`"lrm"` или `"lmr"`), `offWithMouse` |
+| `device("имя") { }` | | одно устройство по имени (`*` — что угодно: `"Logitech*"`): `enabled` (false: не используется — клавиатура, которой вы не доверяете), `pointerSpeed`, `accelProfile`, `naturalScroll`, `leftHanded`, `scrollFactor`, `middleButtonEmulation`, `tapToClick`, `disableWhileTyping` |
 
 ## output("имя") { }
 
@@ -418,6 +498,9 @@ vec4 paint(vec2 at) {
 | `screensOffAfter` | `0` | секунды до отключения экранов (0: никогда) |
 | `suspendCommand` | `"systemctl suspend"` | как усыпить компьютер |
 | `onIdle { what -> }` | | получает `"idle"`, `"idle-lock"`, `"idle-presuspend"`, `"idle-suspend"`, `"active"`, `"sleep"`, `"wakeup"` |
+| `inhibitFrom` | `listOf("wayland", "dbus", "logind", "mpris")` | что не даёт компьютеру считаться бездействующим: idle-inhibit программ; D-Bus `org.freedesktop.ScreenSaver` / `PowerManagement.Inhibit` (браузеры с видео); idle-ингибиторы logind; медиаплеер, который играет (MPRIS), пока видно его окно. Панель показывает, что держит экран сейчас |
+| `mprisIgnore` | музыкальные плееры: `spotify`, `rhythmbox`, `lollypop`, `amberol`, `elisa`, `strawberry`, `audacious`, ... | плееры, чья игра ничего не держит (имя на шине или название, регистр не важен) |
+| `logindCheckSeconds` | `10` | как часто спрашивать logind о его idle-ингибиторах |
 
 ## gestures { }
 
@@ -526,6 +609,72 @@ play-startup-sound` (или `play-startup-sound glass`) проигрывает �
 | `delayMillis` | `0` | подождать ещё столько (`delay_ms`) |
 | `at` | `"reveal"` | `"reveal"` (когда newm проявляется) или `"start"` (сразу) |
 | `player` | pw-play, paplay, aplay | слова вашего проигрывателя: `listOf("mpv", "--no-video", "{file}")` (есть и `{volume}`, `{percent}`) |
+
+## env("ИМЯ", "значение")
+
+Переменная окружения для каждой программы, которую newm запускает с этого момента; при запуске
+она передаётся и службам сеанса (порталам, программам, которые запускает systemd) — `env` в
+Hyprland: `env("XCURSOR_SIZE", "24")`, `env("QT_QPA_PLATFORMTHEME", "qt6ct")`. Уже запущенные
+программы сохраняют свои; переменная, убранная из файла, пропадает для следующих. Lua и JSON:
+`env = { XCURSOR_SIZE = "24" }`.
+
+## permissions { }
+
+Каким программам можно то, что видит или меняет больше, чем их собственные окна, —
+разрешения (permissions) Hyprland. Без правил (по умолчанию) можно всем, как раньше.
+
+| Вызов | Что |
+|---|---|
+| `rule(program, feature, mode)` | программы, чей путь (`"/usr/bin/grim"`) или имя (`"grim"`) подходит под `program` (регулярное выражение), получают `mode` — `"allow"`, `"ask"` или `"deny"` — для `feature`; решает первое подходящее правило |
+| `default(feature, mode)` | что получают программы, о которых нет правила (`enforce_permissions` в Hyprland: `default("screencopy", "ask")`) |
+
+Возможности: `screencopy` (снимки и запись экрана или окна: grim, wf-recorder, портал
+показа экрана), `window-list` (доки и панели задач), `clipboard` (менеджеры буфера обмена,
+читающие чужие копирования), `panels` (панели, обои, лаунчеры, программы уведомлений), `lock`
+(блокировщики экрана), `monitors` (расстановка и выключение мониторов: kanshi, wlr-randr),
+`gamma` (ночной свет: wlsunset, gammastep).
+
+`"ask"` — для `screencopy`: снимки программы ждут, пока карточка спрашивает — *Разрешить*
+(пока программа работает), *Разрешить до выхода из newm*, *Запретить* (закрыть карточку —
+значит нет). Остальные возможности решаются при подключении программы, поэтому для них
+`"allow"` или `"deny"`. Правила действуют для программ, подключившихся после изменения. Lua и
+JSON: `permissions = { rules = { { program = "/usr/bin/grim", feature = "screencopy", mode = "allow" } }, defaults = { screencopy = "ask" } }`.
+
+## misc { }
+
+Настройки `misc` из Hyprland, которые есть в newm.
+
+| Настройка | По умолчанию | Что |
+|---|---|---|
+| `swallow` | `false` | «проглатывание» окон: окно, запущенное из терминала (видеоплеер, просмотрщик картинок), занимает место терминала, а терминал возвращается, когда окно закрывается (`enable_swallow` в Hyprland; действие клавиши `swallow` делает обратное для одного окна) |
+| `swallowApps` | распространённые терминалы (foot, alacritty, kitty, wezterm, ghostty, konsole, GNOME, xterm, ...) | терминалы, которые проглатывают: регулярное выражение для их app id (`swallow_regex`) |
+| `swallowExceptTitles` | `""` | терминал с подходящим под это заголовком не проглатывает (`swallow_exception_regex`): `"wev|vim"` |
+| `focusOnActivate` | `true` | окно, просящее фокус по уважительной причине (ссылка, открытая в браузере), получает его; `false`: только отмечается (`focus_on_activate`) |
+| `wakeOnInput` | `true` | клавиша, щелчок или движение мыши снова включают погасшие экраны (`key_press_enables_dpms`, `mouse_move_enables_dpms`) |
+| `vrr` | `false` | переменная частота обновления (FreeSync, Adaptive-Sync) на каждом мониторе, где она есть (`vrr`) |
+| `middleClickPaste` | `true` | выделенное вставляется средней кнопкой (`middle_click_paste`); со следующего запуска |
+| `backgroundColor` | тёмно-серый | цвет под всем, где нет обоев (`background_color`) |
+
+## windowRule { }, layerRule { }
+
+Правила Caulis — для того, чего нет в `view { rules }` newm (правила окон Hyprland о том, как
+окно себя ведёт). Куда окна попадают, решает newm: `view { rules }`.
+
+```kotlin
+windowRule { appId("mpv"); keepAwake = true }                         // idle_inhibit
+windowRule { appId(Regex(".*")); ignore(WindowRequest.MAXIMIZE) }   // suppress_event maximize
+windowRule { title("Firefox — Sharing Indicator"); hiddenFromCapture = true }   // no_screen_share
+windowRule { appId("steam"); takesFocus = false }                     // no_initial_focus
+windowRule { appId("org.gnome.Calculator"); minSize(300, 400) }       // min_size
+layerRule { namespace("fuzzel"); blur = true; dimAround = 0.4f }     // layerrule blur, dim_around
+```
+
+Какие окна: `appId(...)`, `title(...)` (текст или `Regex`), `program(...)`, `initialAppId`,
+`initialTitle`, `isXwayland()`, `isFloating()`, `isFullscreen()`, `unless { }`, `anyOf { }`,
+`where { window -> ... }`. Что делают: `keepAwake`, `ignore(WindowRequest.FULLSCREEN, MAXIMIZE,
+MINIMIZE, ACTIVATE, RESTORE)`, `hiddenFromCapture`, `takesFocus`, `minSize`, `maxSize`,
+`tags(...)`. Панели: `namespace(...)`, `layer(...)`; `blur`, `cornerRadius`, `shadow`,
+`opacity`, `dimAround`, `hiddenFromCapture`. Пока только в config.kts.
 
 ## События
 

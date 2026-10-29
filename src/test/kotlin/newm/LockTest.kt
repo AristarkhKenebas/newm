@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -97,6 +98,122 @@ class LockTest {
         third.close()
     }
 
+    // --- the lock screen's notes: the layout, Caps Lock, PAM's words, pam_faillock (a fake PAM)
+
+    private fun Layout.notes() = panelsUi.lockNotes()
+
+    private fun press(caulis: Caulis, vararg codes: Int) = onLoop(caulis) {
+        for (code in codes) caulis.simulateKey(code, true)
+        for (code in codes.reversed()) caulis.simulateKey(code, false)
+    }
+
+    private fun waitUntil(what: String, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + 10_000_000_000
+        while (!condition()) {
+            check(System.nanoTime() < deadline) { "timed out: $what" }
+            Thread.sleep(30)
+        }
+    }
+
+    // Locked with newm's own lock screen, the password field ready.
+    private fun lockAndWait(caulis: Caulis, layout: Layout) {
+        onLoop(caulis) { layout.ensureLocked(anim = false) }
+        waitUntil("the lock screen asks") {
+            onLoop(caulis) { caulis.desktop.keyboardWidget === layout.panelsUi.lockScreenWidget() && layout.notes().canSubmit }
+        }
+        // (Compose focuses the field once it has drawn.)
+        Thread.sleep(300)
+    }
+
+    @Test
+    fun `the lock screen shows the layout and Caps Lock, the layout keys work on it, PAM's words show, nothing typed is lost`() =
+        withNewm({ keyboardLayouts = "us,ru"; keyboardOptions = "grp:win_space_toggle" }) { caulis, layout, _ ->
+            val checked = java.util.concurrent.LinkedBlockingQueue<String>()
+            val answer = java.util.concurrent.CountDownLatch(1)
+            val before = passwordCheck
+            passwordCheck = { _, _, password ->
+                checked += password
+                answer.await(10, TimeUnit.SECONDS)
+                AuthOutcome(false, newm.bar.verbatim("pam_unix: authentication failure"))
+            }
+            Config.loadConfig(mapOf("language" to "en", "panels" to mapOf("lock" to mapOf("faillock" to false))))
+            try {
+                lockAndWait(caulis, layout)
+                assertEquals("EN", onLoop(caulis) { layout.notes().layout })
+                // Super+Space (grp:win_space_toggle) switches the layout on the lock screen too.
+                press(caulis, KEY_LEFTMETA, KEY_SPACE)
+                waitUntil("RU") { onLoop(caulis) { layout.notes().layout } == "RU" }
+                // The key of "a" types "ф" now; Enter checks it.
+                press(caulis, KEY_A)
+                press(caulis, KEY_ENTER)
+                assertEquals("ф", checked.poll(10, TimeUnit.SECONDS))
+                onLoop(caulis) { assertFalse(layout.notes().canSubmit, "one check at a time") }
+                // (A frame for the lock screen to show the field emptied, as between a person's keys.)
+                Thread.sleep(200)
+                // Typed while it is checked, and Enter: kept, not checked.
+                press(caulis, KEY_B)
+                press(caulis, KEY_ENTER)
+                Thread.sleep(300)
+                assertTrue(checked.isEmpty(), "nothing checked meanwhile")
+                answer.countDown()
+                waitUntil("asked again") { onLoop(caulis) { layout.notes().canSubmit } }
+                val notes = onLoop(caulis) { layout.notes() }
+                assertTrue("pam_unix: authentication failure" in notes.message, notes.message)
+                assertTrue("The keyboard layout is RU." in notes.message, notes.message)
+                assertTrue(notes.failures.startsWith("Wrong passwords since locking: 1"), notes.failures)
+                // What was typed meanwhile is still there: Enter checks it now.
+                press(caulis, KEY_ENTER)
+                assertEquals("и", checked.poll(10, TimeUnit.SECONDS))
+                // Caps Lock is told.
+                assertFalse(onLoop(caulis) { layout.notes().capsLock })
+                press(caulis, KEY_CAPSLOCK)
+                waitUntil("Caps Lock") { onLoop(caulis) { layout.notes().capsLock } }
+            } finally {
+                passwordCheck = before
+                Config.loadConfig(emptyMap())
+                onLoop(caulis) { layout.trustedUnlock() }
+            }
+        }
+
+    @Test
+    fun `an account pam_faillock locked counts down and takes no password`() = withNewm { caulis, layout, _ ->
+        val dir = Files.createTempDirectory("newm-faillock")
+        val user = Users.current(Users.currentUid())!!
+        val now = System.currentTimeMillis() / 1000
+        val tally = java.nio.ByteBuffer.allocate(64 * 3).order(java.nio.ByteOrder.nativeOrder())
+        for (n in 0 until 3) {
+            tally.putShort(n * 64 + 54, 1)
+            tally.putLong(n * 64 + 56, now - 10)
+        }
+        Files.write(dir.resolve(user), tally.array())
+        val conf = dir.resolve("faillock.conf")
+        Files.writeString(conf, "dir = $dir\ndeny = 3\nunlock_time = 120\n")
+        val checked = java.util.concurrent.LinkedBlockingQueue<String>()
+        val before = passwordCheck
+        passwordCheck = { _, _, password -> checked += password; AuthOutcome(false) }
+        Config.loadConfig(mapOf("language" to "en", "panels" to mapOf("lock" to mapOf("faillock_conf" to conf.toString()))))
+        try {
+            onLoop(caulis) { layout.ensureLocked(anim = false) }
+            waitUntil("the lock screen") { onLoop(caulis) { caulis.desktop.keyboardWidget === layout.panelsUi.lockScreenWidget() } }
+            val notes = onLoop(caulis) { layout.notes() }
+            assertTrue(notes.lockout.startsWith("Too many wrong passwords: try again in 1:"), notes.lockout)
+            assertFalse(notes.canSubmit)
+            Thread.sleep(300)
+            press(caulis, KEY_A)
+            press(caulis, KEY_ENTER)
+            Thread.sleep(300)
+            assertTrue(checked.isEmpty(), "no password checked while locked")
+            // Unlocked by pam_faillock (its records reset): passwords are taken again.
+            Files.write(dir.resolve(user), ByteArray(0))
+            waitUntil("taken again") { onLoop(caulis) { layout.notes().canSubmit } }
+        } finally {
+            passwordCheck = before
+            Config.loadConfig(emptyMap())
+            onLoop(caulis) { layout.trustedUnlock() }
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     // --- the harness: newm's layout on a headless Caulis, and a small Wayland client
 
     @Test
@@ -117,7 +234,7 @@ class LockTest {
         }
     }
 
-    private fun withNewm(test: (Caulis, Layout, Client) -> Unit) {
+    private fun withNewm(configure: Caulis.() -> Unit = {}, test: (Caulis, Layout, Client) -> Unit) {
         assumeTrue(Files.isDirectory(Path.of("/dev/dri")), "no GPU")
         val dir = Files.createTempDirectory("newm-lock-test")
         val caulis = Caulis().apply {
@@ -126,6 +243,7 @@ class LockTest {
             socketDirectory = dir
             exitAfterSeconds = 60 // (never a hanging test run)
             mode(LOCKED_MODE) {}
+            configure()
         }
         val layout = Layout(caulis)
         val started = CompletableFuture<Unit>()
@@ -244,5 +362,10 @@ class LockTest {
     private companion object {
         const val BTN_LEFT = 0x110
         const val KEY_A = 30
+        const val KEY_B = 48
+        const val KEY_ENTER = 28
+        const val KEY_SPACE = 57
+        const val KEY_CAPSLOCK = 58
+        const val KEY_LEFTMETA = 125
     }
 }

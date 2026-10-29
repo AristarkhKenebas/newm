@@ -32,6 +32,12 @@ private val confGreeterCommand = configuredValue<String?>("greeter_command", nul
 /** What a password check says: whether it was right, and (if not) the words to show for it. */
 internal data class AuthOutcome(val ok: Boolean, val message: String? = null)
 
+/**
+ * How a password is checked: PAM (service, user, password), on a thread of its own. Tests put
+ * a fake one here; the password never leaves this call.
+ */
+internal var passwordCheck: (service: String, user: String, password: String) -> AuthOutcome = { service, user, password -> Pam.authenticate(service, user, password) }
+
 private interface Backend {
     fun initAuth(user: String, message: String? = null) {}
     fun enterCred(cred: String) {}
@@ -55,13 +61,19 @@ private class PamBackend(private val auth: AuthBackend) : Backend {
         val u = user ?: return
         // (One check at a time: a second Enter while PAM thinks is not a second guess.)
         if (checking) return log.info { "A password check runs already: this one is not taken" }
+        // pam_faillock locked the account: a password now would only count as one more wrong one
+        // (and make the lock longer), so none is checked until it unlocks.
+        if (confFaillock() && Faillock.read(u)?.locked == true) {
+            log.info { "The account is locked by pam_faillock: the password is not checked" }
+            return initAuth(u, "Too many wrong passwords: the account is locked for a while.")
+        }
         checking = true
         val number = ++attempt
         val service = confPamService().ifBlank { "login" }
         // (PAM may wait seconds after a wrong password: not on the compositor's thread.)
         Thread({
             val outcome = try {
-                Pam.authenticate(service, u, cred)
+                passwordCheck(service, u, cred)
             } catch (e: Throwable) {
                 // (libpam missing, or the FFI refused: said on the lock screen, never a lock screen that waits for ever.)
                 log.error("PAM could not be used", e)
@@ -285,6 +297,10 @@ class AuthBackend(private val layout: Layout) {
     private val greeterUser = confGreeterUser()
     private val backend: Backend
 
+    /** Wrong passwords since the screen locked (shown on the lock screen). */
+    var failures = 0
+        private set
+
     init {
         if (currentUser == null) log.error("Could not find the current user (uid $uid): the lock screen says so")
         backend = if (isGreeter()) GreetdBackend(this) else PamBackend(this)
@@ -312,6 +328,7 @@ class AuthBackend(private val layout: Layout) {
 
     fun lock() {
         log.trace { "Locking for user $currentUser" }
+        failures = 0
         val user = currentUser
         if (user == null) {
             // (Said on the lock screen: nothing can be checked without the user's name.)
@@ -349,6 +366,7 @@ class AuthBackend(private val layout: Layout) {
             waitingCred = mapOf("kind" to "auth_request_cred", "user" to forUser, "message" to message)
         }
         if (error != null) waitingCred = waitingCred + ("error" to error) else waitingCred = waitingCred - "error"
+        waitingCred = if (failures > 0) waitingCred + ("failures" to failures) else waitingCred - "failures"
         log.trace { "Requesting credentials" }
         publish(AuthRequest(waitingCred, ::onCred))
         state = "wait_cred"
@@ -356,9 +374,11 @@ class AuthBackend(private val layout: Layout) {
 
     internal fun authResult(successful: Boolean) {
         if (!successful) {
-            log.info { "Verification failed" } // (the backend asks again by itself)
+            failures++
+            log.info { "Verification failed ($failures since locking)" } // (the backend asks again by itself)
             return
         }
+        failures = 0
         state = "initial"
         if (isGreeter()) {
             log.info { "Starting session after successful verification" }

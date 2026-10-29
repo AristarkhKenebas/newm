@@ -104,6 +104,7 @@ programs.newm.enable = true;
 - [Все настройки](docs/ru/settings.md) и `newm cmd`
 - [Если что-то пошло не так](docs/ru/troubleshooting.md)
 - [Вся документация](docs/ru/README.md)
+- [Что изменилось](CHANGELOG.md) (на английском)
 
 Нашли проблему? Пожалуйста, [создайте issue](https://github.com/AristarkhKenebas/newm/issues)
 ([что в него написать](docs/ru/testing.md#как-сообщить-о-проблеме)).

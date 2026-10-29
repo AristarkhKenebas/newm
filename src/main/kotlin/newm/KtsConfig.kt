@@ -45,6 +45,8 @@ object NewmScriptCompilation : ScriptCompilationConfiguration({
     defaultImports(
         "newm.*", "newm.SystemInfo.cpu", "newm.SystemInfo.memory", "newm.SystemInfo.temperature", "newm.SystemInfo.battery",
         "newm.SystemInfo.wifi", "newm.SystemInfo.date", "newm.SystemInfo.time", "newm.SystemInfo.user",
+        // (windowRule { ignore(WindowRequest.MAXIMIZE) }: as Hyprland's suppress_event.)
+        "dev.caulis.core.WindowRequest",
     )
     jvm { dependenciesFromCurrentContext(wholeClasspath = true) }
     ide { acceptedLocations(ScriptAcceptedLocation.Everywhere) }

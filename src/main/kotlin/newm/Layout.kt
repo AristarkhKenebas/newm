@@ -112,16 +112,16 @@ internal fun score(
         run { val t = w2; w2 = h2; h2 = t }
     }
     // Now either im == 1, jm == 0 or im == jm == 1.
-    val di = i2 - (i1 + w1)
-    if (di < 0) return 1000.0
+    // (A hair's breadth counts as touching: windows on screens lie at thirds, fifths, ...)
+    val eps = 1e-6
+    val di = max(0.0, i2 - (i1 + w1)).takeIf { i2 - (i1 + w1) > -eps } ?: return 1000.0
     if (jm == 1) {
-        val dj = j2 - (j1 + h1)
-        if (dj < 0) return 1000.0
+        val dj = max(0.0, j2 - (j1 + h1)).takeIf { j2 - (j1 + h1) > -eps } ?: return 1000.0
         return di + dj
     }
     val dj = when {
-        j2 >= j1 + h1 -> j2 - (j1 + h1)
-        j1 >= j2 + h2 -> j1 - (j2 + h2)
+        j2 >= j1 + h1 - eps -> max(0.0, j2 - (j1 + h1))
+        j1 >= j2 + h2 - eps -> max(0.0, j1 - (j2 + h2))
         else -> -1.0
     }
     return di + dj
@@ -362,6 +362,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     val keyProcessor = KeyProcessor()
     val dbusEndpoint = DBusEndpoint(this)
 
+    /** What keeps the computer awake besides Wayland (D-Bus, MPRIS, logind), and in words for the bar. */
+    val idleInhibit = IdleInhibitState(this)
+
     /** newm's own lock screen and launcher. */
     val panelsUi = Panels(this)
     val authBackend = AuthBackend(this)
@@ -486,7 +489,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         // Idle: Caulis says when nobody is there (programs that keep the screen on hold it off),
         // newm counts the seconds and goes through energy.idle_times.
         caulis.onIdle(1, resume = { idleSince = null; onIdle(0.0, false) }) { idleSince = now() - 1.0 }
-        caulis.onStart { caulis.every(1000) { idleSince?.let { onIdle(now() - it, false) } } }
+        caulis.onStart { caulis.every(1000) { idleTick() } }
         caulis.onStart { main() }
     }
 
@@ -728,6 +731,14 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         )
     }
 
+    /** Where [view]'s window shows in the layout's state now: its place cut by its clip (null: not shown). */
+    internal fun shownArea(view: View): Rect? {
+        val up = view.upState ?: return null
+        val p = placeOf(view.reducer(up, state)) ?: return null
+        val rect = Rect(Math.floor(p.x).toInt(), Math.floor(p.y).toInt(), Math.ceil(p.width).toInt(), Math.ceil(p.height).toInt())
+        return p.clip?.let { rect.intersect(it) } ?: rect
+    }
+
     // --- setup -----------------------------------------------------------------------------------
 
     private fun setupWorkspaces() {
@@ -934,6 +945,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         queue.start()
         panelLauncher.start()
         dbusEndpoint.start()
+        idleInhibit.start()
         barModel.notifications.start()
         try {
             confOnStartup()()
@@ -960,6 +972,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     private fun terminateNow() {
+        idleInhibit.stop()
         dbusEndpoint.stop()
         barModel.notifications.stop()
         panelLauncher.stop()
@@ -1161,6 +1174,41 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     private val warnedPlacement = HashSet<String>()
 
+    /**
+     * On screens (screens { }): puts the new tiled [view] on a screen of [wsState] and tiles
+     * them anew; its state there is given back. A child window goes right after its window on
+     * its screen, any other by windows { newPlacement }: after the focused one ("right-of-focused",
+     * "beside-focused"), on the last screen ("end"), on the first with room ("original"). A
+     * full screen: on a new one right after it.
+     */
+    internal fun placeOnScreen(view: View, workspace: Workspace, wsState: WorkspaceState): ViewState {
+        val screens = wsState.readScreens()
+        screens.forEach { s -> s.windows.remove(view.handle) }
+        fun tiledOf(v: View?): Int? = generateSequence(v) { it.parent }.firstOrNull { a -> a !== view && wsState.viewStates[a.handle]?.let { it.isTiled && it.swallowed == null } == true }?.handle
+        val child = view.openedAsChildOf()?.takeIf { confChildPlacement() != "over" }?.let(::tiledOf)
+        val placement = if (child != null) "child" else confPlaceBesideFocused()?.let { if (it) "beside-focused" else "original" } ?: confNewPlacement()
+        val anchor = child ?: tiledOf(view.focusedAtOpen) ?: tiledOf(findFocusedView()?.takeIf { it !== view })
+            ?: workspace.focusViewHint?.takeIf { h -> h != view.handle && wsState.viewStates[h]?.isTiled == true }
+        fun room(s: Screen) = s.windows.size < Screens.capacity(s.layout ?: Screens.defaultLayout())
+        val anchorScreen = anchor?.let { a -> screens.indexOfFirst { a in it.windows } }?.takeIf { it >= 0 }
+        when {
+            placement == "original" || (anchorScreen == null && placement != "end") -> screens.firstOrNull(::room)?.windows?.add(view.handle)
+                ?: screens.add(Screen(null, mutableListOf(view.handle)))
+            placement == "end" -> screens.lastOrNull()?.takeIf(::room)?.windows?.add(view.handle) ?: screens.add(Screen(null, mutableListOf(view.handle)))
+            else -> {
+                val s = screens[anchorScreen!!]
+                if (room(s)) s.windows.add(s.windows.indexOf(anchor) + 1, view.handle)
+                else screens.add(anchorScreen + 1, Screen(null, mutableListOf(view.handle)))
+            }
+        }
+        if (placement !in setOf("child", "original", "end", "right-of-focused", "beside-focused") && warnedPlacement.add(placement)) {
+            log.warn("windows { newPlacement = \"$placement\" } is none of right-of-focused, beside-focused, end, original: right-of-focused")
+        }
+        wsState.viewStates[view.handle] = ViewState(isTiled = true, stackIdx = view.handle)
+        wsState.writeScreens(screens)
+        return wsState.viewState(view)
+    }
+
     // Room for [w] x [h] tiles at [i], [j]: with [columns], every window from column [i] on
     // moves [w] right (a column put in); else every window from row [j] on moves [h] down. A
     // window reaching over that line from before stays; if it is in the way still, the place
@@ -1292,6 +1340,29 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         return false
     }
 
+    // resize { onBorder }: on screens, a press in the room right beside a window (no window
+    // under the pointer, within borderGrabSize of it) drags that window's border.
+    private fun resizeAtBorder(button: Int): Boolean {
+        if (!Screens.on() || !ScreenResize.onBorder() || button != ScreenResize.borderButton() || overviewShown()) return false
+        val d = caulis.desktop
+        val x = d.pointerX
+        val y = d.pointerY
+        if (d.windowAt(x, y) != null) return false
+        val g = ScreenResize.borderGrab()
+        for (v in tiles(activeWorkspace())) {
+            val r = shownArea(v) ?: continue
+            if (x < r.x - g || x > r.x + r.width + g || y < r.y - g || y > r.y + r.height + g) continue
+            val ex = when { x < r.x -> -1; x > r.x + r.width -> 1; else -> 0 }
+            val ey = when { y < r.y -> -1; y > r.y + r.height -> 1; else -> 0 }
+            if (ex == 0 && ey == 0) continue
+            log.info { "Border of ${v.appId} grabbed" }
+            if (!v.isFocused()) v.focus()
+            enterOverlay(ScreenResizeOverlay(this, v, ex, ey, button))
+            return true
+        }
+        return false
+    }
+
     /** The window drawn under the pointer now (also where windows take no clicks: the overview). */
     fun viewUnderPointer(dx: Double = 0.0, dy: Double = 0.0): View? {
         val d = caulis.desktop
@@ -1335,6 +1406,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             if (res == 1) break
         }
         if (overlay == null && chooseInOverview(button, pressed)) return true
+        if (overlay == null && pressed && resizeAtBorder(button)) return true
         overlay?.takeIf { it.ready }?.let { return it.onButton(timeMillis, button, pressed) }
         return false
     }
@@ -1406,8 +1478,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // The window under the pointer (as Hyprland's Super+drag), focused; else the focused one.
             // (In the overview windows take no clicks: the one drawn under the pointer there.)
             val under = if (overviewShown()) viewUnderPointer() else caulis.desktop.let { d -> d.windowAt(d.pointerX, d.pointerY) }?.let(::viewOf)
+            // (In the overview windows are not resized: they are seen from afar.)
+            if (gesture.kind == moveResize[2] && overviewShown()) {
+                log.info { "Resizing is off in the overview" }
+                return true
+            }
             val view = under?.also { if (!it.isFocused()) it.focus() } ?: findFocusedView()
             if (view != null && view.isFloat(state)) return enter(MoveResizeFloatingOverlay(this, view))
+            // On screens: the window's edges by the quarter grabbed, within its screen.
+            if (view != null && view.isTiled(state) && Screens.on() && gesture.kind == moveResize[2]) {
+                val d = caulis.desktop
+                val (ex, ey) = shownArea(view)?.let { grabbedEdges(it, d.pointerX, d.pointerY) } ?: (1 to 1)
+                return enter(ScreenResizeOverlay(this, view, ex, ey))
+            }
             if (view != null && view.isTiled(state)) return enter(MoveResizeOverlay(this, view))
         }
         val swipe = confGestureBindingSwipe()
@@ -1487,6 +1570,21 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     // A stage's seconds: its own setting (energy.dim_after, ...), else idle_times' [index]; 0: never.
     private fun idleSeconds(own: Any?, index: Int): Double =
         (own as? Number)?.toDouble() ?: confIdleTimes().getOrNull(index)?.toDouble() ?: 0.0
+
+    // Each second: what keeps the computer awake is looked at (the bar shows it); while newm's own
+    // keep-awake (caffeine, newm cmd inhibit-idle) holds, nobody-there counts from now — when it
+    // ends, the screen does not dim or lock at once for the time that passed meanwhile.
+    private fun idleTick() {
+        idleInhibit.tick()
+        val since = idleSince ?: return
+        if (caffeineOn || idleInhibitUser) {
+            idleSince = now()
+            // (Dimmed or dark already when it began: lit again, as when someone is back.)
+            if (idleDone.any { !it.startsWith("after:") } || screensOff) onIdle(0.0, false)
+            return
+        }
+        onIdle(now() - since, false)
+    }
 
     /**
      * [elapsed] seconds without input (0: someone is back). Each stage (dim_after: "idle",
@@ -1654,7 +1752,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (justLost) lostFocus = null
         if (closingFocused === view) closingFocused = null
         if (focusedView === view) focusedView = null
-        val (s, wsState, _) = state.findViewOrNull(view) ?: run {
+        val (s, wsState, closedWs) = state.findViewOrNull(view) ?: run {
             // (A view destroyed before it was shown.)
             views.remove(view.handle)
             view.releaseDamage()
@@ -1705,26 +1803,33 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
         }
 
+        // On screens: the window's screen tiled anew, taking windows of the next ones (screens { pullBack }).
+        val closedPage = s.page.takeIf { s.isTiled && Screens.on() }
+        fun LayoutState.withoutIt(): LayoutState {
+            val r = unswallowing(view).withoutViewState(view)
+            if (closedPage != null) r.workspaceStates[closedWs]?.pullBackScreens(closedPage)
+            return r
+        }
         val bv = bestView?.takeIf { it in views }
         if (bv != null) {
             log.trace { "Found view to focus: ${views[bv]}" }
             animateTo({ st ->
                 val next = views[bv]
                 val result = if (next != null) {
-                    val r = st.unswallowing(view).focusingView(next).withoutViewState(view).constrain()
+                    val r = if (closedPage != null) st.withoutIt().constrain().focusingView(next) else st.unswallowing(view).focusingView(next).withoutViewState(view).constrain()
                     focusBorders.updateFocus(next, null to r)
                     next.focus()
                     r
                 } else {
                     // (The view may be gone meanwhile.)
                     focusBorders.unfocus()
-                    st.unswallowing(view).withoutViewState(view).constrain()
+                    st.withoutIt().constrain()
                 }
                 null to result
             }, "windowsOut", { views.remove(view.handle); view.releaseDamage() })
         } else {
             if (wasFocused) focusBorders.unfocus()
-            animateTo({ st -> null to st.unswallowing(view).withoutViewState(view).constrain() }, "windowsOut", { views.remove(view.handle); view.releaseDamage() })
+            animateTo({ st -> null to st.withoutIt().constrain() }, "windowsOut", { views.remove(view.handle); view.releaseDamage() })
         }
     }
 
@@ -2138,6 +2243,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             val (vs, _, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to s
             val ws = workspaces.firstOrNull { it.handle == wsHandle }
             if (!vs.isTiled || ws == null) return@animateTo null to s
+            // (On screens: its screen, whole.)
+            if (Screens.on() && vs.page >= 0) return@animateTo null to s.replacingWorkspaceState(ws) { copy(size = 1.0).focusingScreen(vs.page) }
             val size = max(1.0, max(vs.w, vs.h))
             null to s.replacingWorkspaceState(ws) { copy(size = size, i = vs.i - (size - vs.w) / 2, j = vs.j - (size - vs.h) / 2) }
         }, "camera")
@@ -2153,6 +2260,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         private set
 
     fun sideBySide() {
+        // (On screens windows are side by side already: the screen's next layout instead.)
+        if (Screens.on()) return nextScreenLayout()
         // (The key that asked, for the words if there is no neighbour.)
         val key = runningKey
         val view = findFocusedView() ?: return
@@ -2401,6 +2510,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     fun moveFocusedView(di: Int, dj: Int) {
+        // On screens: it changes places with the window that way on its screen, or goes onto the next screen that way.
+        if (Screens.on()) return onScreens("move ${di} ${dj}") { view, ws, wsState, screens, k ->
+            val s0 = wsState.viewState(view)
+            val sameScreen = screens[k].windows.filter { it != view.handle }
+            val other = sameScreen.mapNotNull { h -> wsState.viewStates[h]?.let { h to score(s0.i, s0.j, s0.w, s0.h, di, dj, it.i, it.j, it.w, it.h) } }
+                .filter { it.second < 1000.0 }.minByOrNull { it.second }?.first
+            val along = if (Screens.down()) dj else di
+            when {
+                other != null -> swapIn(screens[k].windows, view.handle, other)
+                along != 0 -> toScreen(screens, k, view.handle, along)
+                else -> false
+            }
+        }
         animateTo({ s ->
             val view = findFocusedView() ?: return@animateTo null to s
             try {
@@ -2415,7 +2537,145 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }, "windowsMove")
     }
 
+    // --- screens (screens { }) ---------------------------------------------------------------------------
+
+    /**
+     * Changes the screens of the focused tiled window's workspace by [change] (given the view,
+     * its workspace and state, the screens and the index of its own; true: changed), then
+     * tiles them anew and brings the view onto the window's screen. [what] is for the log.
+     */
+    private fun onScreens(what: String, change: (View, Workspace, WorkspaceState, MutableList<Screen>, Int) -> Boolean) {
+        if (!Screens.on()) return
+        val view = findFocusedView()?.let { v -> generateSequence(v) { it.parent }.firstOrNull { it.isTiled(state) } } ?: return
+        animateTo({ s ->
+            val (_, wsState0, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to null
+            val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return@animateTo null to null
+            if (wsState0.isFullscreen()) return@animateTo null to null
+            val wsState = wsState0.copy()
+            val screens = wsState.readScreens()
+            val k = screens.indexOfFirst { view.handle in it.windows }.takeIf { it >= 0 } ?: return@animateTo null to null
+            if (!change(view, ws, wsState, screens, k)) return@animateTo null to null
+            wsState.writeScreens(screens)
+            wsState.validateStackIndices(view)
+            log.info { "Screens: $what: ${view.appId} now on screen ${wsState.viewState(view).page + 1}, place ${wsState.viewState(view).slot + 1}" }
+            null to s.settingWorkspaceState(ws, wsState.focusingView(view))
+        }, "windowsMove")
+    }
+
+    // [a] and [b] change places in [windows].
+    private fun swapIn(windows: MutableList<Int>, a: Int, b: Int): Boolean {
+        val x = windows.indexOf(a)
+        val y = windows.indexOf(b)
+        if (x < 0 || y < 0 || x == y) return false
+        windows[x] = b
+        windows[y] = a
+        return true
+    }
+
+    // Window [handle] of screen [k] onto the screen [by] (1: next, -1: previous): first there going on, last going back;
+    // a full screen gives it its window there in exchange; past the last (or first) one, a screen of its own.
+    private fun toScreen(screens: MutableList<Screen>, k: Int, handle: Int, by: Int): Boolean {
+        val from = screens[k].windows
+        val t = k + by.coerceIn(-1, 1)
+        if (t < 0 || t >= screens.size) {
+            if (from.size <= 1) return false
+            from.remove(handle)
+            screens.add(if (t < 0) 0 else screens.size, Screen(null, mutableListOf(handle)))
+            return true
+        }
+        val to = screens[t].windows
+        val at = if (by > 0) 0 else to.size
+        if (to.size >= Screens.capacity(screens[t].layout ?: Screens.defaultLayout())) {
+            val back = if (by > 0) to.first() else to.last()
+            val place = from.indexOf(handle)
+            from[place] = back
+            to[to.indexOf(back)] = handle
+        } else {
+            from.remove(handle)
+            to.add(at.coerceAtMost(to.size), handle)
+        }
+        return true
+    }
+
+    /** The focused window onto the next screen ([by] 1) or the one before (-1). */
+    fun moveFocusedViewToScreen(by: Int = 1) = onScreens("to screen ${if (by > 0) "+" else ""}$by") { view, _, _, screens, k -> toScreen(screens, k, view.handle, by) }
+
+    /** The focused window changes places with the next one on its screen (the last with the first). */
+    fun swapOnScreen(by: Int = 1) = onScreens("swap") { view, _, _, screens, k ->
+        val w = screens[k].windows
+        if (w.size < 2) false else swapIn(w, view.handle, w[(w.indexOf(view.handle) + by).mod(w.size)])
+    }
+
+    /** The focused window becomes its screen's first (the master); the master already: it changes places with the second. */
+    fun promoteToMaster() = onScreens("master") { view, _, _, screens, k ->
+        val w = screens[k].windows
+        when {
+            w.size < 2 -> false
+            w[0] == view.handle -> swapIn(w, w[0], w[1])
+            else -> {
+                w.remove(view.handle)
+                w.add(0, view.handle)
+                true
+            }
+        }
+    }
+
+    /** The focused window's screen takes the next layout of screens { cycle } (or [name]). */
+    fun nextScreenLayout(name: String? = null) {
+        val view = findFocusedView()
+        if (view == null) {
+            // (No window: the screen in view.)
+            val ws = activeWorkspace()
+            val wsState = state.workspaceState(ws)
+            val page = Screens.pageAt(wsState.i + .5, wsState.j + .5)
+            animateTo({ s ->
+                val next = s.workspaceState(ws).copy()
+                next.pageLayouts[page] = name ?: Screens.nextLayout(Screens.layoutOf(next, page))
+                null to s.settingWorkspaceState(ws, next)
+            }, "windowsMove")
+            return
+        }
+        onScreens("layout") { _, _, _, screens, k ->
+            val layout = name ?: Screens.nextLayout(screens[k].layout ?: Screens.defaultLayout())
+            screens[k].layout = layout
+            log.info { "Screen ${k + 1}: layout $layout" }
+            true
+        }
+    }
+
+    /** The view onto the next screen ([by] 1) or the one before (-1), its first window focused. */
+    fun focusScreen(by: Int = 1) {
+        if (!Screens.on()) return basicMove(if (Screens.down()) 0 else by, if (Screens.down()) by else 0)
+        val ws = activeWorkspace()
+        val wsState = state.workspaceState(ws)
+        val screens = wsState.readScreens()
+        val page = findFocusedView()?.let { wsState.viewStateOrNull(it)?.page } ?: Screens.pageAt(wsState.i + .5, wsState.j + .5)
+        val target = screens.getOrNull(page + by)?.windows?.firstOrNull() ?: return
+        views[target]?.let(::focusView)
+    }
+
     fun resizeFocusedView(di: Int, dj: Int) {
+        // On screens: its edge moves within its screen (the right or bottom one; on the screen's edge, the other one), the neighbours making way.
+        if (Screens.on()) {
+            val view = findFocusedView()?.let { v -> generateSequence(v) { it.parent }.firstOrNull { it.isTiled(state) } } ?: return
+            val step = ScreenResize.keyStep()
+            animateTo({ s ->
+                val (_, wsState0, wsHandle) = s.findViewOrNull(view) ?: return@animateTo null to null
+                val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return@animateTo null to null
+                val next = wsState0.copy()
+                // (Wider: the right edge right; on the screen's edge, resizeOnScreen moves the left one — so it goes the other way.)
+                val vs = next.viewState(view)
+                val (oi, oj) = Screens.origin(vs.page)
+                val rightOnEdge = vs.i - oi + vs.w > 1 - 1e-4
+                val bottomOnEdge = vs.j - oj + vs.h > 1 - 1e-4
+                val dx = di * step * (if (rightOnEdge) -1 else 1)
+                val dy = dj * step * (if (bottomOnEdge) -1 else 1)
+                if (!next.resizeOnScreen(view.handle, if (di != 0) 1 else 0, if (dj != 0) 1 else 0, dx, dy)) return@animateTo null to null
+                next.validateStackIndices(view)
+                null to s.settingWorkspaceState(ws, next.focusingView(view))
+            }, "windowsMove")
+            return
+        }
         animateTo({ s ->
             val view = findFocusedView() ?: return@animateTo null to s
             try {

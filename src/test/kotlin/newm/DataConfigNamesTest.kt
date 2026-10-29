@@ -75,4 +75,39 @@ class DataConfigNamesTest {
         val (_, wrong) = DataConfig.settings(mapOf("launcher" to mapOf("keys" to mapOf("C-x" to "jump"))), Caulis(), "config.json")
         assertTrue(wrong.single().contains("launcher.keys.C-x"), wrong.toString())
     }
+
+    @Test
+    fun `variables, env, permissions and misc, as Hyprland's`() {
+        val data = linkedMapOf<String, Any?>(
+            "variables" to linkedMapOf("mainMod" to "Super", "\$menu" to "wofi --show drun", "run" to "\$menu -i"),
+            "keys" to linkedMapOf("\$mainMod+D" to "launch \$run"),
+            "terminal" to "\$run",
+            "time_format" to "\$HOME",
+            "env" to linkedMapOf("XCURSOR_SIZE" to "24"),
+            "permissions" to linkedMapOf("rules" to listOf(linkedMapOf("program" to "/usr/bin/grim", "feature" to "screencopy", "mode" to "allow")), "defaults" to linkedMapOf("screencopy" to "ask")),
+            "misc" to linkedMapOf("swallow" to true, "vrr" to true, "middle_click_paste" to false, "focus_on_activate" to false),
+        )
+        val caulis = Caulis()
+        val (s, problems) = DataConfig.settings(data, caulis, "config.json")
+        assertEquals(emptyList(), problems)
+        @Suppress("UNCHECKED_CAST")
+        val help = (s["key_help"] as List<Pair<String, String>>).toMap()
+        assertTrue("L-d" in help, "a variable in a key: $help")
+        assertEquals("wofi --show drun -i", s["terminal"], "one variable using another")
+        assertEquals("\$HOME", s["time_format"], "a shell's variable stays")
+        assertEquals("24", s.at("env.XCURSOR_SIZE"))
+        applyMiscSettings(caulis, s)
+        assertEquals("24", caulis.environment["XCURSOR_SIZE"])
+        assertEquals(dev.caulis.wm.PermissionMode.ALLOW, caulis.permissions.modeOf("/usr/bin/grim", "grim", "screencopy"))
+        assertEquals(dev.caulis.wm.PermissionMode.ASK, caulis.permissions.modeOf("/usr/bin/obs", "obs", "screencopy"))
+        assertEquals(true, caulis.adaptiveSync)
+        assertEquals(false, caulis.primarySelection)
+        assertEquals(false, caulis.focusOnActivate)
+        // A reload without them: the variable goes, the rules go, the settings are as before.
+        applyMiscSettings(caulis, emptyMap())
+        assertEquals(null, caulis.environment["XCURSOR_SIZE"])
+        assertTrue(caulis.permissions.rules.isEmpty())
+        assertEquals(false, caulis.adaptiveSync)
+        assertEquals(true, caulis.focusOnActivate)
+    }
 }

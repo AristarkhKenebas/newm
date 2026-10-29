@@ -103,6 +103,7 @@ for every key, **Logo+Return** for a terminal, **Logo+D** for the launcher, and
 - [Every setting](docs/en/settings.md), and `newm cmd`
 - [When something goes wrong](docs/en/troubleshooting.md)
 - [All of the documentation](docs/en/README.md)
+- [What changed](CHANGELOG.md)
 
 Found a problem? Please [open an issue](https://github.com/AristarkhKenebas/newm/issues)
 ([what to put in it](docs/en/testing.md#reporting-a-problem)).

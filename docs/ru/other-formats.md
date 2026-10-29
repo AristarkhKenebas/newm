@@ -103,6 +103,10 @@ startup = { "mako" }
 | `launcher { keys { "C-n" { next() } } }` | `launcher.keys = { ["C-n"] = "next" }`: `next`, `previous`, `first`, `last`, `start`, `run_typed`, `close` | |
 | `panels { topBarProgram { cmd } }` | `panels.top_bar.cmd` (рядом с настройками собственной панели newm) | |
 | `terminal = "foot"` | `terminal = "foot"` | |
+| `val menu = "wofi"`, затем `menu` в клавише | `variables = { menu = "wofi --show drun" }`, затем `"$menu"` в любом тексте или клавише (`"L-d": "launch $menu"`); переменная может использовать предыдущие; прочие `$ИМЯ` (`$HOME`) остаются как есть | |
+| `env("XCURSOR_SIZE", "24")` | `env = { XCURSOR_SIZE = "24" }` | |
+| `permissions { rule("/usr/bin/grim", "screencopy", "allow"); default("screencopy", "ask") }` | `permissions = { rules = { { program = "/usr/bin/grim", feature = "screencopy", mode = "allow" } }, defaults = { screencopy = "ask" } }` | |
+| `misc { swallow = true; vrr = true }` | `misc = { swallow = true, vrr = true }` (`swallow_apps`, `swallow_except_titles`, `focus_on_activate`, `wake_on_input`, `middle_click_paste`, `background_color`) | |
 
 ## Nix
 

@@ -32,9 +32,6 @@ ru: Руководство: https://github.com/AristarkhKenebas/newm/blob/master
 en: Every setting: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/settings.md
 ru: Все настройки: https://github.com/AristarkhKenebas/newm/blob/master/docs/ru/settings.md
 
-en: --- Looks -----------------------------------------------------------------------------------
-ru: --- Внешний вид ------------------------------------------------------------------------------
-
 en: newm's own; or "~/Pictures/wallpaper.jpg" (an SVG stays sharp)
 ru: обои newm; или "~/Pictures/wallpaper.jpg" (SVG остаётся чётким)
 
@@ -67,9 +64,6 @@ ru: "wallpaper", "nord" (классические) или "#5b8cc8"
 
 en: "tonal", "vibrant", "expressive", "neutral", "monochrome"
 ru: "tonal", "vibrant", "expressive", "neutral", "monochrome"
-
-en: --- Animations ------------------------------------------------------------------------------
-ru: --- Анимации ---------------------------------------------------------------------------------
 
 en: newm's usual animations are on: windows glide to their places, the view glides when it moves.
 ru: Обычные анимации newm включены: окна плавно встают на места, вид плавно движется.
@@ -203,9 +197,6 @@ ru: мелкие движения: наведение, переключател�
 en: fading in at the start, out at the end (seconds)
 ru: проявление при запуске, угасание при выходе (секунды)
 
-en: --- Windows ---------------------------------------------------------------------------------
-ru: --- Окна ---------------------------------------------------------------------------------------
-
 en: windows' corners (bigger cuts into what programs draw at their edges)
 ru: углы окон (больше — сильнее срезает то, что программы рисуют у краёв)
 
@@ -272,6 +263,60 @@ ru: окно программы в фокусе без родителя (про�
 en: but not for these: their windows are their own
 ru: но не для этих: их окна — самостоятельные
 
+en: The wall in whole screens: each screen holds a few windows, the next one opens on the next screen.
+ru: Стена из целых экранов: на каждом экране несколько окон, следующее открывается на следующем экране.
+
+en: how many windows share a screen (4: as Hyprland's quarters)
+ru: сколько окон делят экран (4 — четверти, как в Hyprland)
+
+en: "rows", "grid" (halves, quarters), "master" (as i3), "dwindle", "monocle"
+ru: "rows", "grid" (половины, четверти), "master" (как в i3), "dwindle", "monocle"
+
+en: the master's share ("master")
+ru: доля главного окна ("master")
+
+en: "right", "top", "bottom"
+ru: "right", "top", "bottom"
+
+en: more room between windows, pixels
+ru: больше места между окнами, в пикселях
+
+en: where the next screen is: "right" or "down"
+ru: где следующий экран: "right" (справа) или "down" (снизу)
+
+en: a window closing: windows of the next screens move up
+ru: окно закрылось — окна следующих экранов подтягиваются
+
+en: true: the wall goes on under the bar, as newm
+ru: true — стена продолжается под панелью, как в newm
+
+en: what Super+Space goes through
+ru: что перебирает Super+Space
+
+en: newm's free wall of tiles instead
+ru: вместо этого свободная стена плиток newm
+
+en: Resizing windows on screens: only within their screen; zoom out for room.
+ru: Размер окон на экранах меняется только в пределах их экрана; для места отдалите вид.
+
+en: the quarter grabbed decides the corner, as Hyprland
+ru: четверть, за которую взяли, выбирает угол, как в Hyprland
+
+en: the room beside a window, dragged, resizes it
+ru: если тянуть промежуток рядом с окном, меняется его размер
+
+en: how far from a window, pixels
+ru: насколько далеко от окна, в пикселях
+
+en: nothing grows past its screen
+ru: ничто не вырастает за свой экран
+
+en: a corner keeps the window's shape
+ru: угол сохраняет форму окна
+
+en: with Super held
+ru: при зажатой Super
+
 en: a line around the focused window
 ru: линия вокруг окна в фокусе
 
@@ -331,9 +376,6 @@ ru: какую часть экрана занимает
 
 en: windows opening while it is shown go into it
 ru: окна, открытые, пока оно показано, попадают в него
-
-en: --- The bar and panels ----------------------------------------------------------------------
-ru: --- Панель и экраны ---------------------------------------------------------------------------
 
 en: newm's own bar at the top: see-through islands floating at the edge — the focused window,
 ru: Собственная панель newm сверху: полупрозрачные острова у края — окно в фокусе,
@@ -449,9 +491,6 @@ ru: указатель на снимке
 en: a command run with each file saved
 ru: команда, запускаемая с каждым сохранённым файлом
 
-en: --- Keyboard, mouse, monitors -----------------------------------------------------------
-ru: --- Клавиатура, мышь, мониторы -----------------------------------------------------------------
-
 en: Unset: the system's layouts (with Alt+Shift switching). Your own:
 ru: Не задано: раскладки системы (переключение Alt+Shift). Свои:
 
@@ -472,12 +511,6 @@ ru: Logo + тянуть левой кнопкой двигает окно, Logo 
 
 en: hideAfter: seconds the mouse is still
 ru: hideAfter: сколько секунд мышь неподвижна
-
-en: A monitor of its own (connectors: `newm cmd debug`):
-ru: Свой монитор (разъёмы показывает `newm cmd debug`):
-
-en: --- Keys ------------------------------------------------------------------------------------
-ru: --- Клавиши ------------------------------------------------------------------------------------
 
 en: A key in one line: bind("Super+Backspace", "close-window"). Keys are written as you say them:
 ru: Клавиша в одну строку: bind("Super+Backspace", "close-window"). Клавиши пишутся, как вы их называете:
@@ -533,8 +566,20 @@ ru: два окна рядом и обратно
 en: Moving a window on the wall
 ru: Двигать окно по стене
 
-en: Its size, in tiles (one tile: a screen at zoom 1)
-ru: Его размер в плитках (одна плитка: экран при масштабе 1)
+en: Screens: a few windows each
+ru: Экраны: по несколько окон на каждом
+
+en: the screen's next layout
+ru: следующая раскладка экрана
+
+en: the window changes places with the next one
+ru: окно меняется местами со следующим
+
+en: the window becomes the screen's master
+ru: окно становится главным на экране
+
+en: Its size (on screens: within its screen; else in tiles, one tile: a screen at zoom 1)
+ru: Его размер (на экранах — в пределах своего экрана; иначе в плитках, одна плитка: экран при масштабе 1)
 
 en: Windows
 ru: Окна
@@ -614,9 +659,6 @@ ru: мягче (и медленнее)
 en: Gestures of your own: the way the fingers go first decides; other ways stay newm's own.
 ru: Свои жесты: решает, куда пальцы пошли сначала; другие направления остаются жестами newm.
 
-en: --- The start ------------------------------------------------------------------------------------
-ru: --- Запуск --------------------------------------------------------------------------------------
-
 en: Programs started with the session: one after another once newm is shown, once per session
 ru: Программы, запускаемые с сеансом: одна за другой, когда newm показан, раз за сеанс
 
@@ -650,9 +692,6 @@ ru: true: окна прошлого сеанса возвращаются при
 en: programs never started again
 ru: программы, которые никогда не запускаются снова
 
-en: --- When things happen --------------------------------------------------------------------------
-ru: --- Когда что-то происходит ------------------------------------------------------------------
-
 en: (or in autostart { } above)
 ru: (или в autostart { } выше)
 
@@ -664,3 +703,164 @@ ru: и экраны гаснут (0: никогда)
 
 en: something of your own after so many seconds
 ru: что-то своё через столько-то секунд
+
+en: what keeps the screen on (videos): all by default
+ru: что не даёт экрану гаснуть (видео): по умолчанию всё
+
+en: the first keyboard layout while locked ("keep": the one in use; shown either way)
+ru: первая раскладка, пока экран заблокирован ("keep": текущая; видна в любом случае)
+
+en: a small keyboard on the lock screen (touch screens)
+ru: маленькая клавиатура на экране блокировки (сенсорные экраны)
+
+# Hyprland-like sections (programs, monitors, environment, permissions, misc, rules).
+
+en: --- Your programs --------------------------------------------------------------------------
+ru: --- Ваши программы -------------------------------------------------------------------------
+
+en: The programs you use, each by a name of your own (as Hyprland's $terminal, $menu): the keys
+ru: Программы, которыми вы пользуетесь, каждая под своим именем (как $terminal, $menu в Hyprland): клавиши
+
+en: at the end start them, bind("Super+E", "launch", fileManager). Any Kotlin works in this file.
+ru: в конце запускают их, bind("Super+E", "launch", fileManager). В этом файле работает любой Kotlin.
+
+en: Super+E
+ru: Super+E
+
+en: Super+B
+ru: Super+B
+
+en: a launcher of your own for Super+D ("wofi --show drun"); without: newm's own
+ru: свой лаунчер для Super+D ("wofi --show drun"); без него — лаунчер newm
+
+en: --- Monitors -------------------------------------------------------------------------------
+ru: --- Мониторы -------------------------------------------------------------------------------
+
+en: Unset: each monitor at its best mode, side by side. A monitor of its own (connectors: `newm cmd debug`):
+ru: Без настроек: каждый монитор в лучшем режиме, рядом друг с другом. Свой монитор (разъёмы: `newm cmd debug`):
+
+en: turned (1: 90°, 2: 180°, 3: 270°)
+ru: повёрнут (1: 90°, 2: 180°, 3: 270°)
+
+en: --- Environment ----------------------------------------------------------------------------
+ru: --- Окружение ------------------------------------------------------------------------------
+
+en: Variables for the programs newm starts, also handed to the session's services (Hyprland's env).
+ru: Переменные для программ, которые запускает newm, передаются и службам сеанса (env в Hyprland).
+
+en: --- Autostart ------------------------------------------------------------------------------
+ru: --- Автозапуск -----------------------------------------------------------------------------
+
+en: --- Look -----------------------------------------------------------------------------------
+ru: --- Внешний вид ----------------------------------------------------------------------------
+
+en: Windows: the gaps, corners and see-through (Hyprland's general and decoration)
+ru: Окна: зазоры, углы и прозрачность (general и decoration в Hyprland)
+
+en: The line around the focused window (Hyprland's border; a gradient as col.active_border).
+ru: Линия вокруг окна в фокусе (border в Hyprland; градиент как col.active_border).
+
+en: --- Animations -----------------------------------------------------------------------------
+ru: --- Анимации -------------------------------------------------------------------------------
+
+en: --- The bar, notifications, screenshots ----------------------------------------------------
+ru: --- Панель, уведомления, снимки экрана -----------------------------------------------------
+
+en: --- Input ----------------------------------------------------------------------------------
+ru: --- Ввод -----------------------------------------------------------------------------------
+
+en: --- Layout ---------------------------------------------------------------------------------
+ru: --- Раскладка окон -------------------------------------------------------------------------
+
+en: newm's wall: tiles on an endless wall, or whole screens of a few windows each.
+ru: Стена newm: плитки на бесконечной стене или целые экраны по несколько окон.
+
+en: --- Window rules ---------------------------------------------------------------------------
+ru: --- Правила окон ---------------------------------------------------------------------------
+
+en: Caulis' rules for how windows behave (Hyprland's windowrule): stay awake, ignore requests, ...
+ru: Правила Caulis о поведении окон (windowrule в Hyprland): не давать экрану гаснуть, пропускать запросы, ...
+
+en: the screen stays on (idle_inhibit)
+ru: экран не гаснет (idle_inhibit)
+
+en: suppress_event maximize
+ru: suppress_event maximize
+
+en: not in screen sharing
+ru: не видно при показе экрана
+
+en: panels and launchers (Hyprland's layerrule)
+ru: панели и лаунчеры (layerrule в Hyprland)
+
+en: --- Workspaces -----------------------------------------------------------------------------
+ru: --- Рабочие столы --------------------------------------------------------------------------
+
+en: newm has one wall per monitor instead of numbered workspaces (Hyprland's workspace rules:
+ru: У newm одна стена на монитор вместо нумерованных рабочих столов (правила рабочих столов Hyprland:
+
+en: docs/en/hyprland.md).
+ru: docs/ru/hyprland.md).
+
+en: --- Permissions ----------------------------------------------------------------------------
+ru: --- Разрешения -----------------------------------------------------------------------------
+
+en: Which programs may take pictures of the screen, see the window list, read the clipboard, show
+ru: Каким программам можно снимать экран, видеть список окон, читать буфер обмена, показывать
+
+en: panels, lock, arrange monitors (as Hyprland's permissions). Nothing said: every program may.
+ru: панели, блокировать экран, настраивать мониторы (как permissions в Hyprland). Без правил: всем можно.
+
+en: A program is its path or its name (regular expressions); "ask" shows a card (screencopy only).
+ru: Программа — её путь или имя (регулярные выражения); "ask" показывает карточку (только screencopy).
+
+en: features: screencopy, window-list, clipboard, panels, lock, monitors, gamma
+ru: возможности: screencopy, window-list, clipboard, panels, lock, monitors, gamma
+
+en: programs no rule is about (Hyprland's enforce_permissions)
+ru: программы, о которых нет правила (enforce_permissions в Hyprland)
+
+en: --- Misc -----------------------------------------------------------------------------------
+ru: --- Разное ---------------------------------------------------------------------------------
+
+en: a window opened from a terminal takes its place (enable_swallow)
+ru: окно, открытое из терминала, занимает его место (enable_swallow)
+
+en: the terminals that do (a regular expression for the app id)
+ru: терминалы, которые так делают (регулярное выражение для app id)
+
+en: not when the terminal's title matches
+ru: но не когда заголовок терминала подходит
+
+en: a window asking for the focus gets it (false: only marked)
+ru: окно, просящее фокус, получает его (false: только отмечается)
+
+en: keys and the mouse switch dark screens on again
+ru: клавиши и мышь снова включают погасшие экраны
+
+en: variable refresh rate (FreeSync) on every monitor that has it
+ru: переменная частота обновления (FreeSync) на каждом мониторе, где она есть
+
+en: paste what is selected with the middle button (at the next start)
+ru: вставка выделенного средней кнопкой (со следующего запуска)
+
+en: under everything, where no wallpaper is
+ru: под всем, где нет обоев
+
+en: --- Keybindings ----------------------------------------------------------------------------
+ru: --- Клавиши --------------------------------------------------------------------------------
+
+en: your own launcher instead
+ru: свой лаунчер вместо него
+
+en: held keys: how fast they repeat, and after how long (ms)
+ru: удерживаемые клавиши: как быстро повторяются и через сколько (мс)
+
+en: -1.0 to 1.0 (Hyprland's sensitivity)
+ru: от -1.0 до 1.0 (sensitivity в Hyprland)
+
+en: or "flat": no acceleration
+ru: или "flat": без ускорения
+
+en: one device by its name (libinput list-devices)
+ru: одно устройство по его имени (libinput list-devices)

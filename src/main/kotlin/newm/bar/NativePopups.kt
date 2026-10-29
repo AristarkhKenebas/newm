@@ -364,6 +364,8 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
                         }, bt.powered, colors, text, Modifier.weight(1f), onOpen = { model.toggle(PopupKind.BLUETOOTH, popup.bar, popup.anchorX) }) { bt.switchPower(!bt.powered) }
                     }
                     "caffeine" -> WideTile(model, "coffee", "Caffeine", when {
+                        // (Off, but a program keeps the screen on: which one.)
+                        !caffeine && wm.idleInhibit.reasons.isNotEmpty() -> newm.idleReasonsText(wm.idleInhibit.reasons)
                         !caffeine -> tr("Off")
                         until == Long.MAX_VALUE -> tr("On")
                         else -> tr("%s more").replace("%s", hoursOf(((until - now) / 60_000L).toInt() + 1))

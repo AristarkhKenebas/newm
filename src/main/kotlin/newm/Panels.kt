@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +39,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -177,15 +179,87 @@ class Panels(private val wm: Layout) {
     /** The widget Caulis locks the session with (newm's lock screen; with a lock panel program, it stays hidden). */
     fun lockScreenWidget(): ComposeWidget? = lockWidget
 
+    // The keyboard layout before the lock screen switched to the first one (lock { layoutOnLock = "first" }).
+    private var layoutBeforeLock: Int? = null
+
     /** The lock screen gets the keyboard (and newm's own and Caulis's keys stop meanwhile). */
     fun locked() {
         lockWidget?.let { wm.caulis.desktop.focusWidget(it) }
+        val now = wm.caulis.keyboardLayoutNow
+        if (confLayoutOnLock().lowercase() == "first" && now != 0 && layoutBeforeLock == null) {
+            layoutBeforeLock = now
+            wm.caulis.switchKeyboardLayout(0)
+            log.info { "The lock screen switched to the first keyboard layout (lock { layoutOnLock = \"first\" })" }
+        }
     }
 
     fun unlocked() {
         request = null
         message = ""
         if (wm.caulis.desktop.keyboardWidget === lockWidget) wm.caulis.desktop.focusWidget(null)
+        // (Back to the layout of before, unless it was switched on the lock screen meanwhile.)
+        layoutBeforeLock?.let { before -> if (wm.caulis.keyboardLayoutNow == 0) wm.caulis.switchKeyboardLayout(before) }
+        layoutBeforeLock = null
+    }
+
+    /** What the lock screen says besides the password: its notes, as they read now. */
+    internal data class LockNotes(
+        /** The keyboard layout's short name ("EN", "RU"; "" with one layout). */
+        val layout: String,
+        val capsLock: Boolean,
+        /** Why the last try failed, or what the lock screen asks ("" for nothing). */
+        val message: String,
+        /** Wrong passwords since locking, and how many more pam_faillock allows ("" before the first). */
+        val failures: String,
+        /** pam_faillock locked the account: until when, as a countdown ("" when not). */
+        val lockout: String,
+        /** Enter checks a password now (false: one is being checked, or the account is locked). */
+        val canSubmit: Boolean,
+    )
+
+    /** The lock screen's notes now ([faillock]: pam_faillock's state, or null for none). */
+    internal fun lockNotes(faillock: FaillockState? = currentFaillock(), nowSeconds: Long = System.currentTimeMillis() / 1000): LockNotes {
+        val req = request
+        val layout = lockLayoutLabel(wm.caulis)
+        val failures = (req?.data?.get("failures") as? Number)?.toInt() ?: 0
+        val locked = faillock?.locked == true
+        val lockout = when {
+            !locked -> ""
+            faillock!!.lockedUntil < 0 -> tr("Too many wrong passwords: the account stays locked until an administrator unlocks it (faillock --reset).")
+            else -> tr("Too many wrong passwords: try again in %s").replace("%s", Faillock.countdown(faillock.lockedUntil - nowSeconds))
+        }
+        val failed = if (failures == 0) "" else buildString {
+            append(tr("Wrong passwords since locking: %s").replace("%s", "$failures"))
+            faillock?.triesLeft?.takeIf { !locked }?.let { append(" · " + tr("%s more lock the account").replace("%s", "$it")) }
+        }
+        // A wrong password typed with a layout other than the first (Russian, say): said, as it is the likely cause.
+        val layoutHint = if (failures > 0 && layout.isNotEmpty() && wm.caulis.keyboardLayoutNow != 0) "\n" + tr("The keyboard layout is %s.").replace("%s", layout) else ""
+        return LockNotes(
+            layout = layout,
+            capsLock = wm.caulis.capsLockOn,
+            message = (if (req == null && message.isEmpty()) "" else tr(message)) + layoutHint,
+            failures = failed,
+            lockout = lockout,
+            canSubmit = req != null && req.data["kind"] == "auth_request_cred" && !req.replied && !locked,
+        )
+    }
+
+    // pam_faillock's state of the user asked for (lock { faillock }), or null.
+    private fun currentFaillock(): FaillockState? {
+        if (!confFaillock()) return null
+        val user = (request?.data?.get("user") as? String) ?: return null
+        return Faillock.read(user)
+    }
+
+    /** Checks [password] if the lock screen takes one now ([LockNotes.canSubmit]); true if it was taken. */
+    internal fun submitPassword(password: String, faillock: FaillockState? = currentFaillock()): Boolean {
+        val r = request ?: return false
+        if (!lockNotes(faillock).canSubmit) {
+            log.info { "Enter while a password is checked or the account is locked: what was typed stays" }
+            return false
+        }
+        reply(r, mapOf("cred" to password))
+        return true
     }
 
     // --- the launcher
@@ -295,9 +369,32 @@ class Panels(private val wm: Layout) {
             }
         }
         var password by remember { mutableStateOf("") }
+        var reveal by remember { mutableStateOf(false) }
         val focus = remember { FocusRequester() }
         val req = request
         LaunchedEffect(req) { runCatching { focus.requestFocus() } }
+        // pam_faillock's state: read when asked anew, and each second while the account is locked (the countdown).
+        var faillock by remember { mutableStateOf<FaillockState?>(null) }
+        var notes by remember { mutableStateOf(lockNotes(null)) }
+        LaunchedEffect(req) {
+            while (true) {
+                faillock = currentFaillock()
+                notes = lockNotes(faillock)
+                if (faillock?.locked != true) break
+                delay(1000)
+            }
+        }
+        // The layout and Caps Lock change with keys the lock screen does not see as text: looked at often.
+        LaunchedEffect(req, message) {
+            while (true) {
+                val n = lockNotes(faillock)
+                if (n != notes) notes = n
+                delay(200)
+            }
+        }
+        fun submit() {
+            if (submitPassword(password, faillock)) password = ""
+        }
         val c = lockColors()
         val panelText = c.text
         val panelDim = c.dim
@@ -331,26 +428,53 @@ class Panels(private val wm: Layout) {
                 } else {
                     BasicText((req?.data?.get("user") as String?) ?: SystemInfo.user(), style = TextStyle(color = panelText, fontSize = 20.sp))
                     Spacer(Modifier.height(16.dp))
-                    BasicTextField(
-                        password, { password = it },
-                        Modifier.width(320.dp).focusRequester(focus)
-                            .background(fieldBackground, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 12.dp)
-                            .onPreviewKeyEvent { e ->
-                                if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter)) {
-                                    request?.let { r -> if (r.data["kind"] == "auth_request_cred") reply(r, mapOf("cred" to password)) }
-                                    password = ""
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        textStyle = TextStyle(color = panelText, fontSize = 18.sp, textAlign = TextAlign.Center),
-                        cursorBrush = SolidColor(panelAccent),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // The keyboard layout ("EN", "RU"): a click switches it (the layout keys work here too).
+                        if (notes.layout.isNotEmpty()) {
+                            BasicText(
+                                notes.layout,
+                                Modifier.background(fieldBackground, RoundedCornerShape(8.dp)).clickable { wm.caulis.switchKeyboardLayout(wm.caulis.keyboardLayoutNow + 1) }
+                                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                                style = TextStyle(color = panelText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        BasicTextField(
+                            password, { password = it },
+                            Modifier.width(320.dp).focusRequester(focus)
+                                .background(fieldBackground, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 12.dp)
+                                .onPreviewKeyEvent { e ->
+                                    if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter)) {
+                                        // (While a password is checked or the account is locked, what was typed stays.)
+                                        submit()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                            singleLine = true,
+                            visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+                            textStyle = TextStyle(color = panelText, fontSize = 18.sp, textAlign = TextAlign.Center),
+                            cursorBrush = SolidColor(panelAccent),
+                        )
+                        if (confRevealButton()) {
+                            Spacer(Modifier.width(8.dp))
+                            RevealEye(panelDim) { reveal = it }
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
-                    BasicText(if (req == null && message.isEmpty()) "" else tr(message), style = TextStyle(color = panelDim, fontSize = 14.sp))
+                    if (notes.capsLock) LockNote(tr("Caps Lock is on"), panelAccent, bold = true)
+                    LockNote(if (req != null && req.replied) tr("Checking…") else notes.message, panelDim)
+                    LockNote(notes.lockout, panelAccent, bold = true)
+                    LockNote(notes.failures, panelDim)
+                    if (confOnScreenKeyboard()) {
+                        Spacer(Modifier.height(12.dp))
+                        OnScreenKeyboard(
+                            wm.caulis, notes.layout, panelText, fieldBackground,
+                            onText = { password += it }, onBackspace = { password = password.dropLast(1) }, onEnter = { submit() },
+                            onLayout = { wm.caulis.switchKeyboardLayout(wm.caulis.keyboardLayoutNow + 1) },
+                        )
+                    }
                 }
             }
         }
@@ -359,7 +483,9 @@ class Panels(private val wm: Layout) {
     private fun reply(req: AuthRequest, data: Map<String, Any?>) {
         if (req.replied) return
         req.replied = true
-        message = "…"
+        message = ""
+        // (A state change Compose sees: the lock screen says "Checking…" meanwhile.)
+        request = AuthRequest(req.data, req.callback).also { it.replied = true }
         req.callback(data)
     }
 }

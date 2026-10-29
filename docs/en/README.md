@@ -18,6 +18,7 @@ Start here:
 
 Then, when you need them:
 
+- [Coming from Hyprland](hyprland.md): every Hyprland setting and what it is in newm.
 - [Key bindings](keys.md): keys written as you say them ("Super+Backspace"), every action by name, ready-made sets.
 - [Every setting](settings.md): all sections and settings with their defaults, everything a
   key can do, and `newm cmd`.
@@ -29,3 +30,4 @@ Then, when you need them:
 - [When something goes wrong](troubleshooting.md).
 - [Testing newm](testing.md): a checklist for trying newm, and how to report a problem.
 - [Working on newm](development.md): building it, and working on newm from inside newm.
+- [What changed](../../CHANGELOG.md): the changelog.

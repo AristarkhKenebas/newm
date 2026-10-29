@@ -77,21 +77,30 @@ tasks.test {
 
 // The memory options of newm's Java (see application below).
 val NEWM_GC_OPTIONS = listOf(
-    "-XX:+UseG1GC", "-Xms16m", "-Xmx1g", "-XX:SoftMaxHeapSize=96m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=20",
+    "-XX:+UseG1GC", "-Xms16m", "-Xmx384m", "-XX:SoftMaxHeapSize=96m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=20",
     "-XX:G1PeriodicGCInterval=30000", "-XX:MaxMetaspaceSize=384m",
+    "-XX:MaxNewSize=24m", "-XX:ParallelGCThreads=2", "-XX:ConcGCThreads=1", "-XX:MarkStackSize=256k",
 )
 
 application {
     mainClass = "newm.MainKt"
     applicationName = "newm"
     // Java's memory for a program that runs all day beside others (measured headless with a few
-    // windows: ~20 MB live): G1, with short pauses, aiming at under 96 MB of heap (more only
-    // while it is needed: SoftMaxHeapSize) and giving back what it does not use — kept at most
-    // 20% above what is used, looked at every 30 seconds when nothing else made it collect; at
-    // most 1 GB, never Java's default of a quarter of the computer's memory (4.9 GB were seen).
-    // (Measured: ZGC kept ~350 MB of heap, ~700 MB in all; Serial paused up to 40 ms — dropped
-    // frames.) More options: JAVA_OPTS or NEWM_OPTS; NEWM_GC_OPTS replaces these memory options
-    // (another collector: NEWM_GC_OPTS="-XX:+UseZGC -Xmx1g").
+    // windows: ~20 MB live): G1, with short pauses, at most 384 MB (never Java's default of a
+    // quarter of the computer's memory: 4.9 GB were seen). Java 27's G1 sizes its heap by the
+    // time it spends collecting, aiming very low while the heap is small next to its maximum,
+    // and does not keep to SoftMaxHeapSize: during the start it grew the heap to 120-290 MB
+    // and kept it for minutes (the start used ~580 MB). So: a lower maximum (the heap grows in
+    // smaller steps), the young part at most 24 MB, two collector threads and one marking
+    // thread (each takes a few MB of its own), a marking stack that starts small (grows when
+    // needed), and newm collects once itself after its start's work (warmup.collect, while
+    // the pointer rests). The rest given back when unused: 20% above what is used, looked at
+    // every 30 seconds when nothing else made it collect. (Measured headless, the full
+    // template configuration and 4 terminals: ~310-390 MB after the start instead of ~460,
+    // at most ~450-470 instead of ~580. ZGC kept ~350 MB of heap, ~700 MB in all; Serial
+    // paused up to 40 ms — dropped frames.) More options: JAVA_OPTS or NEWM_OPTS;
+    // NEWM_GC_OPTS replaces these memory options (another collector, a bigger heap for
+    // screenshots of several 4K monitors: NEWM_GC_OPTS="-XX:+UseG1GC -Xmx1g").
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED") + NEWM_GC_OPTIONS
 }
 

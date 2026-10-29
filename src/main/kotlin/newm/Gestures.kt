@@ -206,7 +206,7 @@ class CGestureProvider(
             // ("swipe-2", as two fingers do) }. Taken only when the layout wants it (Super
             // held): else the program gets the click.
             val move = mouseButtonCode(confMoveButton())
-            val resize = mouseButtonCode(confResizeButton())
+            val resize = mouseButtonCode(ScreenResize.mouseButton() ?: confResizeButton())
             if (captured != null || button != move && button != resize) return 0
             if (start(if (button == move) 1 else 2) != 2) return 0
             log.trace { "Super + ${mouseButtonName(button)} drag: ${if (button == move) "moving" else "resizing"}" }

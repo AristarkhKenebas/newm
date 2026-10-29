@@ -237,7 +237,7 @@ internal class SessionKeeper(private val wm: Layout) {
             windows += mapOf(
                 "app" to view.appId, "title" to view.title, "command" to command, "start" to start,
                 "dir" to dir, "workspace" to wm.workspaces.indexOfFirst { it.handle == wsHandle },
-                "tiled" to vs.isTiled, "i" to vs.i, "j" to vs.j, "w" to vs.w, "h" to vs.h,
+                "tiled" to vs.isTiled, "i" to vs.i, "j" to vs.j, "w" to vs.w, "h" to vs.h, "page" to vs.page, "slot" to vs.slot,
                 "fx" to vs.floatPos.first, "fy" to vs.floatPos.second, "fw" to vs.floatSize.first, "fh" to vs.floatSize.second,
                 "focused" to view.isFocused(),
             )
@@ -380,6 +380,8 @@ internal class SessionKeeper(private val wm: Layout) {
                 val next = wsState.replacingViewState(view) {
                     if (entry["tiled"] == true && isTiled) {
                         d("i")?.let { i = it }; d("j")?.let { j = it }; d("w")?.let { w = it }; d("h")?.let { h = it }
+                        // (On screens: its screen and place there, the layout tiling it again.)
+                        if (Screens.on()) { d("page")?.let { page = it.toInt() }; d("slot")?.let { slot = it.toInt() }; sized = null }
                     } else if (entry["tiled"] != true && !isTiled) {
                         val fx = d("fx") ?: floatPos.first
                         val fy = d("fy") ?: floatPos.second

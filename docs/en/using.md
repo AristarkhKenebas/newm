@@ -242,6 +242,11 @@ newm's window management is the original's (the Python newm, jbuchermn/newm): th
 of whole tiles, the same zooming, swiping, snapping, overview, fullscreen and placement
 algorithm. What is different on purpose:
 
+- **Screens** (`screens { }`, on by default): the wall is in whole screens, each holding
+  `windowsPerScreen` windows (2) tiled by a layout (columns; rows, grid, master, dwindle,
+  monocle, ...); the next window opens on the next screen, and the view moves by whole
+  screens only. Under the bars only the bars show (`windowsUnderBar`). `screens { enabled =
+  false }` gives the original's free wall of tiles, where everything below holds.
 - **Where new windows open**: right of the focused window, the rest moving on (the original:
   the first free tile in view) — `windows { newPlacement = "original" }` for that.
 - **Child windows** (dialogs, viewers) are tiled below their window, and the focus goes back

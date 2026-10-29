@@ -72,6 +72,13 @@ action, or are your own: `bind("Super+B", "launch", "firefox", description = "Fi
 | `move-window-right` |  | Move the window right |
 | `move-window-up` |  | Move the window up |
 | `move-window-down` |  | Move the window down |
+| `next-screen` |  | Next screen |
+| `previous-screen` |  | Previous screen |
+| `window-to-next-screen` |  | Move the window onto the next screen |
+| `window-to-previous-screen` |  | Move the window onto the previous screen |
+| `swap-on-screen` |  | Swap the window with the next one on its screen |
+| `promote-to-master` |  | Make the window the screen's master |
+| `next-layout` | `[name]` | Next layout of the screen |
 | `window-narrower` |  | Window narrower |
 | `window-wider` |  | Window wider |
 | `window-shorter` |  | Window shorter |
@@ -98,6 +105,13 @@ action, or are your own: `bind("Super+B", "launch", "firefox", description = "Fi
 
 `unbind("Super+S")` takes a key away (one of the template's you do not want); binding a key
 again replaces what it did.
+
+The screens' keys of the template (screens { }): Super+Space `next-layout`, Super+Shift+Space
+`swap-on-screen`, Super+Ctrl+Return `promote-to-master`, Super+PageDown / Super+PageUp
+`next-screen` / `previous-screen`, Super+Shift+PageDown / Super+Shift+PageUp
+`window-to-next-screen` / `window-to-previous-screen`. On screens Super+Shift+arrows swap the
+window with its neighbour on the screen (at the screen's edge: onto the next screen), and
+Super+Ctrl+arrows resize it within its screen.
 
 ## With code of your own
 

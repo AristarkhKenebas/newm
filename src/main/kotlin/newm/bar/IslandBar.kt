@@ -1066,10 +1066,11 @@ private fun BatteryModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
         else -> colors.text
     }
     Chip(colors, model.clicksOf(bar, "battery", Clicks(click = { model.toggle(PopupKind.BATTERY, bar, bar.originX + x) })), onX = { x = it },
-        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "battery") { batteryHint(b) + if (model.wm.caffeineOn) "\n" + tr("Caffeine: the screen stays on") else "" } }) {
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "battery") { batteryHint(b) + (if (model.wm.caffeineOn) "\n" + tr("Caffeine: the screen stays on") else "") + newm.idleReasonsLine(model.wm.idleInhibit.reasons) } }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (model.wm.caffeineUntil != null) {
-                GlyphIcon(Glyph.COFFEE, colors.accent, bar.iconSize.dp)
+            // (Caffeine in the accent; a program keeping the screen on, the cup in the text's colour.)
+            if (model.wm.caffeineUntil != null || model.wm.idleInhibit.reasons.isNotEmpty()) {
+                GlyphIcon(Glyph.COFFEE, if (model.wm.caffeineUntil != null) colors.accent else colors.text, bar.iconSize.dp)
                 Spacer(Modifier.width(6.dp))
             }
             GlyphIcon(Glyph.BATTERY, colors.text, (bar.iconSize + 4).dp, level = b.percent / 100f, bolt = b.plugged, accent = fill)
@@ -1099,10 +1100,10 @@ private fun QuickModule(bar: Bar, model: BarModel, colors: BarColors) {
         scroll = { dy -> val n = model.notches("${bar.top}/quick", dy); if (n != 0) model.stepBrightness(-n * confBrightnessStep()) }))
     val wheelHint = clicks.changed.none { it.startsWith("scroll") }
     Chip(colors, clicks, onX = { x = it }, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "quick") {
-        "Quick actions" + (model.status.brightness?.let { "\n" + tr("Brightness %s").replace("%s", "$it%") + if (wheelHint) " · " + tr("the wheel changes it") else "" } ?: "")
+        "Quick actions" + (model.status.brightness?.let { "\n" + tr("Brightness %s").replace("%s", "$it%") + if (wheelHint) " · " + tr("the wheel changes it") else "" } ?: "") + (if (model.status.battery == null) newm.idleReasonsLine(model.wm.idleInhibit.reasons) else "")
     } }) {
         // Its own picture: caffeine shows beside the battery (here only on a computer without one).
-        val cup = model.wm.caffeineOn && model.status.battery == null
+        val cup = (model.wm.caffeineOn || model.wm.idleInhibit.reasons.isNotEmpty()) && model.status.battery == null
         GlyphIcon(if (cup) Glyph.COFFEE else Glyph.GRID, if (cup) colors.accent else colors.text, bar.iconSize.dp)
     }
 }

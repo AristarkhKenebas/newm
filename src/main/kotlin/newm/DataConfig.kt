@@ -24,14 +24,17 @@ import dev.caulis.wm.Caulis
 object DataConfig {
 
     /** newm's settings of [data], and what is wrong in it. */
-    fun settings(data: Map<String, Any?>, caulis: Caulis, name: String): Pair<Map<String, Any?>, List<String>> {
+    fun settings(given: Map<String, Any?>, caulis: Caulis, name: String): Pair<Map<String, Any?>, List<String>> {
         val problems = ArrayList<String>()
         val out = LinkedHashMap<String, Any?>()
         @Suppress("UNCHECKED_CAST")
         fun section(key: String): MutableMap<String, Any?> = out.getOrPut(key) { LinkedHashMap<String, Any?>() } as MutableMap<String, Any?>
+        // variables { menu = "wofi" }: "$menu" in any text (and key) below is "wofi", as Hyprland's $menu.
+        val data = withVariables(given, name, problems)
 
         for ((key, value) in data) {
             when (key) {
+                "variables" -> continue
                 "keys" -> {
                     val keys = value as? Map<*, *> ?: problems.add("$name: keys is a table of combination = action").let { continue }
                     // Keys as people write them ("Super+Backspace") or newm's ("L-BackSpace"); null or false: none.
@@ -71,6 +74,8 @@ object DataConfig {
                     k["model"]?.let { pywm["xkb_model"] = it }
                     k["numlock"]?.let { pywm["numlock"] = it }
                     k["binding_modifiers"]?.let { pywm["binding_modifiers"] = it }
+                    k["repeat_rate"]?.let { pywm["repeat_rate"] = it }
+                    k["repeat_delay"]?.let { pywm["repeat_delay"] = it }
                 }
                 // compositor { quit_while_locked, lock_failure, lock_show_millis, stop_programs_on_quit, process_start, java_updated_notice, config_compiler_* }.
                 "compositor" -> (value as? Map<*, *>)?.let { c ->
@@ -91,6 +96,8 @@ object DataConfig {
                     i["focus_follows_mouse"]?.let { pywm["focus_follows_mouse"] = it }
                     i["xwayland"]?.let { pywm["enable_xwayland"] = it }
                     i["title_bars"]?.let { pywm["encourage_csd"] = it }
+                    // input { pointer_speed, ..., touchpad { }, devices { name = { } } }: as they are.
+                    for (key in INPUT_KEYS) i[key]?.let { pywm[key] = it }
                     // input { tablet { } } (its names as they are: monitor, left_handed, lower_button, ...).
                     (i["tablet"] as? Map<*, *>)?.let { pywm["tablet"] = merge(pywm["tablet"], it.entries.associate { (k, v) -> k.toString() to v }) }
                 }
@@ -182,6 +189,28 @@ object DataConfig {
             native["texts"] = { names.map { n -> SYSTEM_TEXTS[n.toString()]?.invoke() ?: n.toString() } }
         }
         return out to problems
+    }
+
+    // [data] with "$name" in its texts and keys replaced by its "variables" (a variable may use those before it).
+    @Suppress("UNCHECKED_CAST")
+    private fun withVariables(data: Map<String, Any?>, name: String, problems: MutableList<String>): Map<String, Any?> {
+        val given = data["variables"] ?: return data
+        val table = given as? Map<*, *> ?: return data.also { problems += "$name: variables is a table of name = text" }
+        val variables = LinkedHashMap<String, String>()
+        fun substitute(text: String): String = VARIABLE.replace(text) { m -> variables[m.groupValues[1]] ?: m.value }
+        for ((k, v) in table) {
+            val key = k.toString().removePrefix("$")
+            if (!key.matches(Regex("[A-Za-z_][A-Za-z0-9_]*"))) problems += "$name: variables.$k: a name is letters, digits and _"
+            else if (v is String || v is Number || v is Boolean) variables[key] = substitute(v.toString())
+            else problems += "$name: variables.$k: a text, a number or true/false"
+        }
+        fun walk(value: Any?): Any? = when (value) {
+            is String -> substitute(value)
+            is Map<*, *> -> value.entries.associateTo(LinkedHashMap()) { (k, v) -> (if (k is String) substitute(k) else k) to walk(v) }
+            is List<*> -> value.map(::walk)
+            else -> value
+        }
+        return data.entries.associateTo(LinkedHashMap()) { (k, v) -> k to (if (k == "variables") v else walk(v)) }
     }
 
     // gestures: the DSL's names (enabled, scale_px: gestures.c; dbus_enabled: gestures.dbus; bind:
@@ -332,5 +361,12 @@ private val NATIVE_BAR_KEYS = setOf(
 // A bar module's settings that are actions (on_scroll, a function of config.lua, gets the notches as it is).
 private val MODULE_ACTIONS = setOf("on_click", "on_middle", "on_right", "on_scroll_up", "on_scroll_down")
 
+// input { } settings passed on as they are (see applyDeviceSettings).
+private val INPUT_KEYS = listOf("pointer_speed", "accel_profile", "left_handed", "scroll_factor", "scroll_method", "scroll_button", "middle_button_emulation", "touchpad", "devices")
+
+// "$name" in a text: a variable (unknown names, like a shell's $HOME, stay as they are).
+private val VARIABLE = Regex("\\$([A-Za-z_][A-Za-z0-9_]*)")
+
 // The settings of compositor { } in config.json / config.lua.
-private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit", "process_start", "java_updated_notice", "config_compiler_jvm_options", "config_compiler_timeout_seconds")
+private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit", "process_start", "java_updated_notice", "config_compiler_jvm_options", "config_compiler_timeout_seconds",
+    "stall_report_ms", "trim_memory", "trim_memory_every_minutes", "malloc_pools", "quick_cursor", "widget_threads")

@@ -190,6 +190,30 @@ meanwhile. From a terminal: `newm cmd caffeine 45`, `newm cmd caffeine on`,
 `newm cmd caffeine off`. While `newm cmd inhibit-idle` runs, the same. Other times:
 `caffeine { choices = listOf(15, 45, 90, 0) }` (minutes; 0 is until turned off).
 
+### Videos keep the screen on
+
+Watching a video never dims, locks or suspends: programs that play one keep the screen on, and
+the bar says which (a cup beside the battery, its hint, and the Caffeine tile: "Firefox:
+video-playing"). newm listens to all the ways they ask:
+
+- **wayland**: a program's idle-inhibit while its window shows (mpv, VLC, browsers on Wayland);
+- **dbus**: `org.freedesktop.ScreenSaver.Inhibit` and `org.freedesktop.PowerManagement.Inhibit`
+  on the session bus (Firefox, Chromium, Telegram); a program that quits or crashes lets go;
+- **logind**: `systemd-inhibit --what=idle ...`;
+- **mpris**: a media player that says it is playing, while a window of its own shows — for
+  players that ask in none of the ways above. Music players are left out (`mprisIgnore`).
+
+```kotlin
+energy {
+    inhibitFrom = listOf("wayland", "dbus", "logind", "mpris")   // the default: all four
+    // mprisIgnore = listOf("spotify", "rhythmbox")              // players whose playing keeps nothing on
+    // logindCheckSeconds = 10                                   // how often logind is asked
+}
+```
+
+While the screen is locked they count for nothing (a paused video behind the lock screen does
+not keep it on); `caulis.idleInhibitorsWhileLocked = true` changes that.
+
 ### A screen locker of your own
 
 newm has its own lock screen. To use swaylock, gtklock or hyprlock instead:

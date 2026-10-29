@@ -73,6 +73,8 @@ fun main(args: Array<String>) {
         // What the one who started newm has to say (dev/newm-dev: "the new build crashed, the one before runs").
         onStart { System.getenv("NEWM_NOTICE")?.takeIf { it.isNotBlank() }?.let { notify(it, title = "newm") } }
         layout = Layout(this)
+        // Permission rules that say "ask" (permissions { }): asked with a card of newm's.
+        askPermission = permissionAsker(layout)
 
         // The configuration's warnings while it is first taken on (a value of the wrong kind):
         // Caulis shows them only once it runs, so they are kept and shown then.
@@ -80,6 +82,9 @@ fun main(args: Array<String>) {
         val watching = dev.caulis.log.Log.watch { if (it.area == "config" && (it.isWarning || it.isError)) early += it }
         val settings = config.load() ?: config.loadDefault() ?: defaultConfig(layout)
         Config.loadConfig(settings)
+        // Compose made ready on a thread of its own while newm starts (its first scene, the
+        // bar's, took ~0.7 s of the compositor's thread: the pointer stood still).
+        if (configuredValue("warmup.compose", true)()) dev.caulis.compose.ComposeWarmup.start()
         applyHostSettings(settings)
         watching.close()
         onStart { early.forEach { notify(it.message, if (it.isError) dev.caulis.core.NoticeLevel.ERROR else dev.caulis.core.NoticeLevel.WARNING, "newm") } }
@@ -134,6 +139,8 @@ private fun dev.caulis.wm.Caulis.applyHostSettingsNow(settings: Map<String, Any?
     if (pywm?.get("java_updated_notice") == null) javaUpdatedNotice = "Java was updated: restart newm when convenient (newm cmd restart keep)"
     pywm?.let { applyPywmSettings(this, it) }
     (settings["outputs"] as? List<Map<String, Any?>>)?.let { applyOutputs(this, it) }
+    // env(...), permissions { }, misc { } (see Misc.kt).
+    applyMiscSettings(this, settings)
     // autostart { }, reveal { }, startupSound { } (see Startup.kt).
     applyStartupSettings(this, settings, greeter = Users.isGreeter())
     // Light or dark: always one of them (never "the programs' own", which left newm light).

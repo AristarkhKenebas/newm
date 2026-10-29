@@ -129,6 +129,9 @@ class NewmConfig(
     /** The wallpaper. */
     fun background(configure: BackgroundSection.() -> Unit) = section("background", ::BackgroundSection, configure)
 
+    /** The start's work done ahead (menus drawn, Compose made ready) and the memory given back after it. */
+    fun warmup(configure: WarmupSection.() -> Unit) = section("warmup", ::WarmupSection, configure)
+
     /** A monitor by its connector ("eDP-1", "HDMI-A-1"): its size, rate, scale, place. */
     fun output(name: String, configure: OutputSection.() -> Unit) {
         @Suppress("UNCHECKED_CAST")
@@ -155,6 +158,18 @@ class NewmConfig(
 
     /** Where new windows and a program's child windows (dialogs, viewers) open, and where the focus goes when they close. */
     fun windows(configure: WindowsSection.() -> Unit) = section("windows", ::WindowsSection, configure)
+
+    /**
+     * The wall in whole screens: how many windows a screen holds and how they are tiled there
+     * (`screens { windowsPerScreen = 4; layout = "grid" }`); the next window opens on the next screen.
+     */
+    fun screens(configure: ScreensSection.() -> Unit) = section("screens", ::ScreensSection, configure)
+
+    /**
+     * Resizing windows on screens: by the quarter grabbed (as Hyprland), at their borders,
+     * within their screen (`resize { quarters = true; onBorder = true; clampToScreen = true }`).
+     */
+    fun resize(configure: ResizeSection.() -> Unit) = section("resize", ::ResizeSection, configure)
 
     /** The line around the focused window. */
     fun focus(configure: FocusSection.() -> Unit) = section("focus", ::FocusSection, configure)
@@ -206,6 +221,44 @@ class NewmConfig(
      * one (Terminal=true), defaultTerminal(). Unset: \$TERMINAL, else the first installed.
      */
     var terminal by setting<String>("terminal")
+
+    /**
+     * An environment variable for every program newm starts, also handed to the session's
+     * services (portals, systemd's user programs) — Hyprland's `env = XCURSOR_SIZE,24`:
+     * `env("XCURSOR_SIZE", "24")`. Programs started already keep theirs.
+     */
+    fun env(name: String, value: String) {
+        require(name.isNotEmpty() && '=' !in name) { "env: \"$name\" is not a variable's name" }
+        nested("env")[name] = value
+    }
+
+    /**
+     * Which programs may take pictures of the screen, see the window list, read the clipboard,
+     * show panels, lock the screen, arrange monitors — Hyprland's permissions:
+     * `permissions { rule("/usr/bin/grim", "screencopy", "allow") }`. Nothing said: all may.
+     */
+    fun permissions(configure: PermissionsSection.() -> Unit) = section("permissions", ::PermissionsSection, configure)
+
+    /** Settings of Hyprland's misc { }: window swallowing, focus on activation, waking the screens, VRR, middle-click paste. */
+    fun misc(configure: MiscSection.() -> Unit) = section("misc", ::MiscSection, configure)
+
+    /**
+     * A Caulis rule for some windows: how they behave (Hyprland's window rules newm's
+     * view { rules } has not) — `windowRule { appId("mpv"); keepAwake = true }`,
+     * `windowRule { appId(Regex("firefox|chromium")); ignore(WindowRequest.MAXIMIZE) }`
+     * (suppress_event), `windowRule { title("Sharing indicator"); hiddenFromCapture = true }`,
+     * minSize, maxSize, takesFocus. Where windows go is newm's: view { rules }.
+     */
+    fun windowRule(configure: dev.caulis.wm.WindowRule.() -> Unit) {
+        @Suppress("UNCHECKED_CAST")
+        (values.getOrPut("window_rules") { ArrayList<Any?>() } as MutableList<Any?>) += configure
+    }
+
+    /** A Caulis rule for some panels (Hyprland's layer rules): `layerRule { namespace("fuzzel"); blur = true; dimAround = 0.4f }`. */
+    fun layerRule(configure: dev.caulis.wm.PanelRule.() -> Unit) {
+        @Suppress("UNCHECKED_CAST")
+        (values.getOrPut("layer_rules") { ArrayList<Any?>() } as MutableList<Any?>) += configure
+    }
 
     /** Where the colours of the bar, menus and borders come from (unset: the colours menu's choice, else the wallpaper). */
     fun colors(configure: ColorsSection.() -> Unit) = section("colors", ::ColorsSection, configure)
@@ -284,6 +337,20 @@ class NewmConfig(
     fun defaultTerminal(): String = terminal?.takeIf { it.isNotBlank() } ?: newm.defaultTerminal()
 }
 
+class WarmupSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** newm's menus drawn once, off screen, a moment after the start: their first opening is quick (true). */
+    var enabled by setting<Boolean>("enabled")
+
+    /** Each is drawn only once the pointer rested this long, in milliseconds (800): it holds the compositor's thread a moment. */
+    var restMillis by setting<Int>("rest_ms")
+
+    /** Compose (the bar, the menus) made ready on a thread of its own while newm starts (true). */
+    var compose by setting<Boolean>("compose")
+
+    /** Java's heap made small again after the start: one full collection while the pointer rests, some 10-50 ms (true). */
+    var collect by setting<Boolean>("collect")
+}
+
 class BackgroundSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
     /** The picture ("~/Pictures/wall.jpg"; "resource:wallpaper.jpg" is newm's own). */
     var path by setting<String>("path")
@@ -341,6 +408,12 @@ class KeyboardSection internal constructor(values: MutableMap<String, Any?>) : S
      * options say — caps:super makes Caps Lock a Super) or "physical" (the printed keys).
      */
     var bindingModifiers by setting<String>("binding_modifiers")
+
+    /** Keys held down repeat this many times a second (Hyprland's repeat_rate; 25 by default). */
+    var repeatRate by setting<Int>("repeat_rate")
+
+    /** ... after being held this long, milliseconds (Hyprland's repeat_delay; 600 by default). */
+    var repeatDelay by setting<Int>("repeat_delay")
 }
 
 /** The compositor underneath: quitting, locking, the programs it started. */
@@ -378,6 +451,24 @@ class CompositorSection internal constructor(values: MutableMap<String, Any?>) :
 
     /** At most this many seconds for compiling config.kts (180), then it is stopped and said (the start's first: NEWM_CONFIG_COMPILER_TIMEOUT). */
     var configCompilerTimeoutSeconds by setting<Int>("config_compiler_timeout_seconds")
+
+    /** The main loop busy this long (ms) with one thing is logged with what it was (log area native, level 2); 0: not watched (50). */
+    var stallReportMillis by setting<Int>("stall_report_ms")
+
+    /** Memory the C library freed (Skia, the GPU driver) given back after the start and every [trimMemoryEveryMinutes] (true). */
+    var trimMemory by setting<Boolean>("trim_memory")
+
+    /** How often [trimMemory] gives memory back after the start, minutes; 0: only after the start (10). */
+    var trimMemoryEveryMinutes by setting<Int>("trim_memory_every_minutes")
+
+    /** At most this many of glibc's malloc pools for newm itself; 0: glibc's own (2; only at the start). */
+    var mallocPools by setting<Int>("malloc_pools")
+
+    /** The cursor (on the monitor's cursor plane) moves the moment the pointer does, not with the next frame (true). */
+    var quickCursor by setting<Boolean>("quick_cursor")
+
+    /** Threads the bar and the menus are drawn into pixels on (composed on newm's own); 0: all on newm's own (2). */
+    var widgetThreads by setting<Int>("widget_threads")
 }
 
 class CursorSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
@@ -412,6 +503,72 @@ class InputSection internal constructor(values: MutableMap<String, Any?>) : Sect
 
     /** Programs draw their own title bars (true), or windows have none (false, newm's look). */
     var titleBars by setting<Boolean>("encourage_csd")
+
+    /** Every mouse and touchpad: how fast the pointer goes, -1.0 to 1.0 (Hyprland's sensitivity; 0: as it is). */
+    var pointerSpeed by setting<Double>("pointer_speed")
+
+    /** "adaptive" (faster when moved fast) or "flat" (Hyprland's accel_profile). */
+    var accelProfile by setting<String>("accel_profile")
+
+    /** Buttons swapped for the left hand. */
+    var leftHanded by setting<Boolean>("left_handed")
+
+    /** Scrolling this many times faster (1.0: as it is). */
+    var scrollFactor by setting<Double>("scroll_factor")
+
+    /** How touchpads and mice scroll: "two-finger", "edge", "button" (with [scrollButton] held) or "none". */
+    var scrollMethod by setting<String>("scroll_method")
+
+    /** The button held to scroll by moving ("button"): a Linux button code, 274 the middle one. */
+    var scrollButton by setting<Int>("scroll_button")
+
+    /** Left and right pressed together are the middle button. */
+    var middleButtonEmulation by setting<Boolean>("middle_button_emulation")
+
+    /** Touchpads only (Hyprland's input:touchpad): `touchpad { disableWhileTyping = true; clickFinger = true }`. */
+    fun touchpad(configure: TouchpadSection.() -> Unit) = section("touchpad", ::TouchpadSection, configure)
+
+    /** One device by its name (`newm cmd debug` lists them; * matches anything) — Hyprland's device { }: `device("epic-mouse-v1") { pointerSpeed = -0.5 }`. */
+    fun device(name: String, configure: DeviceSection.() -> Unit) = DeviceSection(nested("devices", name)).configure()
+}
+
+/** A touchpad's own settings (unset: those of input { }, then the touchpad's own). */
+class TouchpadSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    var naturalScroll by setting<Boolean>("natural_scroll")
+    var scrollFactor by setting<Double>("scroll_factor")
+    var pointerSpeed by setting<Double>("pointer_speed")
+
+    /** Not used while typing (and a moment after). */
+    var disableWhileTyping by setting<Boolean>("disable_while_typing")
+
+    /** A tap, then a drag drags. */
+    var tapAndDrag by setting<Boolean>("tap_and_drag")
+
+    /** Lifting the finger in a drag does not end it at once. */
+    var dragLock by setting<Boolean>("drag_lock")
+
+    /** A click by the number of fingers (two: right, three: middle) instead of where it is pressed (Hyprland's clickfinger_behavior). */
+    var clickFinger by setting<Boolean>("click_finger")
+
+    /** Two and three fingers tapped: "lrm" (right, middle) or "lmr" (middle, right), Hyprland's tap_button_map. */
+    var tapButtons by setting<String>("tap_buttons")
+
+    /** Off while a mouse is plugged in. */
+    var offWithMouse by setting<Boolean>("off_with_mouse")
+}
+
+/** One input device's own settings (see [InputSection.device]). */
+class DeviceSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** False: not used at all (a keyboard you do not trust: Hyprland's keyboard permission). */
+    var enabled by setting<Boolean>("enabled")
+    var pointerSpeed by setting<Double>("pointer_speed")
+    var accelProfile by setting<String>("accel_profile")
+    var naturalScroll by setting<Boolean>("natural_scroll")
+    var leftHanded by setting<Boolean>("left_handed")
+    var scrollFactor by setting<Double>("scroll_factor")
+    var middleButtonEmulation by setting<Boolean>("middle_button_emulation")
+    var tapToClick by setting<Boolean>("tap_to_click")
+    var disableWhileTyping by setting<Boolean>("disable_while_typing")
 }
 
 /** What a rule says about a window (see [ViewSection.rules]). */
@@ -545,6 +702,95 @@ class WindowsSection internal constructor(values: MutableMap<String, Any?>) : Se
 
     /** Programs whose new windows are windows of their own even then (app ids: terminals, browsers by default). */
     var childBySameAppExcept by setting<List<String>>("child_by_same_app_except")
+}
+
+/**
+ * The wall in whole screens: `screens { windowsPerScreen = 2; layout = "columns" }`. A screen is
+ * exactly the monitor's room left by the bars; it holds up to [windowsPerScreen] windows, tiled
+ * by [layout]; the next window opens on the next screen (right of it, or below: [overflow]).
+ * Moving between windows of one screen leaves the view; to another screen it moves one screen.
+ */
+class ScreensSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** Screens (true, the default); false: newm's free wall of tiles, as the original. */
+    var enabled by setting<Boolean>("enabled")
+
+    /** How many windows a screen holds (2 by default); the next one opens on the next screen. */
+    var windowsPerScreen by setting<Int>("windows_per_screen")
+
+    /**
+     * How a screen's windows are tiled: "columns" (the default: side by side), "rows" (one above
+     * the other), "grid" (halves, then quarters, as Hyprland's), "dwindle" (each new one takes
+     * half of the last one's room), "spiral", "master" (one big window and strips beside it,
+     * as i3 and xmonad), "centered-master", "monocle" (one window a screen, as the original
+     * newm), or the name of one of [customLayouts].
+     */
+    var layout by setting<String>("layout")
+
+    /** The master's share of the screen ("master", "centered-master"): 0.6 by default. */
+    var masterRatio by setting<Double>("master_ratio")
+
+    /** Where the master is: "left" (the default), "right", "top" or "bottom". */
+    var masterSide by setting<String>("master_side")
+
+    /** Room between the windows and around them, in pixels (0 by default: view { padding } is there anyway). */
+    var gaps by setting<Int>("gaps")
+
+    /** Where the next screen is: "right" (the default) or "down". */
+    var overflow by setting<String>("overflow")
+
+    /** A window closing: the windows of the screens after it move up to fill its screen (true, the default). */
+    var pullBack by setting<Boolean>("pull_back")
+
+    /** Windows go on under the bars, as newm's wall (true); false (the default): under a bar only the bar shows. */
+    var windowsUnderBar by setting<Boolean>("windows_under_bar")
+
+    /** The layouts Super+Space goes through: "columns", "rows", "grid", "master", "monocle" by default. */
+    var cycle by setting<List<String>>("cycle")
+
+    /**
+     * Layouts of your own by name (any of Caulis' tiling layouts, or your own
+     * dev.caulis.tiling.Layout), to use in [layout] and [cycle]:
+     * `customLayout("wide-master", dev.caulis.tiling.MasterStack(ratio = 0.7))`.
+     */
+    fun customLayout(name: String, layout: dev.caulis.tiling.Layout) {
+        @Suppress("UNCHECKED_CAST")
+        val map = values.getOrPut("custom_layouts") { LinkedHashMap<String, Any?>() } as MutableMap<String, Any?>
+        map[name] = layout
+    }
+}
+
+/**
+ * Resizing windows on screens (screens { }): `resize { quarters = true; clampToScreen = true }`.
+ * A window grows only within its screen — its neighbours there make way; to give one more room,
+ * zoom out and resize there (it still stays within its screen). In the overview nothing is resized.
+ */
+class ResizeSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** The button that resizes with Super held ("right"; unset: mouse { resizeButton }). */
+    var mouseButton by setting<String>("mouse_button")
+
+    /** The quarter of the window grabbed decides the corner that moves (true, as Hyprland); false: always the bottom right one. */
+    var quarters by setting<Boolean>("quarters")
+
+    /** The room right beside a window, dragged without Super, resizes it (true). */
+    var onBorder by setting<Boolean>("on_border")
+
+    /** How far from a window its border can be grabbed, in pixels (10). */
+    var borderGrabSize by setting<Int>("border_grab_size")
+
+    /** The button that drags a border ("left"). */
+    var borderButton by setting<String>("border_button")
+
+    /** Nothing grows past its screen's edges (true); false: a window at a screen's edge may grow over the next screen. */
+    var clampToScreen by setting<Boolean>("clamp_to_screen")
+
+    /** A corner dragged keeps the window's shape (false). */
+    var keepAspect by setting<Boolean>("keep_aspect")
+
+    /** The smallest a window gets, as a part of its screen (0.1). */
+    var minSize by setting<Double>("min_size")
+
+    /** How far a resizing key moves an edge, as a part of the screen (0.1). */
+    var keyStep by setting<Double>("key_step")
 }
 
 /**
@@ -738,6 +984,28 @@ class LockPanelSection internal constructor(values: MutableMap<String, Any?>) : 
      * notifications never show over the lock screen, and nothing but it takes input.
      */
     var showOnLock by setting<List<String>>("show_on_lock")
+
+    /**
+     * The keyboard layout when the screen locks: "keep" (the default: the one in use, shown
+     * beside the password — a click switches it) or "first" (the first of keyboard { layouts },
+     * "us" of "us,ru", and back to the one before after unlocking).
+     */
+    var layoutOnLock by setting<String>("layout_on_lock")
+
+    /** An eye beside the password shows it while held (true). */
+    var revealButton by setting<Boolean>("reveal_button")
+
+    /** A small keyboard on the lock screen, following the layout in use (false): for touch screens and broken keyboards. */
+    var onScreenKeyboard by setting<Boolean>("on_screen_keyboard")
+
+    /**
+     * pam_faillock's state is read (true): after too many wrong passwords the lock screen counts
+     * down until the account unlocks instead of taking passwords that would make it longer.
+     */
+    var faillock by setting<Boolean>("faillock")
+
+    /** Where pam_faillock's settings are ("/etc/security/faillock.conf"). */
+    var faillockConf by setting<String>("faillock_conf")
 }
 
 /** launcher { }: newm's launcher (Logo+D, five fingers). */
@@ -1252,6 +1520,20 @@ class EnergySection internal constructor(values: MutableMap<String, Any?>) : Sec
 
     /** Seconds without input until the screens go dark (they come back with a key or the mouse; newm issue 159). */
     var screensOffAfter by setting<Int>("screens_off_after")
+
+    /**
+     * What keeps the computer awake (no dimming, locking, sleeping): "wayland" (a program's
+     * idle-inhibit: mpv), "dbus" (org.freedesktop.ScreenSaver and PowerManagement.Inhibit: Firefox,
+     * Chromium, Telegram playing a video), "logind" (systemd-inhibit --what=idle), "mpris" (a media
+     * player playing while a window of its own shows). All four by default.
+     */
+    var inhibitFrom by setting<List<String>>("inhibit_from")
+
+    /** Media players whose playing keeps nothing awake (music: nothing to watch), by bus name or name, any case: spotify, rhythmbox, ... */
+    var mprisIgnore by setting<List<String>>("mpris_ignore")
+
+    /** How often logind is asked for its idle inhibitors, in seconds (10). */
+    var logindCheckSeconds by setting<Int>("logind_check_seconds")
 
     /**
      * Told what happens: "idle", "idle-lock", "idle-presuspend", "idle-suspend", "active",
