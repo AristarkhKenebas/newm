@@ -457,7 +457,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onPointerButton { button, pressed -> onButton(now().toMillis(), button, pressed) }
         caulis.onScroll { vertical, value, _ -> onAxis(now().toMillis(), vertical, value) }
         caulis.onGesture { gesture -> onTouchpadGesture(gesture) }
-        caulis.onWindowClosed { window -> viewsByWindow[window]?.destroy() }
+        // (Not while Caulis is taking everything down at the end: the desktop is gone then, and
+        // nothing is left to rearrange.)
+        caulis.onWindowClosed { window -> if (caulis.isRunning) viewsByWindow[window]?.destroy() }
         caulis.onFocusChanged { window ->
             // The focused view, and the one that had it while it closes (Caulis moves the focus
             // on before newm hears of the window closing).

@@ -71,7 +71,7 @@ object SystemInfo {
         if (now - wifiAsked > 10_000_000_000L) {
             wifiAsked = now
             wifiName = try {
-                val p = ProcessBuilder("nmcli", "-t", "-f", "active,ssid", "dev", "wifi").redirectErrorStream(true).start()
+                val p = dev.caulis.ffi.Processes.start(ProcessBuilder("nmcli", "-t", "-f", "active,ssid", "dev", "wifi").redirectErrorStream(true))
                 p.inputStream.bufferedReader().readLines().firstOrNull { it.startsWith("yes:") }?.substringAfter(':').orEmpty()
             } catch (_: Exception) {
                 ""

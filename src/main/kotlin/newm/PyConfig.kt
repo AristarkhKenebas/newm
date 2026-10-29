@@ -183,14 +183,13 @@ class PyConfig private constructor(private val process: Process, private val han
         fun start(handler: Handler): PyConfig? {
             val folder = unpackModules()
             return try {
-                val process = ProcessBuilder("python3", "-u", folder.resolve("host.py").toString())
+                val process = dev.caulis.ffi.Processes.start(ProcessBuilder("python3", "-u", folder.resolve("host.py").toString())
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .apply {
                         // Our newm and pywm win over any installed ones.
                         environment()["PYTHONPATH"] = (listOf(folder.toString()) + listOfNotNull(System.getenv("PYTHONPATH"))).joinToString(":")
                         environment()["PYTHONDONTWRITEBYTECODE"] = "1"
-                    }
-                    .start()
+                    })
                 PyConfig(process, handler)
             } catch (e: java.io.IOException) {
                 // (Info: ConfigLoader shows it, once.)

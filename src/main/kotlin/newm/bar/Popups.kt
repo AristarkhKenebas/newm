@@ -307,7 +307,7 @@ internal fun setBrightness(model: BarModel, level: Float) {
 
 /** Runs [command], its output thrown away; false when it failed or took over three seconds (then it is killed). */
 internal fun runQuietly(vararg command: String): Boolean = try {
-    val p = ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+    val p = dev.caulis.ffi.Processes.start(ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD))
     p.outputStream.close()
     if (!p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
         p.destroyForcibly()

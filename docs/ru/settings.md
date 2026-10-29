@@ -170,8 +170,8 @@ vec4 paint(vec2 at) {
 | `titleWidth` | `360` | наибольшая ширина заголовка окна |
 | `trayHide` | `["nm-applet", "blueman"]` | значки трея, которые не показывать, по имени или заголовку |
 | `menuButton` | `true` | кнопка лаунчера первой слева (только когда `left` — список newm) |
-| `quickButton` | `true` | кнопка быстрых настроек перед кнопкой питания (только когда `right` — список newm) |
-| `notificationsButton` | `true` | колокольчик уведомлений перед кнопкой быстрых настроек (только когда `right` — список newm) |
+| `quickButton` | `true` | кнопка быстрых настроек перед кнопкой питания (и в вашем `right`, если `quick` не поставлен вами) |
+| `notificationsButton` | `true` | колокольчик уведомлений перед кнопкой быстрых настроек (и в вашем `right`, если `notifications` не поставлен вами) |
 | `layoutNames` | `{}` | подписи раскладок: `mapOf("us" to "EN")` (остальные: `us` — EN, иначе первые две буквы кода) |
 | `outputs` | `[]` | мониторы с панелью (`["eDP-1"]`); пусто — все |
 | `clockHint` | `"EEEE, d MMMM yyyy"` | подсказка часов; `""` — без неё |
@@ -258,6 +258,8 @@ vec4 paint(vec2 at) {
 | `lockFailure` | `"own-lock"` | блокировка не появилась: простой экран блокировки самого Caulis, пока локер не разблокирует (Enter запускает локер снова), или `"notice"`: только сообщить |
 | `lockShowMillis` | `3000` | сколько миллисекунд блокировка может появляться, прежде чем считаться неудавшейся |
 | `stopProgramsOnQuit` | `true` | при выходе из newm запущенным программам предлагается завершиться |
+| `processStart` | `"native"` | как запускаются программы: `"native"` (posix_spawn — работает и после того, как система обновила Java под работающим newm) или `"java"` (способ самой Java; после его сбоя — native) |
+| `javaUpdatedNotice` | `"Java was updated: restart newm when convenient (newm cmd restart keep)"` | сообщается один раз, когда Java обновили под работающим newm (`""`: только в журнал) |
 | `configCompilerJvmOptions` | `"-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"` | параметры Java короткоживущего процесса, компилирующего config.kts (компилятор Kotlin никогда не работает внутри newm); для следующей компиляции — первая при запуске берёт переменную окружения `NEWM_CONFIG_COMPILER_OPTS` |
 | `configCompilerTimeoutSeconds` | `180` | сколько секунд самое большее на компиляцию config.kts, затем она останавливается, и об этом сообщается (первая при запуске: `NEWM_CONFIG_COMPILER_TIMEOUT`) |
 

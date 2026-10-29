@@ -130,6 +130,8 @@ private fun dev.caulis.wm.Caulis.applyHostSettingsNow(settings: Map<String, Any?
     }
     // The window under the pointer gets the keys, unless the configuration says otherwise.
     if (pywm?.get("focus_follows_mouse") == null) focusFollowsMouse = true
+    // Java updated under the running newm (a system update): said once, with what to do.
+    if (pywm?.get("java_updated_notice") == null) javaUpdatedNotice = "Java was updated: restart newm when convenient (newm cmd restart keep)"
     pywm?.let { applyPywmSettings(this, it) }
     (settings["outputs"] as? List<Map<String, Any?>>)?.let { applyOutputs(this, it) }
     // autostart { }, reveal { }, startupSound { } (see Startup.kt).

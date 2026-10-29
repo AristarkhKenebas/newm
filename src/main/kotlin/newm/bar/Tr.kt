@@ -98,6 +98,7 @@ private val RU: Map<String, String> = mapOf(
     "Bluetooth is off" to "Bluetooth выключен",
     "Bluetooth is on, nothing connected" to "Bluetooth включён, ничего не подключено",
     "Sound is off" to "Звук выключен",
+    "Sound is unavailable" to "Звук недоступен",
     "Volume %s" to "Громкость %s",
     "Caffeine: the screen stays on" to "Кофеин: экран не гаснет",
     // notifications

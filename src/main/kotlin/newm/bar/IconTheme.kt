@@ -49,7 +49,7 @@ object IconTheme {
     // The theme in use (GNOME's setting, else Adwaita), then the usual ones.
     private val themes: List<String> by lazy {
         val chosen = try {
-            val p = ProcessBuilder("gsettings", "get", "org.gnome.desktop.interface", "icon-theme").redirectErrorStream(true).start()
+            val p = dev.caulis.ffi.Processes.start(ProcessBuilder("gsettings", "get", "org.gnome.desktop.interface", "icon-theme").redirectErrorStream(true))
             p.inputStream.bufferedReader().readText().trim().trim('\'').takeIf { p.waitFor() == 0 && it.isNotEmpty() }
         } catch (_: Exception) {
             null

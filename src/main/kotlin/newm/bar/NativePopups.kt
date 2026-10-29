@@ -334,6 +334,11 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
             LevelSlider(Glyph.BRIGHTNESS, level / 100f, colors, text, "$level%", Modifier.padding(vertical = 2.dp)) { setBrightness(model, it) }
             Spacer(Modifier.height(2.dp))
         }
+        // What does not work now is said here (the bar's sound shows it too, dimmed).
+        model.status.volumeUnavailable?.let { why ->
+            BasicText(tr("Sound is unavailable") + ": " + why, style = text.copy(color = colors.dim, fontSize = (text.fontSize.value - 1).sp), maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
         for (row in rows) {
             val withWide = row.any(::wide)
             // (Beside a wide tile small ones are half as wide and as tall as it.)

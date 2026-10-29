@@ -169,8 +169,8 @@ workspace hides when it opens. The lock hides it too.
 | `titleWidth` | `360` | the window title's widest |
 | `trayHide` | `["nm-applet", "blueman"]` | tray icons left out, by name or title |
 | `menuButton` | `true` | the launcher's button first on the left (only when `left` is newm's own list) |
-| `quickButton` | `true` | the quick settings' button before the power button (only when `right` is newm's own list) |
-| `notificationsButton` | `true` | the notifications' bell before the quick settings' button (only when `right` is newm's own list) |
+| `quickButton` | `true` | the quick settings' button before the power button (also in a `right` of your own, unless you place `quick` yourself) |
+| `notificationsButton` | `true` | the notifications' bell before the quick settings' button (also in a `right` of your own, unless you place `notifications` yourself) |
 | `layoutNames` | `{}` | the keyboard layouts' labels: `mapOf("us" to "EN")` (others: `us` EN, else the code's first two letters) |
 | `outputs` | `[]` | the monitors with the bar (`["eDP-1"]`); empty: all |
 | `clockHint` | `"EEEE, d MMMM yyyy"` | the clock's hint; `""` for none |
@@ -257,6 +257,8 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `lockFailure` | `"own-lock"` | a lock that does not show: Caulis's own plain lock screen until a locker unlocks (Enter starts the locker again), or `"notice"`: only said |
 | `lockShowMillis` | `3000` | how long a lock may take to show before it counts as failed |
 | `stopProgramsOnQuit` | `true` | programs started inside are asked to end when newm quits |
+| `processStart` | `"native"` | how programs are started: `"native"` (posix_spawn — keeps working after the system updated Java while newm runs) or `"java"` (Java's own way, natively after it failed) |
+| `javaUpdatedNotice` | `"Java was updated: restart newm when convenient (newm cmd restart keep)"` | said once when Java was updated under the running newm (`""`: only logged) |
 | `configCompilerJvmOptions` | `"-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"` | the Java options of the short-lived Java that compiles config.kts (the Kotlin compiler never runs inside newm); for the next compilation — a start's first takes the environment's `NEWM_CONFIG_COMPILER_OPTS` |
 | `configCompilerTimeoutSeconds` | `180` | at most this long for compiling config.kts, then it is stopped and said (a start's first: `NEWM_CONFIG_COMPILER_TIMEOUT`) |
 

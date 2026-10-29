@@ -175,10 +175,11 @@ panels {
 
 Каждый остров показывает свои модули по порядку, пустой список убирает остров. Модули:
 `menu`, `wall`, `window`, `clock`, `tray`, `layout`, `bluetooth`, `network`, `volume`,
-`battery`, `notifications`, `quick`, `power` и `texts`, а также ваши (ниже). `menu`,
-`notifications` и `quick` сами добавляются только в списки newm: `left` или `right`,
-написанные вами, показываются как написаны — назовите их там, если они нужны (или уберите
-`menuButton = false`, `quickButton = false`, `notificationsButton = false`). Имя, которое не
+`battery`, `notifications`, `quick`, `power` и `texts`, а также ваши (ниже).
+`notifications` и `quick` всегда добавляются перед `power` (и в `right`, написанный вами),
+если вы не поставили их сами и не выключили (`quickButton = false`,
+`notificationsButton = false`). `menu` добавляется только в `left` newm: `left`, написанный
+вами, показывается как написан (или уберите `menuButton = false`). Имя, которое не
 является модулем, показывается как есть, текстом.
 
 Часы, дата и календарь следуют `language`. На мониторе не из `outputs` панель не рисуется

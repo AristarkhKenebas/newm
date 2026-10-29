@@ -248,7 +248,7 @@ internal object Users {
      */
     fun loginUsers(timeoutSeconds: Long = 5): List<Pair<String, String>> {
         val lines = try {
-            val p = ProcessBuilder("getent", "passwd").redirectError(ProcessBuilder.Redirect.DISCARD).start()
+            val p = dev.caulis.ffi.Processes.start(ProcessBuilder("getent", "passwd").redirectError(ProcessBuilder.Redirect.DISCARD))
             // (Read on a thread of its own: a reading that never ends is cut by ending getent.)
             val read = java.util.concurrent.CompletableFuture.supplyAsync { p.inputStream.bufferedReader().readLines() }
             if (!p.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)) {

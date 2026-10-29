@@ -454,6 +454,21 @@ private fun layoutLabel(name: String, labels: Map<String, Any?>): String {
 // The configuration wrote the bar's list [name] itself ("left", "right" of the top or bottom bar).
 private fun listWritten(top: Boolean, name: String) = Config.lookup("panels.${if (top) "top" else "bottom"}_bar.native.$name") != null
 
+/**
+ * The right island's modules: [right] with the quick actions' button before the power button
+ * and the notifications' bell before that ([quick], [bell]: added) — also in a list of one's
+ * own (the quick actions are where the sound, the brightness, Wi-Fi and the rest are reached:
+ * a configuration from before them went without them) — unless placed elsewhere already.
+ */
+internal fun rightModules(right: List<String>, left: List<String>, center: List<String>, quick: Boolean, bell: Boolean): List<String> {
+    val withQuick = if (!quick || "quick" in right || "quick" in left || "quick" in center) right
+    else right.indexOf("power").let { at -> if (at < 0) right + "quick" else right.take(at) + "quick" + right.drop(at) }
+    return if (!bell || "notifications" in withQuick || "notifications" in left || "notifications" in center) withQuick
+    else (withQuick.indexOf("quick").takeIf { it >= 0 } ?: withQuick.indexOf("power")).let { at ->
+        if (at < 0) withQuick + "notifications" else withQuick.take(at) + "notifications" + withQuick.drop(at)
+    }
+}
+
 /** The room newm's own bar keeps at the top ([top]) or bottom: its height, and the gaps around islands. */
 internal fun nativeBarRoom(top: Boolean): Int {
     val height = confHeight(top).coerceAtLeast(12)
@@ -495,25 +510,17 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
 
     /**
      * The modules of each island ("wall", "window", "clock", "tray", "network", "volume", "battery", "notifications", "power", "texts").
-     * The menu's, quick actions' and notifications' buttons are added to newm's own lists only:
-     * a list the configuration writes is shown as written.
+     * The menu's button is added to newm's own left list only (a left list the configuration
+     * writes is shown as written). The quick actions' and notifications' buttons are always
+     * there — also in a right list of one's own written before they existed — unless placed
+     * elsewhere or turned off (topBar { quickButton = false; notificationsButton = false }).
      */
     val left: List<String> get() = confLeft(top).let { left ->
         // The menu's button (three lines) first, unless it is placed elsewhere or turned off.
         if (confMenuButton(top) && !listWritten(top, "left") && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
     }
     val center: List<String> get() = confCenter(top)
-    val right: List<String> get() = confRight(top).let { right ->
-        if (listWritten(top, "right")) return@let right
-        // Quick actions' button before the power button, unless placed elsewhere or turned off.
-        val withQuick = if (!confQuickButton(top) || "quick" in right || "quick" in confLeft(top) || "quick" in confCenter(top)) right
-        else right.indexOf("power").let { at -> if (at < 0) right + "quick" else right.take(at) + "quick" + right.drop(at) }
-        // The notifications' bell before them (a list of one's own without it gets it too), unless placed elsewhere or turned off.
-        if (!confNotificationsButton(top) || "notifications" in withQuick || "notifications" in confLeft(top) || "notifications" in confCenter(top)) withQuick
-        else (withQuick.indexOf("quick").takeIf { it >= 0 } ?: withQuick.indexOf("power")).let { at ->
-            if (at < 0) withQuick + "notifications" else withQuick.take(at) + "notifications" + withQuick.drop(at)
-        }
-    }
+    val right: List<String> get() = rightModules(confRight(top), confLeft(top), confCenter(top), confQuickButton(top), confNotificationsButton(top))
     val clockPattern: String get() = confClock(top)
     val datePattern: String get() = confDate(top)
     val iconSize: Int get() = confIconSize(top)

@@ -72,7 +72,7 @@ object DataConfig {
                     k["numlock"]?.let { pywm["numlock"] = it }
                     k["binding_modifiers"]?.let { pywm["binding_modifiers"] = it }
                 }
-                // compositor { quit_while_locked, lock_failure, lock_show_millis, stop_programs_on_quit, config_compiler_* }.
+                // compositor { quit_while_locked, lock_failure, lock_show_millis, stop_programs_on_quit, process_start, java_updated_notice, config_compiler_* }.
                 "compositor" -> (value as? Map<*, *>)?.let { c ->
                     val pywm = section("pywm")
                     for (key in COMPOSITOR_KEYS) c[key]?.let { pywm[key] = it }
@@ -333,4 +333,4 @@ private val NATIVE_BAR_KEYS = setOf(
 private val MODULE_ACTIONS = setOf("on_click", "on_middle", "on_right", "on_scroll_up", "on_scroll_down")
 
 // The settings of compositor { } in config.json / config.lua.
-private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit", "config_compiler_jvm_options", "config_compiler_timeout_seconds")
+private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit", "process_start", "java_updated_notice", "config_compiler_jvm_options", "config_compiler_timeout_seconds")

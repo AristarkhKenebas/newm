@@ -258,14 +258,18 @@ are not in Nix's paths). Use your distribution's [install page](../install.md) t
 
 The package builds newm from this repository with Gradle, offline, from the dependencies
 listed in `nix/deps.json`. Caulis, the compositor library under newm, comes from Maven
-Central, in the version written in `gradle/libs.versions.toml`. (`install.sh` uses Caulis's
+Central or from Caulis' own Maven repository on GitHub Pages
+(`https://aristarkhkenebas.github.io/caulis/maven`, the same releases, for when one is not on
+Central yet), in the version written in `gradle/libs.versions.toml`. `nix/deps.json` records
+each file with the address it was downloaded from, so both work offline. (`install.sh` uses Caulis's
 sources instead when they lie next to newm, in `../caulis`; the Nix package never does.) If
 the Nix build stops with "Unresolved reference" in `dev.caulis...`, this newm needs a Caulis
 that is not released yet: please open an issue.
 
 If the build stops with "nix/deps.json (the list of Gradle's downloads) is not there yet",
 the list was not made for this version of newm yet. Make it in newm's folder (with network,
-once the Caulis version in `gradle/libs.versions.toml` is on Maven Central):
+once the Caulis version in `gradle/libs.versions.toml` is released — on Maven Central or on
+its GitHub Pages repository):
 
 ```sh
 nix run .#update-deps

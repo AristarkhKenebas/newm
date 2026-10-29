@@ -476,7 +476,7 @@ class BarModel(val wm: Layout) {
         PopupKind.BATTERY -> 310 to ((if (status.battery != null) 56 + 8 else 0) + (if (status.brightness != null) 26 + 36 + 8 else 0) +
             (if (powerProfiles.profiles.isNotEmpty()) 26 + 8 + powerProfiles.profiles.size * (34 + 8) else 0) + 26).coerceAtLeast(60)
         PopupKind.POWER -> 240 to (confPowerEntries().size.coerceAtLeast(1) * 34 + 24)
-        PopupKind.QUICK -> 296 to (if (status.brightness != null) 280 else 230)
+        PopupKind.QUICK -> 296 to (if (status.brightness != null) 280 else 230) + (if (status.volumeUnavailable != null) 24 else 0)
         PopupKind.COLORS -> 340 to (34 + 6 * 42 + 28)
         PopupKind.NOTIFICATIONS -> 380 to (34 + 38 + 26 + notifications.history.items.let { items ->
             if (items.isEmpty()) 80 else (items.size * 50 + items.map { it.entry.ifBlank { it.app }.lowercase() }.distinct().size * 26).coerceAtMost(7 * 56 + 28)
@@ -1022,7 +1022,10 @@ private fun NetworkModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
 
 @Composable
 private fun VolumeModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
-    val v = model.status.volume ?: return
+    // (Not readable now — the sound server restarts, its tools fail: shown as unavailable, never hidden.)
+    val v = model.status.volume
+    val unavailable = model.status.volumeUnavailable
+    if (v == null && unavailable == null) return
     var x by remember { mutableStateOf(0.0) }
     val clicks = model.clicksOf(bar, "volume", Clicks(
         click = { model.toggle(PopupKind.VOLUME, bar, bar.originX + x) },
@@ -1032,10 +1035,17 @@ private fun VolumeModule(bar: Bar, model: BarModel, colors: BarColors, text: Tex
     Chip(
         colors,
         clicks,
-        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "volume") { model.status.volume?.let { v -> if (v.muted) "Sound is off" else "Volume ${v.percent}%" } + (model.sound.outputs.firstOrNull { it.isDefault }?.let { "\n" + verbatim(it.description) } ?: "") } },
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "volume") {
+            model.status.volume?.let { v -> (if (v.muted) "Sound is off" else "Volume ${v.percent}%") + (model.sound.outputs.firstOrNull { it.isDefault }?.let { "\n" + verbatim(it.description) } ?: "") }
+                ?: ("Sound is unavailable" + (model.status.volumeUnavailable?.let { "\n" + verbatim(it) } ?: ""))
+        } },
         onX = { x = it },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (v == null) {
+                GlyphIcon(Glyph.SPEAKER, colors.dim, bar.iconSize.dp, level = 0f, slash = true)
+                return@Row
+            }
             GlyphIcon(Glyph.SPEAKER, if (v.muted) colors.dim else colors.text, bar.iconSize.dp, level = v.percent / 100f, slash = v.muted)
             if (bar.showPercent) {
                 Spacer(Modifier.width(5.dp))

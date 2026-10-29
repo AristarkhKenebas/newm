@@ -113,7 +113,7 @@ class Sound(private val caulis: Caulis) {
             return null
         }
         return try {
-            val p = ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(out.toFile()).start()
+            val p = dev.caulis.ffi.Processes.start(ProcessBuilder(*command).redirectErrorStream(true).redirectOutput(out.toFile()))
             p.outputStream.close()
             if (!p.waitFor(3, TimeUnit.SECONDS)) {
                 p.destroyForcibly()

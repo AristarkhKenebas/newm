@@ -149,11 +149,10 @@ object KtsConfig {
                 "-cp", classpath, KtsCompilerProcess::class.java.name, source.toString(), jar.toString(), name,
             )
             log.info { "Compiling $name in a Java of its own (${jvmOptions.joinToString(" ")}, at most $timeoutSeconds s)" }
-            val process = ProcessBuilder(command)
+            val process = dev.caulis.ffi.Processes.start(ProcessBuilder(command)
                 .redirectOutput(output.toFile())
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
-                .start()
+                .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null"))))
             if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly()
                 return listOf("$name: compiling took longer than $timeoutSeconds seconds and was stopped (compositor { configCompilerTimeoutSeconds })")

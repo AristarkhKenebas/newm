@@ -783,6 +783,12 @@ class NotificationCenter(private val model: BarModel) {
         val dt = (now - lastTick).coerceIn(0, 1000)
         lastTick = now
         followEnabled()
+        // (Five times a second: with no card and no notification there is nothing to count down
+        // or read, and nothing is looked at — not even the focus.)
+        if (dirtySince > 0 && now - dirtySince > 1000) save()
+        if (cards.isEmpty() && history.items.isEmpty()) return
+        // (The compositor is going: nothing more to do.)
+        if (!wm.caulis.isRunning) return
         val hidden = wm.lockShown()
         for (c in cards) {
             if (c.leaving || c.hovered || c.left == Long.MAX_VALUE || hidden) continue
@@ -805,7 +811,6 @@ class NotificationCenter(private val model: BarModel) {
             }
             if (read.isNotEmpty()) changed()
         }
-        if (dirtySince > 0 && now - dirtySince > 1000) save()
     }
 
     private fun trim() {
@@ -845,7 +850,10 @@ class NotificationCenter(private val model: BarModel) {
         try {
             val rest = history.fromJson(Files.readString(file))
             dndChoice = rest["do_not_disturb"] as? Boolean
-            log.info { "${history.items.size} notifications read back from $file" }
+            // (Only what is kept: a file written with other settings may hold many more, old ones.)
+            val gone = history.trim(confKeepHours(), confKeep(), System.currentTimeMillis())
+            if (gone.isNotEmpty()) changed()
+            log.info { "${history.items.size} notifications read back from $file" + if (gone.isEmpty()) "" else " (${gone.size} older ones left out)" }
         } catch (e: Exception) {
             log.warn("The notifications' history in $file cannot be read: $e")
         }

@@ -67,7 +67,7 @@ stdenv.mkDerivation (finalAttrs: {
       runCommand "newm-deps-missing" { passthru = { inherit (deps) updateScript; }; } ''
         echo "newm: nix/deps.json (the list of Gradle's downloads) is not there yet." >&2
         echo "Make it in newm's folder: nix run .#update-deps" >&2
-        echo "(It needs the Caulis version of gradle/libs.versions.toml on Maven Central; see docs/en/install.md, \"How the Nix package is built\".)" >&2
+        echo "(It needs the Caulis version of gradle/libs.versions.toml released: on Maven Central or https://aristarkhkenebas.github.io/caulis/maven; see docs/en/install.md, \"How the Nix package is built\".)" >&2
         exit 1
       '';
 

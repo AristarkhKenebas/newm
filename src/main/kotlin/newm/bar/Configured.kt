@@ -85,7 +85,7 @@ internal fun inBackground(task: () -> Unit) {
  * within [seconds] (then it is stopped, with what it started). Not on the compositor's thread: it waits.
  */
 internal fun commandOutput(command: String, seconds: Long = 5, needSuccess: Boolean = true): String? = try {
-    val p = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
+    val p = dev.caulis.ffi.Processes.start(ProcessBuilder("sh", "-c", command).redirectErrorStream(true))
     p.outputStream.close()
     val out = outputOf(p, seconds)
     if (out == null) {

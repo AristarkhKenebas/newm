@@ -48,6 +48,10 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
             }
             "lock_show_millis" -> number { caulis.lockShowMillis = it.toLong().coerceIn(100, 60_000) }
             "stop_programs_on_quit" -> flag { caulis.stopProgramsOnQuit = it }
+            "process_start" -> text { v ->
+                dev.caulis.ffi.Processes.Method.entries.firstOrNull { it.name.equals(v, ignoreCase = true) }?.let { caulis.processStart = it } ?: wrong("\"native\" or \"java\"")
+            }
+            "java_updated_notice" -> text { caulis.javaUpdatedNotice = it.ifEmpty { null } }
             // newm's own: compositor { configCompilerJvmOptions, configCompilerTimeoutSeconds } (the next compilation of config.kts).
             "config_compiler_jvm_options" -> text { KtsConfig.jvmOptions = it.trim().split(Regex("\\s+")).filter(String::isNotEmpty).ifEmpty { KtsConfig.DEFAULT_JVM_OPTIONS } }
             "config_compiler_timeout_seconds" -> number { KtsConfig.timeoutSeconds = it.toLong().coerceIn(5, 3600) }

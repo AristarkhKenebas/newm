@@ -91,7 +91,7 @@ fun installSession(args: List<String> = emptyList()): Int {
             else -> listOf("pkexec", "sh", "-c", script)
         }
         println("newm: installing $SESSION_FILE (Exec=${plan.exec}) and /etc/newm/config.kts${if (root) "" else " — as root, so ${command.first()} may ask for your password"}")
-        val status = ProcessBuilder(command).inheritIO().start().waitFor()
+        val status = dev.caulis.ffi.Processes.start(ProcessBuilder(command).inheritIO()).waitFor()
         if (status == 0) {
             println("newm: done. Choose \"newm\" in your login screen, or type newm on a text console.")
         } else {

@@ -6,7 +6,7 @@ private val log = Logger("helpers")
 
 /** newm's helper/execute.py: runs [command] in a shell and gives back what it printed. */
 fun execute(command: String): String = try {
-    val process = ProcessBuilder("/bin/sh", "-c", command).redirectErrorStream(false).start()
+    val process = dev.caulis.ffi.Processes.start(ProcessBuilder("/bin/sh", "-c", command).redirectErrorStream(false))
     process.inputStream.bufferedReader().readText().also { process.waitFor() }
 } catch (e: java.io.IOException) {
     log.warn("\"$command\" could not run: $e")
@@ -16,7 +16,7 @@ fun execute(command: String): String = try {
 // A command in the background (os.system("... &")).
 private fun background(command: String) {
     try {
-        ProcessBuilder("/bin/sh", "-c", command).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start()
+        dev.caulis.ffi.Processes.start(ProcessBuilder("/bin/sh", "-c", command).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD))
     } catch (e: java.io.IOException) {
         log.warn("\"$command\" could not run: $e")
     }

@@ -175,9 +175,10 @@ panels {
 Each island shows its modules in order, and an empty list leaves that island out. The
 modules are `menu`, `wall`, `window`, `clock`, `tray`, `layout`, `bluetooth`, `network`,
 `volume`, `battery`, `notifications`, `quick`, `power` and `texts`, and your own (below).
-`menu`, `notifications` and `quick` are added by themselves to newm's own lists: a `left` or
-`right` you write is shown as you wrote it, so name them there if you want them (or turn them
-off with `menuButton = false`, `quickButton = false`, `notificationsButton = false`). A name
+`notifications` and `quick` are always added before `power` (also to a `right` you write),
+unless you place them yourself or turn them off (`quickButton = false`,
+`notificationsButton = false`). `menu` is added to newm's own `left` only: a `left` you write
+is shown as you wrote it (or turn it off with `menuButton = false`). A name
 that is not a module shows as it is, as a text.
 
 The clock, the date and the calendar follow `language`. On a monitor not in `outputs` the bar

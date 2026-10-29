@@ -259,14 +259,18 @@ Nix). Там используйте [страницу установки](../ins
 
 Пакет собирает newm из этого репозитория с помощью Gradle, без сети, из зависимостей,
 перечисленных в `nix/deps.json`. Caulis, библиотека композитора под newm, берётся из Maven
-Central, той версии, что записана в `gradle/libs.versions.toml`. (`install.sh` вместо этого
+Central или из собственного Maven-репозитория Caulis на GitHub Pages
+(`https://aristarkhkenebas.github.io/caulis/maven`, те же выпуски — на случай, когда версии ещё
+нет в Central), той версии, что записана в `gradle/libs.versions.toml`. `nix/deps.json`
+записывает каждый файл вместе с адресом, откуда он скачан, поэтому без сети работают оба. (`install.sh` вместо этого
 использует исходники Caulis, если они лежат рядом с newm, в `../caulis`; пакет Nix — никогда.)
 Если сборка Nix останавливается на «Unresolved reference» в `dev.caulis...`, значит, этому
 newm нужна ещё не выпущенная версия Caulis: пожалуйста, создайте issue.
 
 Если сборка останавливается со словами «nix/deps.json (the list of Gradle's downloads) is not
 there yet», список для этой версии newm ещё не сделан. Сделайте его в папке newm (нужна сеть
-и версия Caulis из `gradle/libs.versions.toml` уже в Maven Central):
+и выпущенная версия Caulis из `gradle/libs.versions.toml` — в Maven Central или в её
+репозитории на GitHub Pages):
 
 ```sh
 nix run .#update-deps

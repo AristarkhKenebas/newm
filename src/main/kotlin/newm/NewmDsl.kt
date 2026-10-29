@@ -361,6 +361,15 @@ class CompositorSection internal constructor(values: MutableMap<String, Any?>) :
     var stopProgramsOnQuit by setting<Boolean>("stop_programs_on_quit")
 
     /**
+     * How programs are started: "native" (the default: posix_spawn, still working after the
+     * system updated Java while newm runs) or "java" (Java's own way; natively after it failed).
+     */
+    var processStart by setting<String>("process_start")
+
+    /** Said once when Java was updated under the running newm ("": not said, only logged). */
+    var javaUpdatedNotice by setting<String>("java_updated_notice")
+
+    /**
      * The Java options of the short-lived Java that compiles config.kts (default
      * "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss4m -Djava.awt.headless=true"; for the next
      * compilation — the first one of a start takes NEWM_CONFIG_COMPILER_OPTS).
