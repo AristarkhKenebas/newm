@@ -444,8 +444,8 @@ ru: и islandColor, textColor: ваши цвета
 en: shown by the module "texts"
 ru: показывается модулем "texts"
 
-en: the original newm's bar (bars/classic.kts)
-ru: панель исходного newm (bars/classic.kts)
+en: the look: "islands", "solid", "floating", "minimal", "macos", "classic"
+ru: вид: "islands", "solid", "floating", "minimal", "macos", "classic"
 
 en: A bar at the bottom too:
 ru: Панель ещё и снизу:

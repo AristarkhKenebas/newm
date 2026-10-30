@@ -586,11 +586,34 @@ internal fun rightModules(right: List<String>, left: List<String>, center: List<
     }
 }
 
-/** The room newm's own bar keeps at the top ([top]) or bottom: its height, and the gaps around islands. */
-internal fun nativeBarRoom(top: Boolean): Int {
-    val height = confHeight(top).coerceAtLeast(12)
-    return if (confStyle(top) != "classic") height + 2 * confMargin(top).coerceAtLeast(0) else height
+/** The bar's looks (topBar { style }): newm's islands, one strip along the edge, one floating bar, texts alone, a thin strip as macOS's, or the original newm's. */
+internal val BAR_STYLES = listOf("islands", "solid", "floating", "minimal", "macos", "classic")
+
+// The look of the top ([top]) or bottom bar ("macos-like" is "macos"; unknown: islands).
+internal fun barStyleOf(top: Boolean): String = when (val s = confStyle(top).trim().lowercase()) {
+    "macos-like", "mac" -> "macos"
+    in BAR_STYLES -> s
+    else -> "islands"
 }
+
+// The looks along the edge: no gap to it, no corners (unless written).
+private fun flush(style: String) = style == "solid" || style == "macos"
+
+/** The bar's height: as written, else 32 (macos: 28). */
+internal fun barHeightOf(top: Boolean): Int =
+    (if (barStyleOf(top) == "macos" && !listWritten(top, "height")) 28 else confHeight(top)).coerceAtLeast(12)
+
+/** The gap between the bar and the screen's edges: none for classic, solid and macos (unless written). */
+internal fun barMarginOf(top: Boolean): Int = barStyleOf(top).let { style ->
+    when {
+        style == "classic" -> 0
+        flush(style) && !listWritten(top, "margin") -> 0
+        else -> confMargin(top)
+    }.coerceAtLeast(0)
+}
+
+/** The room newm's own bar keeps at the top ([top]) or bottom: its height, and the gaps around it. */
+internal fun nativeBarRoom(top: Boolean): Int = barHeightOf(top) + 2 * barMarginOf(top)
 
 /**
  * newm's own bar at the top or bottom of an output, sliding in and out with the workspace
@@ -602,7 +625,7 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     private val workspace = wm.workspaces.firstOrNull { monitor in it.outputs } ?: wm.workspaces[0]
 
     /** The height of the bar (an island's, in the islands look). */
-    val height: Int get() = confHeight(top).coerceAtLeast(12)
+    val height: Int get() = barHeightOf(top)
     val fontSize: Int get() = confFontSize(top)
     val font: String? get() = confFont(top)
     val fontFamily: FontFamily get() = newm.bar.fontFamilyOf(font)
@@ -613,11 +636,14 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val blur: Boolean get() = confBlur(top)
 
     /** "islands" (newm's) or "classic" (the original newm's). */
-    val islands: Boolean get() = confStyle(top) != "classic"
+    val islands: Boolean get() = style != "classic"
+
+    /** Its look: "islands", "solid", "floating", "minimal", "macos" or "classic" (topBar { style }). */
+    val style: String get() = barStyleOf(top)
 
     /** The gap between the islands and the screen's edges. */
-    val margin: Int get() = if (islands) confMargin(top).coerceAtLeast(0) else 0
-    val cornerRadius: Int get() = confRadius(top)
+    val margin: Int get() = barMarginOf(top)
+    val cornerRadius: Int get() = if (flush(style) && !listWritten(top, "corner_radius")) 0 else confRadius(top)
 
     /** "auto" (the colour scheme of programs), "light" or "dark". */
     val theme: String get() = confTheme(top)
@@ -636,8 +662,12 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
         // The menu's button (three lines) first, unless it is placed elsewhere or turned off.
         if (confMenuButton(top) && !listWritten(top, "left") && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
     }
-    val center: List<String> get() = confCenter(top)
-    val right: List<String> get() = rightModules(confRight(top), confLeft(top), confCenter(top), confQuickButton(top), confNotificationsButton(top))
+    // (macos: the clock at the right end and nothing in the middle, unless the middle is written.)
+    private val macosClock: Boolean get() = style == "macos" && !listWritten(top, "center")
+    val center: List<String> get() = if (macosClock) emptyList() else confCenter(top)
+    val right: List<String> get() = rightModules(confRight(top), confLeft(top), center, confQuickButton(top), confNotificationsButton(top)).let { r ->
+        if (macosClock && confCenter(top).any { it == "clock" } && "clock" !in r && "clock" !in left) r + "clock" else r
+    }
     val clockPattern: String get() = confClock(top)
     val datePattern: String get() = confDate(top)
     val iconSize: Int get() = confIconSize(top)
@@ -662,7 +692,7 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val trayHide: List<String> get() = confTrayHide(top)
 
     /** The room it keeps at the edge: windows stay out of it. */
-    val room: Int get() = if (islands) height + 2 * margin else height
+    val room: Int get() = height + 2 * margin
 
     /** The screen's corners' radius (the classic bar is rounded there too). */
     val screenCornerRadius: Int get() = confCornerRadius()
@@ -694,8 +724,14 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     /** The parts of the screen behind it to blur, with their corners' radius. */
     fun blurAreas(): List<Pair<Rect, Float>> {
         val place = place() ?: return emptyList()
-        if (!islands) return listOf(place to 0f)
-        return islandRects.filterNotNull().map { r -> Rect(place.x + r.x, place.y + r.y, r.width, r.height) to cornerRadius.toFloat() }
+        return when (style) {
+            "classic", "solid", "macos" -> listOf(place to 0f)
+            // One bar inside the gaps.
+            "floating" -> listOf(Rect(place.x + margin, place.y + (if (top) margin else 0), place.width - 2 * margin, height) to cornerRadius.toFloat())
+            // Texts alone: nothing behind them.
+            "minimal" -> emptyList()
+            else -> islandRects.filterNotNull().map { r -> Rect(place.x + r.x, place.y + r.y, r.width, r.height) to cornerRadius.toFloat() }
+        }
     }
 
     private val animation = object : Animate<WidgetDown>() {

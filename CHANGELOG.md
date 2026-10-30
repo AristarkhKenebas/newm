@@ -80,6 +80,11 @@ From now on every change people would notice gets a line under [Unreleased] in t
   shows the XDG categories beside the list (← and → go through them), and `compact = true`
   makes the rows of the list smaller. `gridColumns`, `gridRows` and `categories` (the headings
   and the XDG categories under each) are settings too. The default stays the list.
+- Bar looks in one setting: `topBar { style = "solid" }` (one strip along the screen's edge),
+  `"floating"` (one rounded bar in the gaps), `"minimal"` (the modules alone on the wallpaper,
+  with a soft shadow), `"macos"` (a thin strip, 28 high, the clock at the right end) besides
+  `"islands"` (the default, unchanged) and `"classic"`. Height, margin and corners keep their
+  settings; the looks along the edge only change their defaults.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

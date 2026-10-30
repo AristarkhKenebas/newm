@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -760,17 +762,16 @@ private fun Chip(
 private fun Chip(colors: BarColors, clicks: Clicks, onX: (Double) -> Unit = {}, onHint: ((Boolean, Double) -> Unit)? = null, content: @Composable () -> Unit) =
     Chip(colors, onX = onX, onPrimary = clicks.click, onSecondary = clicks.right, onMiddle = clicks.middle, onScroll = clicks.scroll, onHint = onHint, content = content)
 
-/** An island: a rounded, see-through piece of the bar (what is behind it is blurred). */
+/** An island: a rounded, see-through piece of the bar (what is behind it is blurred); in the other looks only a group of modules. */
 @Composable
 private fun Island(bar: Bar, colors: BarColors, index: Int, content: @Composable () -> Unit) {
     val density = LocalDensity.current
     val shape = RoundedCornerShape(bar.cornerRadius.dp)
+    val own = bar.style == "islands"
     Row(
         Modifier
             .fillMaxHeight()
-            .softShadow(bar.cornerRadius.dp, 4.dp, 0.10f)
-            .background(colors.island, shape)
-            .border(1.dp, colors.edge, shape)
+            .then(if (own) Modifier.softShadow(bar.cornerRadius.dp, 4.dp, 0.10f).background(colors.island, shape).border(1.dp, colors.edge, shape) else Modifier)
             .onGloballyPositioned { c ->
                 val b = c.boundsInRoot()
                 with(density) { bar.setIsland(index, Rect(b.left.toDp().value.toInt(), b.top.toDp().value.toInt(), b.width.toDp().value.toInt(), b.height.toDp().value.toInt())) }
@@ -790,10 +791,23 @@ private fun Island(bar: Bar, colors: BarColors, index: Int, content: @Composable
 fun IslandBar(bar: Bar, model: BarModel) {
     val colors = model.colorsFor(bar)
     val family = bar.fontFamily
-    val text = TextStyle(color = colors.text, fontSize = bar.fontSize.sp, fontFamily = family, fontWeight = FontWeight.Medium)
+    val style = bar.style
+    // Texts alone on the wallpaper (minimal): a soft shadow keeps them readable on any picture.
+    val shadow = if (style == "minimal") androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(
+        if (colors.text.luminance() > 0.5f) Color.Black.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.7f), Offset(0f, 1f), 5f)) else TextStyle()
+    val text = TextStyle(color = colors.text, fontSize = bar.fontSize.sp, fontFamily = family, fontWeight = FontWeight.Medium).merge(shadow)
     val pad = bar.margin.dp
-    Box(Modifier.fillMaxSize().wheelMovesFocus(model, bar.top).padding(start = pad, end = pad, top = if (bar.top) pad else 0.dp, bottom = if (bar.top) 0.dp else pad)) {
-        Box(Modifier.fillMaxWidth().height(bar.height.dp)) {
+    // solid, macos: one strip along the screen's edge, a hairline on its inner side; floating: one rounded bar in the gaps.
+    val strip = style == "solid" || style == "macos"
+    val edge = colors.edge
+    val stripLook = if (!strip) Modifier else Modifier.background(colors.island).drawBehind {
+        val y = if (bar.top) size.height - 0.5f else 0.5f
+        drawLine(edge, Offset(0f, y), Offset(size.width, y), 1f)
+    }
+    val barShape = RoundedCornerShape(bar.cornerRadius.dp)
+    val floatingLook = if (style != "floating") Modifier else Modifier.softShadow(bar.cornerRadius.dp, 6.dp, 0.14f).background(colors.island, barShape).border(1.dp, colors.edge, barShape)
+    Box(Modifier.fillMaxSize().then(stripLook).wheelMovesFocus(model, bar.top).padding(start = pad, end = pad, top = if (bar.top) pad else 0.dp, bottom = if (bar.top) 0.dp else pad)) {
+        Box(Modifier.fillMaxWidth().height(bar.height.dp).then(floatingLook).padding(horizontal = if (strip || style == "floating") 4.dp else 0.dp)) {
             Row(Modifier.align(Alignment.CenterStart).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (bar.left.isNotEmpty()) Island(bar, colors, 0) { Modules(bar.left, bar, model, colors, text) }
             }

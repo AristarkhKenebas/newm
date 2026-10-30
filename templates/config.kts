@@ -200,7 +200,7 @@ panels {
         // showPercent = true               // the battery's percent beside it
         // accentColor = "#BF616A"          // and islandColor, textColor: your own colours
         // texts { listOf(cpu(), memory()) }   // shown by the module "texts"
-        // style = "classic"                // the original newm's bar (bars/classic.kts)
+        // style = "solid"                  // the look: "islands", "solid", "floating", "minimal", "macos", "classic"
     }
     // A bar at the bottom too:
     // bottomBar { enabled = true; left = listOf("window"); center = emptyList(); right = listOf("tray") }

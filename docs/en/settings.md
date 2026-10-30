@@ -261,10 +261,10 @@ Or with newm's own rules, next to the others in `view { rules { } }`:
 | Setting | Default | What |
 |---|---|---|
 | `enabled` | `false` (the starting `config.kts` turns the top one on) | the bar at all |
-| `style` | `"islands"` | `"islands"` or `"classic"` (the old newm's strip of texts) |
-| `height` | `32` | an island's height |
-| `margin` | `6` | the gap to the screen's edges |
-| `cornerRadius` | `12` | the islands' corners |
+| `style` | `"islands"` | the bar's look, one setting: `"islands"` (newm's: three see-through islands), `"solid"` (one strip along the screen's edge, no gaps, no corners), `"floating"` (one rounded bar in the gaps), `"minimal"` (the modules alone on the wallpaper, with a soft shadow, nothing blurred), `"macos"` (a thin strip as macOS's, 28 high, the clock at the right end unless you write `center`), or `"classic"` (the old newm's strip of texts). The modules are the same in each |
+| `height` | `32` (`"macos"`: `28`) | an island's (the bar's) height |
+| `margin` | `6` (`"solid"`, `"macos"`: `0`) | the gap to the screen's edges |
+| `cornerRadius` | `12` (`"solid"`, `"macos"`: `0`) | the islands' (the bar's) corners |
 | `theme` | `"auto"` | `"auto"` (light or dark as everything), `"light"`, `"dark"` |
 | `font`, `fontSize` | the system's sans-serif, `13` | the text |
 | `left`, `center`, `right` | `["window"]`, `["clock"]`, `["tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power"]` | the modules of each island (see [Bars](bars.md)) |

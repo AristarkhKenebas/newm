@@ -1332,7 +1332,12 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
         values["texts"] = make
     }
 
-    /** "islands" (newm's own, the default) or "classic" (the original newm's strip of texts). */
+    /**
+     * The bar's look: "islands" (newm's own, the default), "solid" (one strip along the edge),
+     * "floating" (one rounded bar in the gaps), "minimal" (the modules alone, with a soft
+     * shadow), "macos" (a thin strip, 28 high, the clock at the right end) or "classic" (the
+     * original newm's strip of texts). The modules are the same in each.
+     */
     var style by setting<String>("style")
 
     /** The islands' gap to the screen's edges, and their corners. */
