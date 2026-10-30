@@ -72,6 +72,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   `sqrt(2)`: Enter copies the result) and commands (`> htop` runs htop). Results come under
   headings by kind. `launcher { search = listOf(...); commandPrefix = ">"; recentFiles = 200;
   openWith = "xdg-open"; perKind = 6 }`; `search = listOf("programs")` is the old behaviour.
+- Pinned and recent programs in the launcher: `launcher { pinned = listOf("firefox", "foot") }`
+  shows them first, under "Pinned", and `launcher { recent = 4 }` the programs started last
+  under "Recent" (off by default; kept only with `remember`).
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

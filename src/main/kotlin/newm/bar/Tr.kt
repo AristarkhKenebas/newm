@@ -249,6 +249,7 @@ private val RU: Map<String, String> = mapOf(
     "Frequent" to "Частые",
     "All programs" to "Все программы",
     "Search programs, files, actions" to "Поиск программ, файлов, действий",
+    "Recent" to "Недавние",
     "Actions" to "Действия",
     "Calculator" to "Калькулятор",
     "Run" to "Запуск",

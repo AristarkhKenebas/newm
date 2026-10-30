@@ -91,6 +91,9 @@ private val confCommandPrefix = configuredValue("panels.launcher.command_prefix"
 private val confRecentFiles = configuredValue("panels.launcher.recent_files", 200)
 private val confOpenWith = configuredValue("panels.launcher.open_with", "xdg-open")
 private val confPerKind = configuredValue("panels.launcher.per_kind", 6)
+// launcher { pinned = listOf("firefox", "foot"); recent = 0 }: programs always first, and those started last.
+private val confPinned = configuredValue("panels.launcher.pinned", emptyList<String>())
+private val confRecent = configuredValue("panels.launcher.recent", 0)
 
 /**
  * What a key of `launcher { keys { "C-n" { next() } } }` can do: choose the next or the
@@ -171,6 +174,9 @@ private fun composeKeyOf(name: String): Key? = when {
 
 /** How often each program was started from the launcher (~/.local/state/newm/launcher.json): the frequent ones come first. */
 internal object LaunchCounts {
+    /** How many of the programs started last are kept (launcher { recent } shows up to so many). */
+    const val RECENT_KEPT = 24
+
     private val file: Path by lazy {
         val state = System.getenv("XDG_STATE_HOME")?.takeIf { it.startsWith("/") } ?: "${System.getenv("HOME") ?: System.getProperty("user.home")}/.local/state"
         Path.of(state, "newm", "launcher.json")
@@ -185,13 +191,31 @@ internal object LaunchCounts {
 
     fun of(app: DesktopApp): Int = if (!confRemember()) 0 else counts[app.id.ifEmpty { app.name }] ?: 0
 
+    // The programs started last, newest first (~/.local/state/newm/launcher-recent.json; kept only with remember).
+    private val recentFile: Path by lazy { file.resolveSibling("launcher-recent.json") }
+    private val recentIds: MutableList<String> by lazy {
+        try {
+            Json.parseArray(Files.readString(recentFile)).mapNotNullTo(ArrayList()) { it as? String }
+        } catch (_: Exception) {
+            ArrayList()
+        }
+    }
+
+    /** The programs started last (their ids, newest first), at most [most]. */
+    fun recent(most: Int): List<String> = if (!confRemember() || most <= 0) emptyList() else recentIds.take(most)
+
     fun started(app: DesktopApp) {
         // launcher { remember = false }: nothing written, nothing counted.
         if (!confRemember()) return
         val key = app.id.ifEmpty { app.name }
         counts[key] = (counts[key] ?: 0) + 1
+        // (The newest first; only as many kept as could ever be shown.)
+        recentIds.remove(key)
+        recentIds.add(0, key)
+        while (recentIds.size > RECENT_KEPT) recentIds.removeAt(recentIds.size - 1)
         try {
             privateFolder(file.parent)
+            Files.writeString(recentFile, Json.write(recentIds))
             Files.writeString(file, Json.write(counts))
         } catch (e: Exception) {
             log.warn("The launcher's counts cannot be kept: $e")
@@ -277,13 +301,24 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
     }
     val kindsShown = remember(shown) { shown.map { it.group }.distinct().size }
     val frequent = if (query.isBlank() && frequentMost > 0 && shown.firstOrNull()?.id != "entry:reopen") shown.takeWhile { LaunchCounts.of(it) > 0 }.take(frequentMost).size else 0
+    // Nothing typed: the pinned programs first, then those started last (launcher { pinned; recent }).
+    val (pinnedCount, head) = remember(all, query.isBlank()) {
+        if (query.isNotBlank()) 0 to emptyList() else {
+            val pinned = pinnedApps(all, confPinned())
+            val recentIds = LaunchCounts.recent(confRecent())
+            val byId = all.associateBy { it.id.ifEmpty { it.name } }
+            val recent = recentIds.mapNotNull { byId[it] }.filter { it !in pinned }
+            pinned.size to pinned + recent
+        }
+    }
+    val listed = if (head.isEmpty()) shown else head + shown
     // (Kept in the list, not read here: reading it while composing composed the whole list anew at each row the pointer passed.)
-    LaunchedEffect(shown) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
+    LaunchedEffect(listed) { if (selected >= listed.size) selected = (listed.size - 1).coerceAtLeast(0) }
     // Chosen with the keys: scrolled into sight if it is not (the pointer only chooses what it is on:
     // scrolling then moved the list under a still pointer, which chose the next one, on and on).
     var byKeys by remember(opened) { mutableIntStateOf(0) }
     LaunchedEffect(byKeys) {
-        if (byKeys == 0 || shown.isEmpty()) return@LaunchedEffect
+        if (byKeys == 0 || listed.isEmpty()) return@LaunchedEffect
         val visible = list.layoutInfo.visibleItemsInfo.filter { it.offset >= 0 && it.offset + it.size <= list.layoutInfo.viewportEndOffset }.map { it.index }
         if (selected !in visible) {
             // Below: it becomes the last one in sight; above: the first.
@@ -317,9 +352,9 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
     }
 
     val control = LauncherControl(
-        step = { by -> if (shown.isNotEmpty()) { selected = (selected + by).coerceIn(0, shown.size - 1); byKeys++ } },
-        jump = { toFirst -> if (shown.isNotEmpty()) { selected = if (toFirst) 0 else shown.size - 1; byKeys++ } },
-        startChosen = { shown.getOrNull(selected)?.let(::start) },
+        step = { by -> if (listed.isNotEmpty()) { selected = (selected + by).coerceIn(0, listed.size - 1); byKeys++ } },
+        jump = { toFirst -> if (listed.isNotEmpty()) { selected = if (toFirst) 0 else listed.size - 1; byKeys++ } },
+        startChosen = { listed.getOrNull(selected)?.let(::start) },
         runText = ::runTyped,
         closeIt = { wm.exitOverlay() },
     )
@@ -375,7 +410,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                 }
             }
             Spacer(Modifier.height(10.dp))
-            if (shown.isEmpty()) {
+            if (listed.isEmpty()) {
                 BasicText(if (apps.isEmpty()) newm.bar.tr("Looking for programs…") else newm.bar.tr(if (confRunTyped()) "Nothing called “%s” — Enter runs it" else "Nothing called “%s”").replace("%s", query), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
             }
             LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(opened) {
@@ -390,11 +425,14 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                     }
                 }
             }) {
-                itemsIndexed(shown, key = { _, app -> app.id.ifEmpty { app.name } }) { i, app ->
-                    if (query.isBlank() && i == 0 && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
-                    if (query.isBlank() && i == frequent) Label(newm.bar.tr("All programs"), colors)
+                // (A pinned or recent program is in the list below too: its key says which place it is.)
+                itemsIndexed(listed, key = { i, app -> (if (i < head.size) "head:" else "") + app.id.ifEmpty { app.name } }) { i, app ->
+                    if (query.isBlank() && i == 0 && pinnedCount > 0) Label(newm.bar.tr("Pinned"), colors)
+                    if (query.isBlank() && i == pinnedCount && head.size > pinnedCount) Label(newm.bar.tr("Recent"), colors)
+                    if (query.isBlank() && i == head.size && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
+                    if (query.isBlank() && i == head.size + frequent) Label(newm.bar.tr("All programs"), colors)
                     // Something typed: the kind of what follows, where it changes (when more than programs were found).
-                    if (query.isNotBlank() && kindsShown > 1 && (i == 0 || shown[i - 1].group != app.group)) Label(newm.bar.tr(app.group), colors)
+                    if (query.isNotBlank() && kindsShown > 1 && (i == 0 || listed[i - 1].group != app.group)) Label(newm.bar.tr(app.group), colors)
                     AppRow(app, { selected == i }, colors, text, icons, wm, intro = -1, onHover = { selected = i }, onClick = { start(app) })
                 }
             }

@@ -1156,6 +1156,12 @@ class LauncherPanelSection internal constructor(values: MutableMap<String, Any?>
     /** At most this many actions, and files, are shown (6). */
     var perKind by setting<Int>("per_kind")
 
+    /** Programs always shown first with nothing typed, in this order, by .desktop id or name: `listOf("firefox", "foot")` (none). */
+    var pinned by setting<List<String>>("pinned")
+
+    /** How many of the programs started last are shown first with nothing typed, after the pinned ones (0, the default: none; at most 24). Needs remember. */
+    var recent by setting<Int>("recent")
+
     /** Entries of your own, with what they do: `entries { "Lock"("Lock the screen") { ensureLocked() } }`. */
     fun entries(configure: LauncherEntries.() -> Unit) {
         @Suppress("UNCHECKED_CAST")

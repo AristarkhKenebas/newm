@@ -214,3 +214,18 @@ internal fun launcherActions(): List<DesktopApp> = KeyActions.ALL.filter { it.ar
     DesktopApp(newm.bar.tr(a.description), "newm", "", a.description + " " + a.name.replace('-', ' '), icon = "", id = "action:${a.name}", kind = "action",
         run = { l -> a.run(l, emptyList()) })
 }
+
+/**
+ * The programs of launcher { pinned } in the order given: each by its .desktop id
+ * ("firefox", "org.gnome.Nautilus", with or without ".desktop") or its name ("Files"), case not
+ * minding; one not installed is left out.
+ */
+internal fun pinnedApps(all: List<DesktopApp>, pinned: List<String>): List<DesktopApp> {
+    if (pinned.isEmpty()) return emptyList()
+    val byId = all.associateBy { it.id.lowercase() }
+    val byName = all.associateBy { it.name.lowercase() }
+    return pinned.mapNotNull { p ->
+        val k = p.trim().lowercase().removeSuffix(".desktop")
+        byId[k] ?: byName[k]
+    }.distinct()
+}

@@ -225,6 +225,8 @@ panels {
         // typos = 1                        // letters a word typed may have wrong ("fierfox" finds Firefox; 0: exact only)
         // search = listOf("programs", "actions", "files", "calculator", "command")   // what the search finds
         // commandPrefix = ">"              // "> htop" runs htop
+        // pinned = listOf("firefox", "foot")   // always first
+        // recent = 4                       // the programs started last, next
     }
 }
 

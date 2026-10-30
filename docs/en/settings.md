@@ -351,6 +351,8 @@ newm's own launcher:
 | `recentFiles` | `200` | how many of the files used lately are searched; `0`: none |
 | `openWith` | `"xdg-open"` | the program a file found opens with |
 | `perKind` | `6` | at most this many actions, and files, are shown |
+| `pinned` | `[]` | programs always first when nothing is typed, in this order, by .desktop id or name: `listOf("firefox", "org.gnome.Nautilus", "foot")` |
+| `recent` | `0` | how many of the programs you started last come next (after the pinned ones); `0`: none. Kept in `~/.local/state/newm/launcher-recent.json` only with `remember` |
 | `entries { "Lock"("Lock the screen") { ensureLocked() } }` | | entries of your own, with what they do |
 | `keys { "C-Return" { runTyped() } }` | | keys of your own in it: `next()`, `previous()`, `first()`, `last()`, `start()`, `runTyped()`, `close()` |
 

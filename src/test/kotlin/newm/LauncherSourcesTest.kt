@@ -88,4 +88,12 @@ class LauncherSourcesTest {
     fun `a path is one word for the shell`() {
         assertEquals("'it'\\''s here.txt'", shellQuoted("it's here.txt"))
     }
+
+    @Test
+    fun `pinned programs by id or name, in their order`() {
+        val all = programs + DesktopApp("Files", "", "nautilus", "", id = "org.gnome.Nautilus")
+        assertEquals(listOf("Files", "Firefox"), pinnedApps(all, listOf("org.gnome.Nautilus.desktop", "FIREFOX", "not-installed", "firefox")).map { it.name })
+        assertEquals(listOf("Files"), pinnedApps(all, listOf("files")).map { it.name })
+        assertEquals(emptyList(), pinnedApps(all, emptyList()))
+    }
 }

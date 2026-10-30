@@ -474,6 +474,12 @@ ru: что находит поиск
 en: "> htop" runs htop
 ru: "> htop" запускает htop
 
+en: always first
+ru: всегда первыми
+
+en: the programs started last, next
+ru: последние запущенные программы, следом
+
 en: Notifications of programs (Telegram's messages, a download done): cards at the top right,
 ru: Уведомления программ (сообщения Telegram, готовая загрузка): карточки справа сверху,
 
