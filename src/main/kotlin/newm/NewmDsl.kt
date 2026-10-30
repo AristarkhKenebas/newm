@@ -69,6 +69,14 @@ class NewmConfig(
      */
     fun animations(configure: AnimationsSection.() -> Unit) = section("animations", ::AnimationsSection, configure)
 
+    /**
+     * A look of newm's own, all of it at once: "jadefire" (jade and amber on near-black green,
+     * ember for what is urgent) sets the colours of the bar, the menus, the cards and the lock
+     * screen, the focus border's shader and a moving wallpaper — what the configuration sets
+     * itself wins (a picture of your own keeps its place). Unset: none.
+     */
+    var theme by setting<String>("theme")
+
     /** The screen's own corners rounded off, in pixels (0: square). */
     var cornerRadius by setting<Int>("corner_radius")
 
@@ -955,7 +963,9 @@ class FocusSection internal constructor(values: MutableMap<String, Any?>) : Sect
 
     /**
      * A GLSL file of one's own, `vec4 paint(vec2 at)`, read again when saved (see Caulis's
-     * border shaders: time, progress, focused, urgent, colors[0] = color, colors[1] = urgentColor).
+     * border shaders: time, progress, focused, urgent, colors[0] = color, colors[1] = urgentColor);
+     * or one of newm's by name: "jadefire" (jade flowing into amber, a spark going round, an
+     * urgent window pulsing ember).
      */
     var shader by setting<String>("shader")
 
@@ -1359,7 +1369,7 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
 
 /** colors { }: where newm's colours come from. */
 class ColorsSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
-    /** "wallpaper" (made from it, as phones do), "nord" (the classic ones), or a colour of yours ("#5b8cc8"). */
+    /** "wallpaper" (made from it, as phones do), "nord" (the classic ones), "jadefire" (newm's own look), or a colour of yours ("#5b8cc8"). */
     var source by setting<String>("source")
 
     /** "tonal", "vibrant", "expressive", "neutral" or "monochrome". */

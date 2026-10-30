@@ -2066,7 +2066,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                     newm.bar.NewmColors.choose(choice)
                     barModel.refreshPalette()
                 }
-                barModel.palette?.code ?: "nord (the classic colours)"
+                barModel.palette?.code ?: barModel.theme?.let { "${it.name} (newm's own look)" } ?: "nord (the classic colours)"
             }
             // For newm's own tests only (NEWM_TEST_INPUT=1): the pointer moved, clicked, scrolled.
             "test-pointer" -> if (System.getenv("NEWM_TEST_INPUT") == "1") testPointer(arg.orEmpty()) else "Disabled"

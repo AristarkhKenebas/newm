@@ -228,15 +228,20 @@ class BarModel(val wm: Layout) {
 
     /** The colours made from the wallpaper (or a colour of yours); null: the classic Nord ones. */
     var palette by mutableStateOf<dev.caulis.core.appearance.Palette?>(null)
+
+    /** The look of newm's own in use (colors.source = "jadefire"), or null. */
+    var theme by mutableStateOf<NewmTheme?>(null)
         private set
 
     /** Makes the palette anew (the wallpaper, the configuration or the colours menu changed) and writes it out. */
     fun refreshPalette() {
         val next = NewmColors.palette(wm.wallpaperSeed)
-        if (next == null && palette != null) log.warn("The colours went back to the plain ones (no wallpaper colour now)")
-        if (next != palette) {
+        val look = NewmColors.theme()
+        if (next == null && palette != null && look == null) log.warn("The colours went back to the plain ones (no wallpaper colour now)")
+        if (next != palette || look != theme) {
             palette = next
-            NewmColors.export(next)
+            theme = look
+            NewmColors.export(next, look)
             wm.focusBorders.update()
             applyNoticeStyle()
         }
@@ -340,7 +345,7 @@ class BarModel(val wm: Layout) {
     /** The colours of the scheme in use, for what belongs to no bar (the on-screen display). */
     fun colorsNow(): BarColors = wm.barsNow().firstOrNull()?.let(::colorsFor) ?: run {
         val dark = wm.caulis.colorSchemeNow == ColorScheme.DARK
-        palette?.let { NewmColors.barColors(it, dark) } ?: if (dark) BarColors.DARK else BarColors.LIGHT
+        palette?.let { NewmColors.barColors(it, dark) } ?: NewmColors.plain(dark)
     }
 
     // --- the volume from the bar's wheel and the keys: steps added up, one change at a time ---
@@ -397,7 +402,7 @@ class BarModel(val wm: Layout) {
             "light" -> false
             else -> scheme == ColorScheme.DARK
         }
-        val base = palette?.let { NewmColors.barColors(it, dark) } ?: if (dark) BarColors.DARK else BarColors.LIGHT
+        val base = palette?.let { NewmColors.barColors(it, dark) } ?: NewmColors.plain(dark)
         return base.copy(
             island = bar.islandColor?.let(::composeColor) ?: base.island,
             text = bar.textColor?.let(::composeColor) ?: base.text,

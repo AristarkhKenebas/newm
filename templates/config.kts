@@ -80,6 +80,7 @@ background {
     // fps = 30                             // how often it is drawn a second (fpsOnBattery = 15 on battery)
 }
 
+// theme = "jadefire"                      // newm's own look: colours, focus border and a moving wallpaper at once
 cornerRadius = 24                           // the screen's own corners rounded (0: square)
 // colorScheme = "auto"                     // "auto" (the quick settings' choice), "dark" or "light"
 // language = "auto"                        // newm's menus: "auto" (the system's), "en" or "ru"
@@ -88,7 +89,7 @@ cornerRadius = 24                           // the screen's own corners rounded 
 // The colours of the bar, the menus and the focus border: made from the wallpaper, as phones do.
 // The quick settings (the bar's grid button) choose among them; set them here to keep them fixed.
 // colors {
-//     source = "wallpaper"                 // "wallpaper", "nord" (the classic ones) or "#5b8cc8"
+//     source = "wallpaper"                 // "wallpaper", "nord" (the classic ones), "jadefire" or "#5b8cc8"
 //     style = "tonal"                      // "tonal", "vibrant", "expressive", "neutral", "monochrome"
 // }
 

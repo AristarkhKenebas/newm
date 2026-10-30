@@ -21,6 +21,14 @@ From now on every change people would notice gets a line under [Unreleased] in t
   the screen is dimmed, and are drawn at half the pixels each way on screens above 2560x1600
   (`resolution`). `speed`, `intensity`, `shaderValues` (each one's own settings) and `shaderColors` tune
   them.
+- newm's own look, Jadefire: `theme = "jadefire"` — jade and amber on near-black green, ember
+  for what is urgent. It colours the bar, the menus, the notification cards, the compositor's
+  notices and the lock screen (dark and light), gives the focus border the shader "jadefire"
+  (jade flowing into amber, a spark going round, an urgent window pulsing ember) and sets the
+  "dragon-eye" wallpaper; whatever the configuration sets itself wins, and a picture of your own
+  stays. Only its colours: `colors { source = "jadefire" }`, also in the colours menu. Its tokens
+  go to ~/.cache/newm/colors.json and colors.css for other programs. `focus { shader }` takes
+  newm's own border shaders by name.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

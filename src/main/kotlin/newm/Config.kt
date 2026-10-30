@@ -19,7 +19,8 @@ object Config {
 
     /** Takes [settings] (nested maps, newm's names) as the configuration; every value follows. */
     fun loadConfig(settings: Map<String, Any?>) {
-        provider = settings
+        // (theme = "jadefire": the look's settings underneath, the configuration's own win.)
+        provider = newm.bar.NewmThemes.underlay(settings)
         for ((path, value) in consumers) value.update(lookup(path))
         log.info { "Config loaded (${consumers.size} values in use)" }
     }

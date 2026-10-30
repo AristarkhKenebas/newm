@@ -65,8 +65,11 @@ ru: Цвета панели, меню и рамки фокуса: из обое�
 en: The quick settings (the bar's grid button) choose among them; set them here to keep them fixed.
 ru: Быстрые настройки (кнопка-сетка на панели) выбирают среди них; задайте их здесь, чтобы закрепить.
 
-en: "wallpaper", "nord" (the classic ones) or "#5b8cc8"
-ru: "wallpaper", "nord" (классические) или "#5b8cc8"
+en: "wallpaper", "nord" (the classic ones), "jadefire" or "#5b8cc8"
+ru: "wallpaper", "nord" (классические), "jadefire" или "#5b8cc8"
+
+en: newm's own look: colours, focus border and a moving wallpaper at once
+ru: свой облик newm: цвета, рамка фокуса и живые обои сразу
 
 en: "tonal", "vibrant", "expressive", "neutral", "monochrome"
 ru: "tonal", "vibrant", "expressive", "neutral", "monochrome"

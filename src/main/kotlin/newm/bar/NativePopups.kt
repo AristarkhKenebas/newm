@@ -515,6 +515,9 @@ internal fun ColorsPopup(model: BarModel, colors: BarColors, text: TextStyle) {
                 onClick = { NewmColors.choose("wallpaper:${s.name.lowercase()}"); model.refreshPalette() },
                 leading = { palette?.let { Swatches(it.scheme(dark)) } })
         }
+        ListRow("Jadefire", colors, text, subtitle = "newm's own look: jade, amber, ember", selected = source == "jadefire",
+            onClick = { NewmColors.choose("jadefire"); model.refreshPalette() },
+            leading = { Swatches(null, NewmThemes.JADEFIRE) })
         ListRow("Classic", colors, text, subtitle = "newm's Nord colours", selected = source == "nord" || source == "classic",
             onClick = { NewmColors.choose("nord"); model.refreshPalette() },
             leading = { Swatches(null) })
@@ -523,9 +526,10 @@ internal fun ColorsPopup(model: BarModel, colors: BarColors, text: TextStyle) {
 
 // Four colours of a scheme (or Nord's) in a little square.
 @Composable
-private fun Swatches(scheme: dev.caulis.core.appearance.PaletteScheme?) {
+private fun Swatches(scheme: dev.caulis.core.appearance.PaletteScheme?, look: NewmTheme? = null) {
     fun c(x: dev.caulis.render.Color) = androidx.compose.ui.graphics.Color(x.red, x.green, x.blue)
     val four = scheme?.let { listOf(c(it.primary), c(it.secondary), c(it.tertiary), c(it.surfaceContainer)) }
+        ?: look?.let { listOf(it.dark.accent, it.dark.warning, it.dark.danger, it.dark.island.copy(alpha = 1f)) }
         ?: listOf(androidx.compose.ui.graphics.Color(0xFF88C0D0), androidx.compose.ui.graphics.Color(0xFF5E81AC), androidx.compose.ui.graphics.Color(0xFFB48EAD), androidx.compose.ui.graphics.Color(0xFFECEFF4))
     androidx.compose.foundation.Canvas(Modifier.size(20.dp)) {
         val h = size.width / 2

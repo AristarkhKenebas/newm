@@ -198,10 +198,19 @@ class FocusBorders(private val wm: Layout) : Animatable {
         val urgentPaint = confUrgentColor().takeIf { it.isNotBlank() }?.let(::paintOf)
         val file = confShader().trim()
         if (file.isNotEmpty()) {
-            val made = shader?.takeIf { it.first == file }?.second ?: dev.caulis.core.Paints.file(wm.caulis.file(file)).also { shader = file to it }
+            val made = shader?.takeIf { it.first == file }?.second ?: builtInShader(file)?.also { shader = file to it }
+                ?: dev.caulis.core.Paints.file(wm.caulis.file(file)).also { shader = file to it }
             return made.withColors(usual.firstColor(), (urgentPaint ?: usual).firstColor())
         }
         return if (urgent && urgentPaint != null) urgentPaint else usual
+    }
+
+    // One of newm's own border shaders by name ("jadefire": jade flowing into amber, a spark going round), or null.
+    private fun builtInShader(name: String): Paint.Shader? {
+        if (!name.matches(Regex("[a-z0-9-]+"))) return null
+        val code = FocusBorders::class.java.getResourceAsStream("/newm/borders/$name.glsl")?.use { String(it.readAllBytes()) } ?: return null
+        log.info { "Focus border shader: $name (newm's own)" }
+        return Paint.Shader({ code }, name)
     }
 
     // A colour or gradient as configured (null for "auto" or a mistake, which is logged once).
@@ -233,6 +242,8 @@ class FocusBorders(private val wm: Layout) : Animatable {
         val configured = confColor()
         if (configured != "auto") return runCatching { color(configured) }.getOrElse { runCatching { Paint.parse(configured).firstColor() }.getOrElse { color("#88C0D0B0") } }
         val dark = wm.caulis.colorSchemeNow == dev.caulis.core.appearance.ColorScheme.DARK
+        // (A look of newm's own: its accent.)
+        newm.bar.NewmColors.theme()?.let { look -> (if (dark) look.dark else look.light).accent.let { a -> return dev.caulis.render.Color(a.red, a.green, a.blue, 0.85f) } }
         val accent = wm.barModel.palette?.scheme(dark)?.primary ?: return color("#88C0D0B0")
         return accent.withAlpha(0.8f)
     }

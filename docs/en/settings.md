@@ -17,6 +17,7 @@ setting in use.
 | `animTime` | `0.3` | how long moving and zooming take, seconds (the animations' global time; they run only when on) |
 | `blendTime` | `1.0` | fading in at the start and out at the end, seconds (the animations `startup`, `quit`) |
 | `animations { }` | off | every animation, Hyprland-like: `preset = "newm"` (newm's usual look), `enabled`, `millis`, `curve`, `curve(name, …)`, `spring(name, …)`, `animation(name, enabled, millis, curve, style, speed)`, `on(name)`, `off(name)` — see [Animations](animations.md) |
+| `theme` | unset | a look of newm's own, all at once: `"jadefire"` — jade and amber on near-black green, ember for what is urgent: the colours of the bar, menus, cards and lock screen, the focus border's shader `"jadefire"` and the wallpaper `"dragon-eye"`; what you set yourself wins (a picture of your own keeps its place). See [the Jadefire look](brand.md) |
 | `cornerRadius` | `18` | the screen's own corners rounded, pixels (0: square) |
 | `lockOnWakeup` | `true` | lock before the computer sleeps (sleep waits for the lock screen, see `lock { sleepWait }`) and when it wakes up |
 | `colorScheme` | `"auto"` | `"dark"`, `"light"`, or `"auto"`: the quick settings' last choice (dark until one) |
@@ -148,7 +149,7 @@ overview nothing is resized. A screen keeps its sizes until its windows or layou
 | `animTime` | `0.3` | how long its own glide takes (the animation `border`) |
 | `animateOnChange` | `false` | the line glides to the next window |
 | `urgentColor` | `""` | the border of a window wanting attention while it has not the focus (focusing it takes the wish away), as Hyprland's; `""`: none |
-| `shader` | `""` | a GLSL file of your own, `vec4 paint(vec2 at)`, read again when saved (see below) |
+| `shader` | `""` | a GLSL file of your own, `vec4 paint(vec2 at)`, read again when saved (see below); or newm's own `"jadefire"`: jade flowing into amber, a spark going round, an urgent window pulsing ember |
 | `animate` | `true` | `false`: a shader's own time (and a turning gradient) stands still |
 
 `color` and `urgentColor` take Hyprland's way of writing border colours too: a gradient
@@ -249,7 +250,7 @@ Or with newm's own rules, next to the others in `view { rules { } }`:
 
 | Setting | Default | What |
 |---|---|---|
-| `source` | the colours menu's choice, else `"wallpaper"` | `"wallpaper"`, `"nord"` (the classic colours) or `"#5b8cc8"` |
+| `source` | the colours menu's choice, else `"wallpaper"` | `"wallpaper"`, `"nord"` (the classic colours), `"jadefire"` (newm's own look) or `"#5b8cc8"` |
 | `style` | `"tonal"` | `"tonal"`, `"vibrant"`, `"expressive"`, `"neutral"`, `"monochrome"` |
 
 ## panels { }

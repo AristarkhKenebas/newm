@@ -240,6 +240,7 @@ private val RU: Map<String, String> = mapOf(
     "The wallpaper is not read yet" to "Обои ещё не прочитаны",
     "Classic" to "Классическая",
     "newm's Nord colours" to "Цвета Nord от newm",
+    "newm's own look: jade, amber, ember" to "Свой облик newm: нефрит, янтарь, угли",
     "Palette copied: %s" to "Палитра скопирована: %s",
     // launcher, clipboard, keys, screenshots
     "Search programs" to "Поиск программ",
