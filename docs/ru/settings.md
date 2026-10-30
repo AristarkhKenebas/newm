@@ -795,7 +795,7 @@ newm cmd colors [nord|wallpaper|#5b8cc8]   # текущие цвета или н
 newm cmd displays extend        # второй монитор: extend, mirror, laptop, other
 newm cmd scratchpad drop        # показать или спрятать scratchpad
 newm cmd special music          # показать или спрятать особый рабочий стол ("special" без имени)
-newm cmd restart                # завершить newm, чтобы он запустился снова
+newm cmd restart                # завершить newm, чтобы он запустился снова (не под блокировкой)
 newm cmd restart keep           # то же, и ваши окна откроются снова
 newm cmd restore-rest           # окна, оставленные тогда (больше session { maxWindows })
 newm cmd autostart              # программы из autostart { } и как каждая из них

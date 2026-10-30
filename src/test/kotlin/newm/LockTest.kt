@@ -214,6 +214,21 @@ class LockTest {
         }
     }
 
+    @Test
+    fun `newm cmd restart is refused while the screen is locked`() = withNewm { caulis, layout, _ ->
+        onLoop(caulis) { layout.ensureLocked(anim = false) }
+        try {
+            // (The start script would start newm again, unlocked: any program could unlock so.)
+            val answer = onLoop(caulis) { layout.command("restart", "keep") }
+            assertTrue(answer?.contains("locked") == true, "refused with a reason: $answer")
+            assertFalse(restartRequested, "newm is not ending")
+            onLoop(caulis) { assertTrue(caulis.desktop.locked, "still locked") }
+        } finally {
+            restartRequested = false
+            onLoop(caulis) { layout.trustedUnlock() }
+        }
+    }
+
     // --- the harness: newm's layout on a headless Caulis, and a small Wayland client
 
     @Test

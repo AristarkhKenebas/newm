@@ -792,7 +792,7 @@ newm cmd colors [nord|wallpaper|#5b8cc8]   # the colours in use, or new ones
 newm cmd displays extend        # a second monitor: extend, mirror, laptop, other
 newm cmd scratchpad drop        # show or hide a scratchpad
 newm cmd special music          # show or hide a special workspace ("special" without a name)
-newm cmd restart                # end newm so that it starts again
+newm cmd restart                # end newm so that it starts again (not while locked)
 newm cmd restart keep           # the same, and your windows open again after it
 newm cmd restore-rest           # the windows left out then (more than session { maxWindows })
 newm cmd autostart              # the programs of autostart { } and how each is

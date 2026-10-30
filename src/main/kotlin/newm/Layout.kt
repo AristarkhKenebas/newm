@@ -2073,7 +2073,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 codes.reversed().forEach { caulis.simulateKey(it, false) }
                 null
             } else "Disabled"
-            "restart" -> {
+            "restart" -> if (isLocked() || desktopOrNull()?.locked == true) {
+                // (The start script starts newm again, and the new newm is not locked: a restart
+                // now would unlock the screen without a password — any program could ask for it.)
+                log.warn("newm cmd restart while the screen is locked: refused (unlock first)")
+                "The screen is locked: unlock it first, then restart"
+            } else {
                 // `restart keep`: the windows open now open again after it, each in its place.
                 val keep = arg?.trim()?.removePrefix("--") in setOf("keep", "restore", "windows", "session")
                 if (keep) session.save() else session.forgetForRestart()

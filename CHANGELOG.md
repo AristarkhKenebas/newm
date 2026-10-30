@@ -10,6 +10,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
 
 ## [Unreleased]
 
+### Security
+- `newm cmd restart` is refused while the screen is locked. The start script starts newm again
+  after a restart, and the new newm came up unlocked: any program of the session could unlock
+  the screen that way, and a restart from a script (a rebuild, an update) left the computer
+  open. Unlock first, then restart.
+
 ## [2026-10-30, on Caulis 0.1.7]
 
 ### Added
