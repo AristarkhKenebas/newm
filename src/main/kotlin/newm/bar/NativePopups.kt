@@ -42,7 +42,9 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun WifiPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val nm = model.network
-    LaunchedEffect(Unit) { nm.refresh(); if (nm.wifiEnabled && confScanOnOpen()) nm.scan() }
+    // (Not while drawn ahead at the start: no scan at every login.)
+    val warming = newm.LocalWarmingUp.current
+    LaunchedEffect(Unit) { if (!warming) { nm.refresh(); if (nm.wifiEnabled && confScanOnOpen()) nm.scan() } }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Header("Wi-Fi", colors, text) {
             if (nm.wifiEnabled) IconButton(Glyph.REFRESH, colors, spinning = nm.scanning) { nm.scan() }
@@ -99,7 +101,8 @@ private fun Note(words: String, colors: BarColors, text: TextStyle) {
 @Composable
 internal fun BluetoothPopup(model: BarModel, popup: Popup, colors: BarColors, text: TextStyle) {
     val bt = model.bluetooth
-    LaunchedEffect(Unit) { bt.refresh() }
+    val warming = newm.LocalWarmingUp.current
+    LaunchedEffect(Unit) { if (!warming) bt.refresh() }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Header("Bluetooth", colors, text) {
             if (bt.powered) IconButton(Glyph.REFRESH, colors, spinning = bt.scanning) { bt.scan() }
@@ -157,7 +160,8 @@ internal fun maxVolume(): Int = confMaxVolume().coerceIn(100, 150)
 @Composable
 internal fun SoundPopup(model: BarModel, colors: BarColors, text: TextStyle) {
     val sound = model.sound
-    LaunchedEffect(Unit) { sound.refresh() }
+    val warming = newm.LocalWarmingUp.current
+    LaunchedEffect(Unit) { if (!warming) sound.refresh() }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val out = sound.outputs.firstOrNull { it.isDefault } ?: sound.outputs.firstOrNull()
         Header("Sound", colors, text)
@@ -270,7 +274,8 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
             kotlinx.coroutines.delay(5000)
         }
     }
-    LaunchedEffect(Unit) { model.network.refresh(); model.bluetooth.refresh(); model.powerProfiles.refresh() }
+    val warming = newm.LocalWarmingUp.current
+    LaunchedEffect(Unit) { if (!warming) { model.network.refresh(); model.bluetooth.refresh(); model.powerProfiles.refresh() } }
     val caffeine = until != null && until > now
     // (The same test as the bar's: what the tile shows is what everything shows.)
     val dark = wm.caulis.colorSchemeNow == dev.caulis.core.appearance.ColorScheme.DARK
@@ -287,6 +292,7 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
     var asked by remember { mutableStateOf(0) }
     val commandSays = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     LaunchedEffect(asked) {
+        if (warming) return@LaunchedEffect // (no commands run while drawn ahead)
         for ((name, spec) in custom) {
             val check = (spec as? Map<*, *>)?.get("is_on") as? String ?: continue
             inBackground { val on = commandSucceeds(check); wm.caulis.post { commandSays[name] = on } }
@@ -397,7 +403,7 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
             }
             // The caffeine's times, below its row.
             if ("caffeine" in row && popup.expanded == "caffeine") Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val left = if (caffeine && until != Long.MAX_VALUE) ((until!! - now) / 60_000L).toInt() + 1 else -1
+                val left = if (caffeine && until != Long.MAX_VALUE) ((until - now) / 60_000L).toInt() + 1 else -1
                 // caffeine { choices }: minutes, 0 for until turned off; the one chosen is the shortest that still covers what is left.
                 val choices = confCaffeineChoices().filter { it >= 0 }.distinct()
                 val timed = choices.filter { it > 0 }.sorted()

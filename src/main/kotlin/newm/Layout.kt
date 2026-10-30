@@ -24,9 +24,10 @@ private val log = Logger("layout")
 
 // newm's own wallpaper unless another is named; "" for none (a wallpaper program instead, swaybg).
 private val confScreensOffAfter = configuredValue("energy.screens_off_after", 0)
-// windows { newPlacement }: where a new window opens — "right-of-focused" (others move right),
+// windows { newPlacement }: where a new window opens — "compact" (the free place next to the
+// focused one keeping the wall compact, see Placement), "right-of-focused" (others move right),
 // "beside-focused" (the first free tile right of it in its row), "end" (right of all), "original" (newm's).
-private val confNewPlacement = configuredValue("windows.new_placement", "right-of-focused")
+private val confNewPlacement = configuredValue("windows.new_placement", Placement.COMPACT)
 // (Before windows { newPlacement }: view { placeBesideFocused }, true "beside-focused", false "original".)
 private val confPlaceBesideFocused = configuredValue<Boolean?>("view.place_beside_focused", null)
 // windows { returnFocusToParent = true }: a child window closing gives the focus back to its parent
@@ -491,6 +492,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onIdle(1, resume = { idleSince = null; onIdle(0.0, false) }) { idleSince = now() - 1.0 }
         caulis.onStart { caulis.every(1000) { idleTick() } }
         caulis.onStart { main() }
+        // view { rules } may send windows into special workspaces too (as Caulis' rules do).
+        caulis.onStart { specials.takeOverRules() }
     }
 
     // --- pywm's part ---------------------------------------------------------------------------
@@ -586,7 +589,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private fun director() = object : WindowDirector {
         // Windows of Caulis's scratchpads (caulis.scratchpad(...) in the configuration) are the
         // desktop's: they slide in above newm's wall and away again (newm issue 70).
-        override fun manages(window: Window): Boolean = caulis.desktop.scratchpadOf(window) == null
+        // A window a rule sends into a special workspace is not newm's either: it opens straight
+        // in there (newm placing it first would move the wall's windows and the view for nothing).
+        override fun manages(window: Window): Boolean = caulis.desktop.scratchpadOf(window) == null && !specials.opensInSpecial(window)
 
         override fun place(window: Window, now: Long): WindowPlace? {
             val view = viewsByWindow.getOrPut(window) {
@@ -619,7 +624,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             // What is behind it blurred (a see-through terminal), if its rule says so.
             viewsByWindow[window]?.blur?.let { (size, passes) ->
                 val area = place.clip?.let { place.rect.intersect(it) } ?: place.rect
-                if (area != null) canvas.blur(area, radius = place.cornerRadius ?: 0f, size = size, passes = passes)
+                canvas.blur(area, radius = place.cornerRadius ?: 0f, size = size, passes = passes)
             }
             val focused = focusBorders.currentView
             if (focused?.window === window && focused.wantsFocusBorder) focusBorders.draw(canvas)
@@ -800,17 +805,34 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
     }
 
-    private fun setupWidgets() {
+    // The monitors the bars and backgrounds were made for last (the same objects).
+    private var widgetsMonitors: List<Monitor> = emptyList()
+
+    // The workspaces (layoutGeneration) the bars were made for.
+    private var barsGeneration = -1
+
+    // [keepBars]: bars made already for these monitors and workspaces stay (the start: the
+    // first monitor was announced just before newm's main, which made them then).
+    private fun setupWidgets(keepBars: Boolean = false) {
         val monitors = desktopOrNull()?.monitors ?: return
+        val sameMonitors = widgetsMonitors.size == monitors.size && widgetsMonitors.indices.all { widgetsMonitors[it] === monitors[it] }
+        val keep = keepBars && sameMonitors && barsGeneration == layoutGeneration &&
+            topBars.isNotEmpty() == confNativeTopBarEnabled() && bottomBars.isNotEmpty() == confNativeBottomBarEnabled()
+        widgetsMonitors = monitors.toList()
         fun workspaceFor(m: Monitor): Workspace =
             workspaces.firstOrNull { w -> w.posX <= m.area.x && m.area.x < w.posX + w.width && w.posY <= m.area.y && m.area.y < w.posY + w.height }
                 ?: workspaces[0].also { log.warn("Workspaces do not cover whole area") }
 
-        barModel.close()
-        // (Diagnostics: the bars made anew show for a frame as new — if they flash, this says when.)
-        if (topBars.isNotEmpty() || bottomBars.isNotEmpty()) log.warn("The bars are made anew (the layout or the configuration changed)")
-        topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh).also(Bar::look) } else emptyList()
-        bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh).also(Bar::look) } else emptyList()
+        if (keep) {
+            log.trace { "The bars made a moment ago stay" }
+        } else {
+            barModel.close()
+            // (Diagnostics: the bars made anew show for a frame as new — if they flash, this says when.)
+            if (topBars.isNotEmpty() || bottomBars.isNotEmpty()) log.warn("The bars are made anew (the layout or the configuration changed)")
+            topBars = if (confNativeTopBarEnabled()) monitors.map { Bar(this, it, top = true).also(Bar::refresh).also(Bar::look) } else emptyList()
+            bottomBars = if (confNativeBottomBarEnabled()) monitors.map { Bar(this, it, top = false).also(Bar::refresh).also(Bar::look) } else emptyList()
+            barsGeneration = layoutGeneration
+        }
         barModel.refreshPalette()
         barModel.applyNoticeStyle() // (below the bars made now)
         shots?.apply()
@@ -832,7 +854,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                         if (image != null && wallpaper?.first == path) {
                             wallpaper = path to Wallpaper.of(caulis.desktop.renderer, image)
                             wallpaperSeed = seed
-                            setupWidgets()
+                            wallpaperArrived()
                         }
                     }
                 }, "newm-wallpaper").apply { isDaemon = true }.start()
@@ -844,8 +866,24 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         damage()
     }
 
+    // The wallpaper read (on its own thread) is ready: shown, and its colour for the colours
+    // made from it — the bars stay as they are (they were made anew for it before: a second
+    // whole composition of every bar at each start).
+    private fun wallpaperArrived() {
+        val monitors = desktopOrNull()?.monitors ?: return
+        val picture = wallpaper?.second ?: return
+        log.info { "The wallpaper is ready: shown on ${monitors.size} monitor(s)" }
+        backgrounds = monitors.map { m ->
+            val ws = workspaces.firstOrNull { w -> w.posX <= m.area.x && m.area.x < w.posX + w.width && w.posY <= m.area.y && m.area.y < w.posY + w.height } ?: workspaces[0]
+            Background(this, m, ws, picture)
+        }
+        barModel.refreshPalette()
+        focusBorders.update()
+        damage()
+    }
+
     private fun setup(reconfigure: Boolean = true) {
-        setupWidgets()
+        setupWidgets(keepBars = !reconfigure)
         // Sleep locks first (lock_on_wakeup) and waits up to lock { sleepWait } seconds for the lock screen to show.
         caulis.lockBeforeSleep = confLockOnWakeup()
         caulis.sleepLockWaitMillis = (confSleepWait().toDouble() * 1000).toLong().coerceIn(0L, 30_000L)
@@ -898,7 +936,10 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     private fun main() {
         log.info { "Layout main" }
-        setupWorkspaces()
+        // (Made already when the first monitor was announced just before: not again.)
+        val geometry = geometryNow()
+        if (geometry == null || geometry != lastGeometry || barsGeneration != layoutGeneration) setupWorkspaces()
+        lastGeometry = geometry
         setup(reconfigure = false)
         addWidgetDrawings({ backgrounds }, corners) { topBars + bottomBars }
         panelsUi.start()
@@ -918,13 +959,41 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         // The bars drawn once ahead while the screen is still dark (reveal): newm fades in whole,
         // no bar popping in. (Right after the widgets are made, which is the next moment.)
         caulis.whenWarm("the bars") { done ->
-            caulis.after(0) {
+            fun onThisThread() = caulis.after(0) {
                 try {
                     for ((widget, bars) in listOf(topBarWidget to topBars, bottomBarWidget to bottomBars)) {
                         for (bar in bars) bar.place()?.let { r -> widget.prewarm(bar.monitor, r.width, r.height) }
                     }
                 } finally {
                     done()
+                }
+            }
+            // Each bar's scene made on a thread of its own first (warmup.own_thread): composed
+            // and drawn there, handed to the widget — the compositor's thread then only shows
+            // its pixels (its first composition held it ~0.2-0.3 s: the pointer stood still).
+            // (The widgets are there the next moment; the bars not placed yet while newm comes
+            // in: as big as they will be.)
+            caulis.after(0) {
+                val ahead = if (!warmsOnThread()) emptyList() else listOf(topBarWidget to topBars, bottomBarWidget to bottomBars).flatMap { (handle, bars) ->
+                    val widget = handle.widget ?: return@flatMap emptyList()
+                    bars.map { b -> Triple(widget, b, b.place() ?: dev.caulis.geometry.Rect(b.monitor.area.x, b.monitor.area.y, b.monitor.area.width, b.room)) }
+                }
+                if (ahead.isEmpty()) {
+                    onThisThread()
+                    return@after
+                }
+                Thread.ofPlatform().daemon().name("newm-bar-warmup").start {
+                    val started = System.nanoTime()
+                    for ((widget, bar, r) in ahead) {
+                        try {
+                            widget.prepareAhead(bar.monitor, r.width, r.height)
+                        } catch (e: Throwable) {
+                            if (e is VirtualMachineError && e !is StackOverflowError) throw e
+                            log.warn("Making the bar ahead failed: $e")
+                        }
+                    }
+                    log.info { "The bars made ahead on a thread of their own in ${(System.nanoTime() - started) / 1_000_000} ms" }
+                    caulis.post { onThisThread() }
                 }
             }
         }
@@ -1138,15 +1207,21 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val child = view.openedAsChildOf()
         if (child != null) {
             val p = tiledOf(child)
+            // (Free room there already: it goes there, nothing moves; else what is in the way makes room.)
             when (confChildPlacement().takeIf { p != null }) {
-                "below" -> return insertAt(wsState, pyRound(p!!.i), pyRound(p.j + p.h), w, h, columns = false).also { log.info { "Child window ${view.appId} below its parent, at ${it.first}, ${it.second}" } }
-                "right" -> return insertAt(wsState, pyRound(p!!.i + p.w), pyRound(p.j), w, h, columns = true).also { log.info { "Child window ${view.appId} right of its parent, at ${it.first}, ${it.second}" } }
+                "below" -> return (pyRound(p!!.i) to pyRound(p.j + p.h)).takeIf { (i, j) -> isFree(wsState, i, j, w, h) }
+                    ?.also { log.info { "Child window ${view.appId} below its parent, at ${it.first}, ${it.second} (free)" } }
+                    ?: insertAt(wsState, pyRound(p.i), pyRound(p.j + p.h), w, h, columns = false).also { log.info { "Child window ${view.appId} below its parent, at ${it.first}, ${it.second}" } }
+                "right" -> return (pyRound(p!!.i + p.w) to pyRound(p.j)).takeIf { (i, j) -> isFree(wsState, i, j, w, h) }
+                    ?.also { log.info { "Child window ${view.appId} right of its parent, at ${it.first}, ${it.second} (free)" } }
+                    ?: insertAt(wsState, pyRound(p.i + p.w), pyRound(p.j), w, h, columns = true).also { log.info { "Child window ${view.appId} right of its parent, at ${it.first}, ${it.second}" } }
                 else -> {}
             }
         }
         val placement = confPlaceBesideFocused()?.let { if (it) "beside-focused" else "original" } ?: confNewPlacement()
         val anchor = tiledOf(view.focusedAtOpen) ?: tiledOf(findFocusedView()?.takeIf { it !== view }) ?: workspace.focusViewHint?.let { h0 -> wsState.viewStates[h0]?.takeIf { it.isTiled && it.w > 0 } }
         return when (placement) {
+            Placement.COMPACT -> Placement.placeOnWall(wsState, anchor, w, h, except = view.handle)
             "right-of-focused" -> if (anchor == null) placeInitial(workspace, wsState, w, h)
                 else insertAt(wsState, pyRound(anchor.i + anchor.w), pyRound(anchor.j), w, h, columns = true)
             "beside-focused" -> if (anchor == null) placeInitial(workspace, wsState, w, h) else {
@@ -1166,8 +1241,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             }
             "original" -> placeInitial(workspace, wsState, w, h)
             else -> {
-                if (warnedPlacement.add(placement)) log.warn("windows { newPlacement = \"$placement\" } is none of right-of-focused, beside-focused, end, original: original")
-                placeInitial(workspace, wsState, w, h)
+                if (warnedPlacement.add(placement)) log.warn("windows { newPlacement = \"$placement\" } is none of ${Placement.NAMES.joinToString()}: compact")
+                Placement.placeOnWall(wsState, anchor, w, h, except = view.handle)
             }
         }
     }
@@ -1177,9 +1252,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     /**
      * On screens (screens { }): puts the new tiled [view] on a screen of [wsState] and tiles
      * them anew; its state there is given back. A child window goes right after its window on
-     * its screen, any other by windows { newPlacement }: after the focused one ("right-of-focused",
-     * "beside-focused"), on the last screen ("end"), on the first with room ("original"). A
-     * full screen: on a new one right after it.
+     * its screen (a full screen's last window onto the next screen if that has room), any other
+     * by windows { newPlacement }: next to the focused one, else on a neighbour with room, else a
+     * new screen after it ("compact"); after the focused one ("right-of-focused", "beside-focused"),
+     * on the last screen ("end"), on the first with room ("original"). A full screen: on a new
+     * one right after it.
      */
     internal fun placeOnScreen(view: View, workspace: Workspace, wsState: WorkspaceState): ViewState {
         val screens = wsState.readScreens()
@@ -1191,7 +1268,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             ?: workspace.focusViewHint?.takeIf { h -> h != view.handle && wsState.viewStates[h]?.isTiled == true }
         fun room(s: Screen) = s.windows.size < Screens.capacity(s.layout ?: Screens.defaultLayout())
         val anchorScreen = anchor?.let { a -> screens.indexOfFirst { a in it.windows } }?.takeIf { it >= 0 }
+        val known = placement in Placement.NAMES || placement == "child"
         when {
+            placement == "child" && anchorScreen != null -> Placement.placeChildOnScreens(screens, anchorScreen, anchor, view.handle)
+            placement == Placement.COMPACT || !known ->
+                Placement.placeOnScreens(screens, anchorScreen, anchor?.takeIf { anchorScreen != null }, view.handle, Screens.pageAt(wsState.i + .5, wsState.j + .5))
             placement == "original" || (anchorScreen == null && placement != "end") -> screens.firstOrNull(::room)?.windows?.add(view.handle)
                 ?: screens.add(Screen(null, mutableListOf(view.handle)))
             placement == "end" -> screens.lastOrNull()?.takeIf(::room)?.windows?.add(view.handle) ?: screens.add(Screen(null, mutableListOf(view.handle)))
@@ -1201,8 +1282,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 else screens.add(anchorScreen + 1, Screen(null, mutableListOf(view.handle)))
             }
         }
-        if (placement !in setOf("child", "original", "end", "right-of-focused", "beside-focused") && warnedPlacement.add(placement)) {
-            log.warn("windows { newPlacement = \"$placement\" } is none of right-of-focused, beside-focused, end, original: right-of-focused")
+        if (!known && warnedPlacement.add(placement)) {
+            log.warn("windows { newPlacement = \"$placement\" } is none of ${Placement.NAMES.joinToString()}: compact")
         }
         wsState.viewStates[view.handle] = ViewState(isTiled = true, stackIdx = view.handle)
         wsState.writeScreens(screens)
@@ -1227,7 +1308,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     /** The monitors changed: workspaces and widgets anew. */
     fun onLayoutChange() {
-        lastGeometry = geometryNow()
+        val geometry = geometryNow()
+        // (A monitor newm already made its workspaces and bars for — the first one, told right
+        // after the start — changes nothing: the bars are not made a second time.)
+        val monitorsNow = desktopOrNull()?.monitors
+        if (geometry == lastGeometry && geometry != null && monitorsNow != null && widgetsMonitors.size == monitorsNow.size && widgetsMonitors.indices.all { widgetsMonitors[it] === monitorsNow[it] }) {
+            log.trace { "Monitors as before: workspaces and bars kept" }
+            return
+        }
+        lastGeometry = geometry
         setupWorkspaces()
         setupWidgets()
     }
@@ -2757,7 +2846,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     private fun safelyEnterMode(mode: String?) {
         try {
-            caulis.enterMode(mode)
+            caulis.enterKeyMode(mode)
         } catch (e: Exception) {
             log.warn("Key mode $mode: $e")
         }

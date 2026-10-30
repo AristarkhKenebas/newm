@@ -181,7 +181,7 @@ class FocusBorders(private val wm: Layout) : Animatable {
         val urgentPaint = confUrgentColor().takeIf { it.isNotBlank() }?.let(::paintOf)
         val file = confShader().trim()
         if (file.isNotEmpty()) {
-            val made = shader?.takeIf { it.first == file }?.second ?: (dev.caulis.core.Paints.file(wm.caulis.file(file)) as Paint.Shader).also { shader = file to it }
+            val made = shader?.takeIf { it.first == file }?.second ?: dev.caulis.core.Paints.file(wm.caulis.file(file)).also { shader = file to it }
             return made.withColors(usual.firstColor(), (urgentPaint ?: usual).firstColor())
         }
         return if (urgent && urgentPaint != null) urgentPaint else usual

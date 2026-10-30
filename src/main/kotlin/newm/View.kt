@@ -633,6 +633,19 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
 
     // --- Init and map
 
+    companion object {
+        /**
+         * The special workspace view { rules } send [window] into (rule(specialWorkspace = "music")),
+         * asked before it appears (a view of its own for the rules to look at, not put anywhere).
+         */
+        internal fun specialWorkspaceRuleOf(wm: Layout, window: Window): String? = try {
+            (confRulesCallback()(View(wm, window, -1))?.get("special_workspace") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            log.error("In rules callback (special workspace)", e)
+            null
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun readRules() {
         try {

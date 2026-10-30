@@ -120,10 +120,13 @@ Tap **Logo** alone: you see every window at once, small.
 
 ## Where windows open
 
-- A new window opens right of the one you are in; the windows right of it move one tile on.
-  `windows { newPlacement = "original" }` brings back newm's: the first free tile in view.
+- A new window opens **next to the one you are in**, in the free place that keeps your windows
+  close together and near a square (a third window goes below the second, not to the end of a
+  long row), with the smallest move of the view; nothing moves aside unless no place next to
+  yours is free. `windows { newPlacement = "right-of-focused" }` opens it right of yours, the
+  windows right of it moving one tile on; `"original"` brings back newm's: the first free tile in view.
 - A program's child window — a dialog, a file chooser, a photo viewer — opens **below its
-  window** (what is below moves down). A window without a parent counts as one too when the
+  window** (into free room there, else what is below moves down). A window without a parent counts as one too when the
   program of the focused window opens it (Telegram's photo viewer). `windows { childPlacement
   = "over" }` floats it over its window instead, as newm did; `"right"` puts it beside.
 - Closing a child window gives the focus back to its window.
@@ -247,8 +250,8 @@ algorithm. What is different on purpose:
   monocle, ...); the next window opens on the next screen, and the view moves by whole
   screens only. Under the bars only the bars show (`windowsUnderBar`). `screens { enabled =
   false }` gives the original's free wall of tiles, where everything below holds.
-- **Where new windows open**: right of the focused window, the rest moving on (the original:
-  the first free tile in view) — `windows { newPlacement = "original" }` for that.
+- **Where new windows open**: next to the focused window where the wall stays compact, nothing
+  moving (the original: the first free tile in view) — `windows { newPlacement = "original" }` for that.
 - **Child windows** (dialogs, viewers) are tiled below their window, and the focus goes back
   to it when they close (the original floated every window with a parent over its middle) —
   `windows { childPlacement = "over" }` for that. A window of the focused program without a

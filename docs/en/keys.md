@@ -113,6 +113,17 @@ The screens' keys of the template (screens { }): Super+Space `next-layout`, Supe
 window with its neighbour on the screen (at the screen's edge: onto the next screen), and
 Super+Ctrl+arrows resize it within its screen.
 
+Special workspaces by name — a music player kept in "music", shown and hidden with Super+M:
+
+```kotlin
+windowRule { appId("spotify"); specialWorkspace = "music" }   // Spotify always opens there, hidden
+bind("Super+M", "special-workspace", "music")                 // show "music", and hide it again
+bind("Super+Shift+M", "to-special-workspace", "music")        // the focused window into "music"
+bind("Super+Ctrl+M", "from-special-workspace")                // the focused window back onto the wall
+```
+
+(More in [Every setting](settings.md#specialworkspace-).)
+
 ## With code of your own
 
 Anything newm can do, as before — the key, its words for the help, and Kotlin inside `{ }`:

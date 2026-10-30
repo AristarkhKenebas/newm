@@ -33,6 +33,7 @@ class StatusSoundTest {
             case "$(cat '$wpctlSays')" in
               ok) echo "Volume: 0.45" ;;
               muted) echo "Volume: 0.30 [MUTED]" ;;
+              stamped) echo "E $(date +%H:%M:%S.%N)             mod.rt ../pipewire/src/modules/module-rt.c:295:pw_rtkit_bus_get: Failed to connect to system bus"; exit 2 ;;
               *) echo "Could not connect to PipeWire"; exit 1 ;;
             esac
         """)
@@ -121,5 +122,25 @@ class StatusSoundTest {
         assertNull(s.volume)
         assertNull(s.volumeUnavailable)
         assertNotNull(lines.firstOrNull { "wpctl is not installed" in it })
+    }
+
+    @Test
+    fun `the same failure with the tool's own times in it is warned once`() {
+        Log.setLevel("bar", 3)
+        Files.writeString(wpctlSays, "stamped")
+        val s = started()
+        waitFor("three failed readings") { lines.count { "still cannot be read" in it } >= 2 }
+        assertEquals(1, lines.count { "The volume cannot be read (" in it }, lines.joinToString("\n"))
+        assertTrue("wpctl ended with 2: Failed to connect to system bus" in s.volumeUnavailable.orEmpty(), s.volumeUnavailable)
+    }
+
+    @Test
+    fun `a failure's reason without times, places and numbers`() {
+        assertEquals(
+            "wpctl ended with 2: Failed to connect to system bus; pactl ended with 1: Connection failure: Connection refused",
+            volumeReason("wpctl ended with 2: E 23:59:34.042409             mod.rt ../pipewire/src/modules/module-rt.c:295:pw_rtkit_bus_get: Failed to connect to system bus; pactl ended with 1: Connection failure: Connection refused"),
+        )
+        assertEquals(volumeReason("wpctl ended with 2: W 10:00:01.1 a b.c:1:f: x 5"), volumeReason("wpctl ended with 2: W 11:22:33.4 a b.c:9:f: x 7"))
+        assertEquals("wpctl is not installed", volumeReason("wpctl is not installed"))
     }
 }

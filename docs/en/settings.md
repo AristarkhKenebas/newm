@@ -44,7 +44,8 @@ what they change: each costs a little at the start and saves a stutter later.)
 | Setting | Default | What |
 |---|---|---|
 | `enabled` | `true` | newm's menus drawn once, off screen, a moment after the start: their first opening is quick |
-| `restMillis` | `800` | each menu is drawn ahead only once the pointer rested this long (ms): drawing one holds the compositor a moment, and the pointer would stand still |
+| `restMillis` | `800` | each menu is drawn ahead only once the pointer rested this long (ms): the start's other work goes first |
+| `ownThread` | `true` | the menus (and the bars, before newm shows) are drawn ahead on a thread of their own, never holding the compositor (nothing they do when opened — a Wi-Fi scan, Bluetooth, sound, commands — happens then); `false`: on the compositor's thread, one a frame, as before (each holds the pointer ~0.1–0.3 s) |
 | `compose` | `true` | Compose (the bar, the menus) made ready on a thread of its own while newm starts (else the bar's first frame holds the compositor ~0.7 s) |
 | `collect` | `true` | after drawing ahead, Java's heap made small again: one full collection (10-50 ms, while the pointer rests) |
 
@@ -66,7 +67,7 @@ what they change: each costs a little at the start and saves a stutter later.)
 | `crispResize` | `false` | a window being resized by keys is drawn at its own size, not stretched (`false`: stretched, as newm) |
 | `fitDrawnSize` | `false` | a program that drew another size than asked is drawn in its own shape inside its place (`false`: stretched to it, as newm) |
 | `stickyFullscreen` | `false` | a fullscreen window stays fullscreen when the view moves or zooms away from it |
-| `rules { view -> ... }` | | rules for some windows: `rule(float, floatSize, floatPos, opacity, blur, focus)`, see [Your configuration](configuration.md#some-windows-float-some-get-blur) |
+| `rules { view -> ... }` | | rules for some windows: `rule(float, floatSize, floatPos, opacity, blur, focus, specialWorkspace)`, see [Your configuration](configuration.md#some-windows-float-some-get-blur) |
 
 ## windows { }
 
@@ -74,8 +75,8 @@ Where new windows and a program's child windows open (see [Everyday use](using.m
 
 | Setting | Default | What |
 |---|---|---|
-| `newPlacement` | `"right-of-focused"` | a new window: `"right-of-focused"` (right of yours, the windows right of it move on), `"beside-focused"` (the first free tile right of yours, nothing moves), `"end"` (right of all windows), `"original"` (newm's: the first free tile in view, row by row) |
-| `childPlacement` | `"below"` | a child window (a dialog, a photo viewer): `"below"` its parent (what is below moves down), `"right"` of it, `"over"` it floating (as newm) |
+| `newPlacement` | `"compact"` | a new window: `"compact"` (the free place next to yours that keeps the windows close together and near a square, with the smallest move of the view; nothing moves aside unless no place next to yours is free, then as few windows as can be — on screens: your screen, else a neighbouring screen with room, else a new screen right after yours), `"right-of-focused"` (right of yours, the windows right of it move on), `"beside-focused"` (the first free tile right of yours, nothing moves), `"end"` (right of all windows), `"original"` (newm's: the first free tile in view, row by row) |
+| `childPlacement` | `"below"` | a child window (a dialog, a photo viewer): `"below"` its parent (into free room there, else what is below moves down), `"right"` of it (likewise), `"over"` it floating (as newm) |
 | `returnFocusToParent` | `true` | a child window closing gives the focus back to its parent (or to the window focused when it came); `false`: the nearest window, as newm |
 | `childBySameApp` | `true` | a window without a parent, opened by the program of the focused window (the same connection and app id, as Telegram's photo viewer), counts as its child |
 | `childBySameAppExcept` | terminals, browsers | app ids whose new windows are never children that way (`["foot", "kitty", "firefox", ...]`) |
@@ -97,14 +98,17 @@ out and the overview show the screens side by side.
 | `masterSide` | `"left"` | `"left"`, `"right"`, `"top"`, `"bottom"` |
 | `gaps` | `0` | more room between and around the windows, pixels (`view { padding }` is there anyway) |
 | `overflow` | `"right"` | where the next screen is: `"right"` or `"down"` |
-| `pullBack` | `true` | a window closing: windows of the following screens move up to fill its screen |
+| `pullBack` | `true` | a window closing closes the gap it leaves, as `pullBackMode` says; `false`: the screens stay as they are |
+| `pullBackMode` | `"compact"` | `"compact"`: a neighbouring screen whose windows all fit into the room left moves in (one screen fewer), nothing else moves; `"shift"`: the windows of every following screen move up one place until its screen is full again |
 | `windowsUnderBar` | `false` | `true`: windows go on under the bars (newm's wall: the window above showed through the bar) |
 | `cycle` | columns, rows, grid, master, monocle | the layouts `next-layout` (Super+Space) goes through |
 | `customLayout(name, layout)` | — | a layout of your own: any `dev.caulis.tiling.Layout` (`MasterStack(ratio = 0.7)`, your own) |
 
-Within a screen a new window goes right after the focused one (`windows { newPlacement }`:
-`"end"` the last screen, `"original"` the first with room), a child window right after its
-window; a full screen sends it to a new screen right after. Each screen can have a layout of
+A new window goes onto the focused screen, right after the focused window; if that screen is
+full, onto a neighbouring screen with room (the next, then the one before), else onto a new
+screen right after it (`windows { newPlacement }`: `"right-of-focused"` always a new screen,
+`"end"` the last screen, `"original"` the first with room). A child window goes right after its
+window; a full screen sends it to the next screen if that has room, else to a new one. Each screen can have a layout of
 its own while newm runs (Super+Space).
 
 ## resize { }
@@ -196,6 +200,29 @@ workspace hides when it opens. The lock hides it too.
 | `newWindowsJoin` | `true` | windows opening while it is shown go into it |
 | `clickOutsideHides` | `true` | a click on the dimmed wall hides it |
 | `hideInOverview` | `true` | the overview hides it |
+
+### A program that always opens there: Spotify in "music"
+
+A rule sends a program into a special workspace when it opens: it never shows on the wall,
+waits there hidden, and a key shows it. Spotify, with Super+M to show or hide it and
+Super+Shift+M to put the focused window there:
+
+```kotlin
+// Spotify opens hidden in the special workspace "music" (its app id is "spotify" on Wayland
+// and, as X11's class "Spotify" made lower case, under XWayland: case does not matter here).
+windowRule { appId("spotify"); specialWorkspace = "music" }
+
+keys {
+    bind("Super+M", "special-workspace", "music")           // show "music", and hide it again
+    bind("Super+Shift+M", "to-special-workspace", "music")  // the focused window into "music"
+    bind("Super+Ctrl+M", "from-special-workspace")          // the focused window back onto the wall
+}
+```
+
+Or with newm's own rules, next to the others in `view { rules { } }`:
+`"spotify", "Spotify" -> rule(specialWorkspace = "music")`. In config.json:
+`"rules": [ { "app_id_matches": "(?i)^spotify$", "special_workspace": "music" } ]`.
+`goToWorkspace = true` in the `windowRule` shows the special workspace as the program opens.
 
 ## colors { }
 
@@ -327,10 +354,14 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `configCompilerTimeoutSeconds` | `180` | at most this long for compiling config.kts, then it is stopped and said (a start's first: `NEWM_CONFIG_COMPILER_TIMEOUT`) |
 | `stallReportMillis` | `50` | newm's loop busy this long (ms) with one thing is logged with what it was (`CAULIS_LOG=native=2`); `0`: not watched |
 | `trimMemory` | `true` | memory the C library freed (Skia, the GPU driver, fonts) given back after the start and now and then |
-| `trimMemoryEveryMinutes` | `10` | how often after the start; `0`: only after the start |
+| `trimMemoryEveryMinutes` | `2` | how often after the start; `0`: only after the start |
 | `mallocPools` | `2` | at most this many of glibc's malloc pools for newm itself (programs keep glibc's own); `0`: glibc's own; only at the start |
 | `quickCursor` | `true` | the cursor (on the monitor's cursor plane) moves the moment the pointer does, not with the next frame |
 | `widgetThreads` | `2` | threads the bar and the menus are drawn into pixels on (they are composed on newm's own); `0`: all on newm's own |
+| `mallocMapAboveKb` | `256` | memory blocks this big (kB) or bigger go back to the system the moment they are freed — glibc otherwise kept the pictures drawn each frame, 30-60 MB more within minutes; `0`: glibc's own; only at the start |
+| `inputThread` | `true` | keyboards, mice and touchpads are read on a thread of their own (on screens; not nested or headless): while newm is busy for a moment no input is held back, and the cursor keeps moving (moved from that thread); `false`: on newm's own |
+| `glVendorByDriver` | `true` | only the EGL driver made for the GPU in use is loaded (NVIDIA's for nvidia-drm, Mesa's for the others), not every one installed — ~35 MB less where both are; only at the start |
+| `keepHiddenMenusSeconds` | `60` | a menu, the launcher, the clipboard list or the cards not shown for this long give their memory back (made anew when they show, as the first time); `0`: kept |
 
 ## cursor { }
 

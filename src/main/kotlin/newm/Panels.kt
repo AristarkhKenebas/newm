@@ -225,7 +225,7 @@ class Panels(private val wm: Layout) {
         val locked = faillock?.locked == true
         val lockout = when {
             !locked -> ""
-            faillock!!.lockedUntil < 0 -> tr("Too many wrong passwords: the account stays locked until an administrator unlocks it (faillock --reset).")
+            faillock.lockedUntil < 0 -> tr("Too many wrong passwords: the account stays locked until an administrator unlocks it (faillock --reset).")
             else -> tr("Too many wrong passwords: try again in %s").replace("%s", Faillock.countdown(faillock.lockedUntil - nowSeconds))
         }
         val failed = if (failures == 0) "" else buildString {

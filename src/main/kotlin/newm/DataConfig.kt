@@ -369,4 +369,5 @@ private val VARIABLE = Regex("\\$([A-Za-z_][A-Za-z0-9_]*)")
 
 // The settings of compositor { } in config.json / config.lua.
 private val COMPOSITOR_KEYS = listOf("quit_while_locked", "lock_failure", "lock_show_millis", "stop_programs_on_quit", "process_start", "java_updated_notice", "config_compiler_jvm_options", "config_compiler_timeout_seconds",
-    "stall_report_ms", "trim_memory", "trim_memory_every_minutes", "malloc_pools", "quick_cursor", "widget_threads")
+    "stall_report_ms", "trim_memory", "trim_memory_every_minutes", "malloc_pools", "quick_cursor", "widget_threads", "input_thread",
+    "gl_vendor_by_driver", "keep_hidden_menus_seconds", "malloc_map_above_kb")

@@ -173,13 +173,16 @@ class Status internal constructor(
             volumeProblem = null
             null
         } else {
-            val why = problems.distinct().joinToString("; ").ifEmpty { "no answer" }
+            // (Said without the tools' own times and numbers: the same failure again is not new.)
+            val why = volumeReason(problems.distinct().joinToString("; ")).ifEmpty { "no answer" }
             // (Nothing to ask it with — no wpctl, pactl or sound { getVolume }: nothing to show either.)
             val shown = confGetVolume() != null || installedHere("wpctl") || installedHere("pactl")
             if (volumeFailures == 0 || why != volumeProblem) {
                 // (A warning, so the log says it next time: it is why the bar's sound is grey.)
                 if (shown) log.warn("The volume cannot be read ($why): the sound shows as unavailable, asked again")
                 else log.info { "The volume cannot be read ($why)" }
+            } else {
+                log.trace { "The volume still cannot be read ($why), failure ${volumeFailures + 1}" }
             }
             volumeFailures++
             volumeProblem = why
@@ -321,7 +324,7 @@ class Status internal constructor(
             problems += "${command.first()} did not answer within 2 s"
             null
         } else if (p.waitFor() != 0) {
-            problems += "${command.first()} ended with ${p.exitValue()}" + (out.lineSequence().firstOrNull { it.isNotBlank() }?.let { ": ${it.trim().take(120)}" } ?: "")
+            problems += "${command.first()} ended with ${p.exitValue()}" + (out.lineSequence().firstOrNull { it.isNotBlank() }?.let { ": ${toolMessage(it).take(120)}" } ?: "")
             null
         } else out
     } catch (e: Exception) {
@@ -342,3 +345,21 @@ class Status internal constructor(
         const val FOLLOWED_SLOWER = 6
     }
 }
+
+/**
+ * Why the volume cannot be read, said the same way each time it fails the same way: the exit
+ * code and the tool's first words, without what changes from one run to the next — a log
+ * line's level and time ("E 21:18:46.935935"), the source place that said it
+ * ("mod.rt ../pipewire/src/modules/module-rt.c:295:pw_rtkit_bus_get:"), and other numbers.
+ */
+internal fun volumeReason(raw: String): String = raw.split("; ").map { part ->
+    val m = Regex("^(.*? ended with -?\\d+)(?:: (.*))?$").find(part)
+    if (m == null) return@map part.replace(Regex("\\d+"), "#")
+    val message = toolMessage(m.groupValues[2]).replace(Regex("\\d+"), "#").trim()
+    if (message.isEmpty()) m.groupValues[1] else "${m.groupValues[1]}: $message"
+}.distinct().joinToString("; ")
+
+/** A tool's line without its log level, time and source place ("E 21:18:46.93 mod.rt ../x.c:295:f: "). */
+internal fun toolMessage(line: String): String = line.trim()
+    .replace(Regex("^[EWIDT] [0-9:.]+\\s+"), "")
+    .replace(Regex("^\\S+ \\S+:\\d+:\\w+: "), "")

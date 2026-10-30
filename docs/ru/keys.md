@@ -113,6 +113,17 @@ bind("Super+A Super+B", "launch", "firefox")   // последовательно
 окно местами с соседом по экрану (у края экрана — переносят на следующий экран), а
 Super+Ctrl+стрелки меняют размер в пределах экрана.
 
+Особые столы по имени — музыкальный плеер живёт в "music", Super+M показывает и прячет его:
+
+```kotlin
+windowRule { appId("spotify"); specialWorkspace = "music" }   // Spotify всегда открывается там, скрытым
+bind("Super+M", "special-workspace", "music")                 // показать "music" и спрятать снова
+bind("Super+Shift+M", "to-special-workspace", "music")        // окно в фокусе — в "music"
+bind("Super+Ctrl+M", "from-special-workspace")                // окно в фокусе — обратно на стену
+```
+
+(Подробнее — в [Все настройки](settings.md#specialworkspace-).)
+
 ## Со своим кодом
 
 Всё, что умеет newm, как раньше — клавиша, её слова для подсказки и Kotlin внутри `{ }`:

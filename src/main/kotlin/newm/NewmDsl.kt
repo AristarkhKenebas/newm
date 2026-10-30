@@ -247,7 +247,8 @@ class NewmConfig(
      * view { rules } has not) — `windowRule { appId("mpv"); keepAwake = true }`,
      * `windowRule { appId(Regex("firefox|chromium")); ignore(WindowRequest.MAXIMIZE) }`
      * (suppress_event), `windowRule { title("Sharing indicator"); hiddenFromCapture = true }`,
-     * minSize, maxSize, takesFocus. Where windows go is newm's: view { rules }.
+     * minSize, maxSize, takesFocus, specialWorkspace (`windowRule { appId("spotify"); specialWorkspace = "music" }`:
+     * it opens hidden in that special workspace). Where on the wall windows go is newm's: view { rules }.
      */
     fun windowRule(configure: dev.caulis.wm.WindowRule.() -> Unit) {
         @Suppress("UNCHECKED_CAST")
@@ -341,8 +342,11 @@ class WarmupSection internal constructor(values: MutableMap<String, Any?>) : Sec
     /** newm's menus drawn once, off screen, a moment after the start: their first opening is quick (true). */
     var enabled by setting<Boolean>("enabled")
 
-    /** Each is drawn only once the pointer rested this long, in milliseconds (800): it holds the compositor's thread a moment. */
+    /** Each is drawn only once the pointer rested this long, in milliseconds (800): the start's other work goes first. */
     var restMillis by setting<Int>("rest_ms")
+
+    /** The menus (and the bars, before newm shows) are drawn ahead on a thread of their own (true); false: on the compositor's thread (it holds the pointer ~0.1-0.4 s each). */
+    var ownThread by setting<Boolean>("own_thread")
 
     /** Compose (the bar, the menus) made ready on a thread of its own while newm starts (true). */
     var compose by setting<Boolean>("compose")
@@ -458,7 +462,7 @@ class CompositorSection internal constructor(values: MutableMap<String, Any?>) :
     /** Memory the C library freed (Skia, the GPU driver) given back after the start and every [trimMemoryEveryMinutes] (true). */
     var trimMemory by setting<Boolean>("trim_memory")
 
-    /** How often [trimMemory] gives memory back after the start, minutes; 0: only after the start (10). */
+    /** How often [trimMemory] gives memory back after the start, minutes; 0: only after the start (2). */
     var trimMemoryEveryMinutes by setting<Int>("trim_memory_every_minutes")
 
     /** At most this many of glibc's malloc pools for newm itself; 0: glibc's own (2; only at the start). */
@@ -469,6 +473,18 @@ class CompositorSection internal constructor(values: MutableMap<String, Any?>) :
 
     /** Threads the bar and the menus are drawn into pixels on (composed on newm's own); 0: all on newm's own (2). */
     var widgetThreads by setting<Int>("widget_threads")
+
+    /** Memory blocks of this many kB or more go back to the system the moment they are freed (256; 0: glibc's own; only at the start). */
+    var mallocMapAboveKb by setting<Int>("malloc_map_above_kb")
+
+    /** Keyboards, mice and touchpads read on a thread of their own: the cursor keeps moving while newm is busy (true; on screens, not nested). */
+    var inputThread by setting<Boolean>("input_thread")
+
+    /** Only the EGL driver for the GPU in use is loaded, not every one installed (true; only at the start). */
+    var glVendorByDriver by setting<Boolean>("gl_vendor_by_driver")
+
+    /** A menu, the launcher or cards not shown for this many seconds give their memory back; made anew when shown (60; 0: kept). */
+    var keepHiddenMenusSeconds by setting<Int>("keep_hidden_menus_seconds")
 }
 
 class CursorSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
@@ -649,7 +665,11 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
         values["rules"] = { view: View -> decide(view)?.values }
     }
 
-    /** A rule: floating (with a size and a place: 0..1 of the screen), how opaque, blur behind it, no focus border (focus = false). */
+    /**
+     * A rule: floating (with a size and a place: 0..1 of the screen), how opaque, blur behind
+     * it, no focus border (focus = false), or the special workspace it opens in, hidden there
+     * until shown (specialWorkspace = "music": `special-workspace music` shows it).
+     */
     fun rule(
         float: Boolean? = null,
         floatSize: Pair<Int, Int>? = null,
@@ -657,8 +677,10 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
         opacity: Double? = null,
         blur: Blur? = null,
         focus: Boolean? = null,
+        specialWorkspace: String? = null,
     ): Rule = Rule(
         buildMap {
+            specialWorkspace?.let { put("special_workspace", it) }
             float?.let { put("float", it) }
             floatSize?.let { put("float_size", listOf(it.first, it.second)) }
             floatPos?.let { put("float_pos", listOf(it.first, it.second)) }
@@ -673,21 +695,26 @@ class ViewSection internal constructor(values: MutableMap<String, Any?>) : Secti
 data class Blur(val radius: Int = 6, val passes: Int = 4)
 
 /**
- * Where windows open: `windows { newPlacement = "right-of-focused"; childPlacement = "below" }`.
+ * Where windows open: `windows { newPlacement = "compact"; childPlacement = "below" }`.
  */
 class WindowsSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
     /**
-     * Where a new window opens: "right-of-focused" (the default: right of the focused window,
-     * the windows right of it move on), "beside-focused" (the first free tile right of it in its
-     * row, nothing moves), "end" (right of all windows, in the focused one's row), "original"
-     * (newm's: the first free tile in view, row by row).
+     * Where a new window opens: "compact" (the default: the free place next to the focused
+     * window that keeps all windows close together and near a square, with the smallest move
+     * of the view — nothing moves aside unless no place next to it is free; on screens: the
+     * focused screen, else a neighbouring screen with room, else a new screen right after it),
+     * "right-of-focused" (right of the focused window, the windows right of it move on),
+     * "beside-focused" (the first free tile right of it in its row, nothing moves), "end" (right
+     * of all windows, in the focused one's row), "original" (newm's: the first free tile in
+     * view, row by row).
      */
     var newPlacement by setting<String>("new_placement")
 
     /**
      * Where a program's child window opens (a dialog, a photo viewer): "below" (the default:
-     * tiled below its parent, what is below moves down), "right" (tiled right of it), "over"
-     * (floating over its middle, as newm).
+     * tiled below its parent — in free room there, else what is below moves down), "right"
+     * (tiled right of it, likewise), "over" (floating over its middle, as newm). On screens: right
+     * after its window on its screen; a full screen: the next one if it has room, else a new one.
      */
     var childPlacement by setting<String>("child_placement")
 
@@ -738,8 +765,15 @@ class ScreensSection internal constructor(values: MutableMap<String, Any?>) : Se
     /** Where the next screen is: "right" (the default) or "down". */
     var overflow by setting<String>("overflow")
 
-    /** A window closing: the windows of the screens after it move up to fill its screen (true, the default). */
+    /** A window closing closes the gap it leaves (true, the default), as [pullBackMode] says; false: screens stay as they are. */
     var pullBack by setting<Boolean>("pull_back")
+
+    /**
+     * How [pullBack] closes the gap: "compact" (the default: a neighbouring screen whose windows
+     * all fit into the room left moves in, one screen fewer; nothing else moves) or "shift" (the
+     * windows of every screen after it move up one place until its screen is full again).
+     */
+    var pullBackMode by setting<String>("pull_back_mode")
 
     /** Windows go on under the bars, as newm's wall (true); false (the default): under a bar only the bar shows. */
     var windowsUnderBar by setting<Boolean>("windows_under_bar")
@@ -1252,8 +1286,8 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
      * `module("vpn") { command("vpn-status"); everySeconds = 10; icon = "lock"; onClick { launch("vpn-toggle") } }`.
      */
     fun module(name: String, configure: BarModule.() -> Unit) {
-        @Suppress("UNCHECKED_CAST")
         val modules = nested("modules")
+        @Suppress("UNCHECKED_CAST") // (what config.kts and config.json put there: maps by name)
         val module = (modules[name] as? MutableMap<String, Any?>) ?: LinkedHashMap<String, Any?>().also { modules[name] = it }
         BarModule(module).configure()
     }
@@ -1264,8 +1298,8 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
      * "network", "volume", "battery", "power", "menu", "quick", "notifications", and yours.
      */
     fun on(module: String, configure: BarClicks.() -> Unit) {
-        @Suppress("UNCHECKED_CAST")
         val on = nested("on")
+        @Suppress("UNCHECKED_CAST") // (what config.kts and config.json put there: maps by name)
         val slots = (on[module] as? MutableMap<String, Any?>) ?: LinkedHashMap<String, Any?>().also { on[module] = it }
         BarClicks(slots).configure()
     }

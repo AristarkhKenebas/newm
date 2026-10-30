@@ -10,6 +10,68 @@ From now on every change people would notice gets a line under [Unreleased] in t
 
 ## [Unreleased]
 
+## [2026-10-30, on Caulis 0.1.6]
+
+### Changed
+- New windows open where the wall stays compact (`windows { newPlacement = "compact" }`, the new
+  default, with screens and on the free wall alike): next to the focused window, in the free
+  place that keeps the windows close together and near a square, with the smallest move of the
+  view. Nothing moves aside unless no place next to the focused window is free (then as few
+  windows as can be). The wall no longer grows into a long row, and opening a window next to the
+  bottom-left one of four no longer leaves a hole above it. On screens a full screen sends the
+  new window to a neighbouring screen with room before a new screen is put in. To get the old
+  behaviour back: `windows { newPlacement = "right-of-focused" }` (config.json:
+  `"windows": { "new_placement": "right-of-focused" }`).
+- A child window (`childPlacement = "below"` or `"right"`) takes free room below (right of) its
+  window without moving anything; only when that is taken do the windows there move aside. On
+  screens, a child of a window on a full screen goes to the next screen if that has room.
+- Closing a window on screens (`screens { pullBack }`) now closes the gap compactly: a
+  neighbouring screen whose windows all fit into the room left moves in, and nothing else moves
+  (before, every following screen gave a window to the one before it). The old way:
+  `screens { pullBackMode = "shift" }`.
+- The menus are drawn ahead after the start on a thread of their own (`warmup { ownThread }`,
+  on): newm no longer stops for ~0.1-0.4 s at a time during the first seconds after login (the
+  pointer stood still meanwhile). Drawing ahead no longer scans for Wi-Fi networks, asks
+  Bluetooth or the sound server, reads power profiles or runs your quick tiles' commands at
+  every login. `ownThread = false` draws them on newm's own thread as before.
+- The bars are made once at the start (they were made two or three times: once more when the
+  first monitor was announced and again when the wallpaper had been read), and their first
+  scene is composed and drawn on a thread of its own before newm shows: newm's own thread only
+  puts its pixels on screen (~20 ms instead of ~0.25-0.4 s with the pointer standing still).
+- A notification's card is drawn ahead too: the first card no longer stops newm for ~0.4 s.
+- Less memory: Java's heap grows only once collecting takes a third of the time
+  (`-XX:GCTimeRatio=2`): the start's garbage made it 130-200 MB for a few seconds, the highest
+  newm used all day; now ~30-60 MB. Memory freed by the C library is given back every 2
+  minutes (`compositor { trimMemoryEveryMinutes }`, was 10), and big blocks go back the moment
+  they are freed (`compositor { mallocMapAboveKb }`, 256: the pictures drawn each frame had
+  kept 30-60 MB in glibc's pools). Only the EGL driver for your GPU
+  is loaded (with NVIDIA's and Mesa's both installed, the other one took ~20-35 MB).
+- The windows kept for the next login (or by `restart keep`) are read from disk on a thread of
+  their own.
+- Built on Caulis's new input thread (`compositor { inputThread }`, on): keyboards, mice and
+  touchpads are read on a thread of their own and the cursor keeps moving while newm is busy.
+
+### Added
+- `windows { newPlacement = "compact" }` and `screens { pullBackMode }` (`"compact"`, `"shift"`;
+  config.json/config.lua: `pull_back_mode`).
+- `rule(specialWorkspace = "music")` in `view { rules { } }` (config.json/config.lua rules:
+  `"special_workspace": "music"`): the window opens hidden in that special workspace, as
+  `windowRule { appId("spotify"); specialWorkspace = "music" }` does. Either way it opens straight
+  in there, never on the wall first. The guide shows Spotify in "music" with
+  Super+M / Super+Shift+M.
+- `compositor { mallocMapAboveKb }` (`malloc_map_above_kb`).
+- `compositor { inputThread; glVendorByDriver; keepHiddenMenusSeconds }` (also in config.json and
+  config.lua as `input_thread`, `gl_vendor_by_driver`, `keep_hidden_menus_seconds`): input on a
+  thread of its own; only the EGL driver for the GPU in use is loaded (~35 MB less where NVIDIA's
+  and Mesa's are both installed); a menu, the launcher or the cards not shown for 60 s give their
+  memory back.
+- `warmup { ownThread }`.
+
+### Fixed
+- Without a sound server the log said "The volume cannot be read" again and again (every few
+  seconds): the tools' own timestamps made each failure look new. The same failure is now said
+  once (then only at level 3), and asked again less and less often as before.
+
 ## [2026-10-29, on Caulis 0.1.5]
 
 ### Added

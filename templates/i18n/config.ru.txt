@@ -248,8 +248,8 @@ ru: самого терминала, для alacritty это window.opacity = 0.
 en: Where windows open.
 ru: Где открываются окна.
 
-en: right of yours, the rest move on; "beside-focused", "end", "original" (newm's)
-ru: справа от вашего, остальные сдвигаются; "beside-focused", "end", "original" (как в newm)
+en: next to yours, the wall kept compact, nothing moves; "right-of-focused", "beside-focused", "end", "original" (newm's)
+ru: рядом с вашим, стена остаётся плотной, ничего не сдвигается; "right-of-focused", "beside-focused", "end", "original" (как в newm)
 
 en: a dialog or a photo viewer: "below" its window, "right", "over" (floating, as newm)
 ru: диалог или просмотр фото: "below" — под своим окном, "right", "over" (плавает, как в newm)
@@ -284,8 +284,10 @@ ru: больше места между окнами, в пикселях
 en: where the next screen is: "right" or "down"
 ru: где следующий экран: "right" (справа) или "down" (снизу)
 
-en: a window closing: windows of the next screens move up
-ru: окно закрылось — окна следующих экранов подтягиваются
+en: a window closing: the gap it leaves is closed
+ru: окно закрылось — оставленный промежуток закрывается
+en: a neighbouring screen that fits moves in; "shift": every next screen moves up
+ru: соседний экран, который помещается, переезжает туда; "shift": все следующие экраны подтягиваются
 
 en: true: the wall goes on under the bar, as newm
 ru: true — стена продолжается под панелью, как в newm
@@ -361,6 +363,8 @@ ru: Особые рабочие пространства ("special" в Hyprland)
 
 en: shown with the keys below (Logo+grave).
 ru: показывается клавишами ниже (Logo+grave).
+en: A program that always opens there, hidden until shown (Super+M below):
+ru: Программа, которая всегда открывается там, скрытой, пока её не покажут (Super+M ниже):
 
 en: the wall behind darker
 ru: стена за ним темнее

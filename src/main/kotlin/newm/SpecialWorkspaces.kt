@@ -55,6 +55,48 @@ internal class NewmSpecialWorkspaces(private val wm: Layout) {
         }
     }
 
+    // Windows told in the log as opening in a special workspace (once each).
+    private val toldOpening = java.util.Collections.newSetFromMap(java.util.WeakHashMap<dev.caulis.core.Window, Boolean>())
+
+    /**
+     * True while [window] has not appeared yet and a rule sends it into a special workspace
+     * (Caulis' windowRule { specialWorkspace }, or view { rules } rule(specialWorkspace)):
+     * newm leaves it alone, so it opens straight in there — never first on the wall.
+     */
+    fun opensInSpecial(window: dev.caulis.core.Window): Boolean {
+        if (window.mapped) return false
+        val name = try {
+            wm.caulis.desktop.placementFor(window)?.specialWorkspace
+        } catch (e: Exception) {
+            log.warn("A rule failed for $window: $e")
+            null
+        } ?: return false
+        if (toldOpening.add(window)) log.info { "$window: a rule sends it into the special workspace $name: not on the wall" }
+        return true
+    }
+
+    /**
+     * view { rules } saying rule(specialWorkspace = "music") for a window: put to Caulis's
+     * rules (Desktop.placementFor), which decide where a window opens before its first frame.
+     * Caulis' own windowRule { specialWorkspace } says first.
+     */
+    fun takeOverRules() {
+        val desktop = wm.caulis.desktop
+        val caulisRules = desktop.placementFor
+        desktop.placementFor = { window ->
+            val placement = caulisRules(window)
+            if (placement?.specialWorkspace != null) placement
+            else View.specialWorkspaceRuleOf(wm, window)?.let { name ->
+                try {
+                    (placement ?: dev.caulis.core.WindowPlacement.USUAL).and(dev.caulis.core.WindowPlacement(specialWorkspace = name))
+                } catch (e: IllegalArgumentException) {
+                    log.warn("view { rules }: rule(specialWorkspace = \"$name\") for $window: ${e.message}")
+                    null
+                }
+            } ?: placement
+        }
+    }
+
     /** Once a frame: views of windows that went into a special workspace go; the overview hides them. */
     fun everyFrame(overview: Boolean) {
         val desktop = wm.caulis.desktop

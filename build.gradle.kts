@@ -18,19 +18,25 @@ val bytecodeVersion = libs.versions.java.bytecode.get().toInt()
 kotlin {
     jvmToolchain(javaVersion)
     compilerOptions {
+        // Set explicitly: Kotlin cannot write the toolchain's (JDK 27) bytecode yet and would fall
+        // back with a warning; java-bytecode in libs.versions.toml goes up once it can.
         jvmTarget = JvmTarget.fromTarget(bytecodeVersion.toString())
+        // Any compiler warning fails the build (to keep the log clean); -Pnewm.strictWarnings=false to allow them.
+        allWarningsAsErrors = providers.gradleProperty("newm.strictWarnings").map { it != "false" }.orElse(true)
     }
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.release = bytecodeVersion
+    // javac's warnings fail the build too (-Pnewm.strictWarnings=false: not).
+    if (providers.gradleProperty("newm.strictWarnings").orNull != "false") options.compilerArgs.add("-Werror")
 }
 
 // The Kotlin compiler's jars (hundreds of megabytes once loaded) are not on newm's class path:
 // config.kts is compiled by a Java of its own (KtsConfig) with them, from lib/compiler. newm
 // itself only loads the compiled script.
 val compilerModules = listOf("kotlin-compiler-embeddable", "kotlin-scripting-compiler-embeddable", "kotlin-scripting-compiler-impl-embeddable", "kotlin-daemon-embeddable", "kotlin-build-tools-api")
-val scriptCompiler: Configuration by configurations.creating {
+val scriptCompiler = configurations.create("scriptCompiler") {
     isCanBeConsumed = false
     isCanBeResolved = true
     // (The jars as newm's own are resolved: for running on the JVM, the same versions.)
@@ -80,6 +86,7 @@ val NEWM_GC_OPTIONS = listOf(
     "-XX:+UseG1GC", "-Xms16m", "-Xmx384m", "-XX:SoftMaxHeapSize=96m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=20",
     "-XX:G1PeriodicGCInterval=30000", "-XX:MaxMetaspaceSize=384m",
     "-XX:MaxNewSize=24m", "-XX:ParallelGCThreads=2", "-XX:ConcGCThreads=1", "-XX:MarkStackSize=256k",
+    "-XX:GCTimeRatio=2",
 )
 
 application {
@@ -95,7 +102,11 @@ application {
     // thread (each takes a few MB of its own), a marking stack that starts small (grows when
     // needed), and newm collects once itself after its start's work (warmup.collect, while
     // the pointer rests). The rest given back when unused: 20% above what is used, looked at
-    // every 30 seconds when nothing else made it collect. (Measured headless, the full
+    // every 30 seconds when nothing else made it collect. And the heap grows only once
+    // collecting takes more than a third of the time (GCTimeRatio=2; G1's own aim is ~8%): the
+    // start's garbage grew it to 130-200 MB for a few seconds — the highest memory newm used
+    // all day; now ~30-60 MB, for some 50 short pauses (≤ 10 ms, ~0.2 s in all) in the first
+    // minute. (Measured headless, the full
     // template configuration and 4 terminals: ~310-390 MB after the start instead of ~460,
     // at most ~450-470 instead of ~580. ZGC kept ~350 MB of heap, ~700 MB in all; Serial
     // paused up to 40 ms — dropped frames.) More options: JAVA_OPTS or NEWM_OPTS;

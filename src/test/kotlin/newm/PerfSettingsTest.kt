@@ -16,8 +16,9 @@ class PerfSettingsTest {
             "compositor" to linkedMapOf(
                 "stall_report_ms" to 80, "trim_memory" to false, "trim_memory_every_minutes" to 5,
                 "malloc_pools" to 4, "quick_cursor" to false, "widget_threads" to 0,
+                "input_thread" to false, "gl_vendor_by_driver" to false, "keep_hidden_menus_seconds" to 30,
             ),
-            "warmup" to linkedMapOf("enabled" to true, "rest_ms" to 500, "compose" to false, "collect" to false),
+            "warmup" to linkedMapOf("enabled" to true, "rest_ms" to 500, "compose" to false, "collect" to false, "own_thread" to false),
         )
         val (s, problems) = DataConfig.settings(data, Caulis(), "config.json")
         assertEquals(emptyList(), problems)
@@ -31,6 +32,11 @@ class PerfSettingsTest {
         assertEquals(4, caulis.mallocPools)
         assertEquals(false, caulis.quickCursorMoves)
         assertEquals(0, caulis.widgetThreads)
+        assertEquals(false, caulis.inputThread)
+        assertEquals(false, caulis.glVendorByDriver)
+        assertEquals(30, dev.caulis.compose.ComposeScenes.keepHiddenSeconds)
+        assertEquals(false, s.at("warmup.own_thread"))
+        dev.caulis.compose.ComposeScenes.keepHiddenSeconds = 60
     }
 
     @Test
@@ -38,11 +44,16 @@ class PerfSettingsTest {
         val c = Caulis()
         val config = NewmConfig(c)
         config.compositor { stallReportMillis = 70; widgetThreads = 1; quickCursor = false }
-        config.warmup { restMillis = 300; collect = false }
+        config.compositor { inputThread = false; glVendorByDriver = false; keepHiddenMenusSeconds = 20 }
+        config.warmup { restMillis = 300; collect = false; ownThread = false }
         assertEquals(70, config.values.at("pywm.stall_report_ms"))
         assertEquals(1, config.values.at("pywm.widget_threads"))
         assertEquals(false, config.values.at("pywm.quick_cursor"))
         assertEquals(300, config.values.at("warmup.rest_ms"))
         assertEquals(false, config.values.at("warmup.collect"))
+        assertEquals(false, config.values.at("pywm.input_thread"))
+        assertEquals(false, config.values.at("pywm.gl_vendor_by_driver"))
+        assertEquals(20, config.values.at("pywm.keep_hidden_menus_seconds"))
+        assertEquals(false, config.values.at("warmup.own_thread"))
     }
 }

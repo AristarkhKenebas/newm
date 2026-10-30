@@ -239,10 +239,10 @@ class LockTest {
         val dir = Files.createTempDirectory("newm-lock-test")
         val caulis = Caulis().apply {
             useConfigFile = false
-            mode = Caulis.Mode.HEADLESS
+            backend = Caulis.Backend.HEADLESS
             socketDirectory = dir
             exitAfterSeconds = 60 // (never a hanging test run)
-            mode(LOCKED_MODE) {}
+            keyMode(LOCKED_MODE) {}
             configure()
         }
         val layout = Layout(caulis)

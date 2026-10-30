@@ -80,6 +80,8 @@ stdenv.mkDerivation (finalAttrs: {
     # gradle.properties turns the configuration cache on for everyday builds; Nix's
     # dependency fetcher (an init script) does not work with it.
     "-Dorg.gradle.configuration-cache=false"
+    # Compiler warnings fail newm's own development builds, not a package build.
+    "-Pnewm.strictWarnings=false"
   ];
   gradleBuildTask = "installDist";
 

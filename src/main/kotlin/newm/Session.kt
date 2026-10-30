@@ -261,11 +261,23 @@ internal class SessionKeeper(private val wm: Layout) {
      * session.max_windows programs, one after another; a notice offers the rest.
      */
     fun restoreAtStart() {
-        val saved = try {
-            Json.parseObject(Files.readString(file)).also { Files.deleteIfExists(file) }
-        } catch (_: Exception) {
-            return
+        // The file read on a thread of its own (the compositor's thread does not wait for the
+        // disk at the start); what it says is acted on there. (Not kept meanwhile.)
+        restoringUntil = System.currentTimeMillis() + 60_000
+        Thread.ofPlatform().daemon().name("newm-session-read").start {
+            val saved = try {
+                Json.parseObject(Files.readString(file)).also { Files.deleteIfExists(file) }
+            } catch (_: Exception) {
+                null
+            }
+            wm.caulis.post {
+                if (saved != null) restoreFrom(saved) else restoringUntil = 0L
+            }
         }
+    }
+
+    private fun restoreFrom(saved: Map<String, Any?>) {
+        restoringUntil = 0L
         // (Kept before "reason" was written: by `restart keep`.)
         val reason = saved["reason"] as? String ?: "restart"
         if (reason == "login" && !confRestoreAtLogin()) return log.info { "Windows of the last session kept, but session.restore_at_login is off: not opened again" }

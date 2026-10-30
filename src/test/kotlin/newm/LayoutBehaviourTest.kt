@@ -29,6 +29,9 @@ import kotlin.test.assertTrue
 @OptIn(dev.caulis.log.InternalCaulisApi::class)
 class LayoutBehaviourTest {
 
+    // (Tests of a placement before "compact" became the default: they keep checking that one.)
+    private val RIGHT_OF_FOCUSED = mapOf("windows" to mapOf("new_placement" to "right-of-focused"))
+
     @Test
     fun `newm's original placement - first at 0 0, then beside, then below`() = withNewm(mapOf("windows" to mapOf("new_placement" to "original"))) { t ->
         // The view starts at i = j = -0.5, size 2. The first window: (0, 0); focusing it keeps
@@ -45,7 +48,7 @@ class LayoutBehaviourTest {
     }
 
     @Test
-    fun `a new window opens right of the focused one, the rest move right`() = withNewm(emptyMap()) { t ->
+    fun `a new window opens right of the focused one, the rest move right`() = withNewm(RIGHT_OF_FOCUSED) { t ->
         t.open("w1")
         t.open("w2")
         t.open("w3")
@@ -181,7 +184,7 @@ class LayoutBehaviourTest {
     }
 
     @Test
-    fun `three fingers move the view over the tiles, snapping to one`() = withNewm(emptyMap()) { t ->
+    fun `three fingers move the view over the tiles, snapping to one`() = withNewm(RIGHT_OF_FOCUSED) { t ->
         t.open("w1")
         t.open("w2")
         t.open("w3")
@@ -192,7 +195,7 @@ class LayoutBehaviourTest {
     }
 
     @Test
-    fun `closing the focused window focuses the nearest and closes its column`() = withNewm(emptyMap()) { t ->
+    fun `closing the focused window focuses the nearest and closes its column`() = withNewm(RIGHT_OF_FOCUSED) { t ->
         t.open("w1")
         val w2 = t.open("w2")
         t.open("w3")
@@ -490,6 +493,111 @@ class LayoutBehaviourTest {
 
     private fun bar(): Map<String, Any?> = mapOf("panels" to mapOf("top_bar" to mapOf("native" to mapOf("enabled" to true))))
 
+    // --- windows { newPlacement = "compact" } (the default)
+
+    @Test
+    fun `compact - four in a square, the bottom left focused - the new one goes beside it, nothing moves, no hole above`() = withNewm(emptyMap()) { t ->
+        for (n in 1..4) t.open("w$n")
+        val tiles = (1..4).associate { "w$it" to t.tile("w$it") }
+        // Four windows opened one after the other: a 2 x 2 block, not a row.
+        assertEquals(setOf(0.0, 1.0), tiles.values.map { it[0] }.toSet(), "two columns: $tiles")
+        assertEquals(setOf(0.0, 1.0), tiles.values.map { it[1] }.toSet(), "two rows: $tiles")
+        val bottomLeft = tiles.entries.first { it.value[0] == 0.0 && it.value[1] == 1.0 }.key
+        t.focus(bottomLeft)
+        val view = t.view()
+        t.open("w5")
+        t.eventually {
+            for ((k, v) in tiles) assertEquals(v, t.tile(k), "$k stays where it was")
+            val w5 = t.tile("w5")
+            // Below it or left of it (right-of-focused put it right of it and moved the right column on: a hole above it).
+            assertTrue(w5 == listOf(0.0, 2.0, 1.0, 1.0) || w5 == listOf(-1.0, 1.0, 1.0, 1.0), "beside the focused one: $w5")
+            assertEquals("w5", t.focused())
+        }
+        val moved = t.view().zip(view).sumOf { (a, b) -> Math.abs(a - b) }
+        assertTrue(moved <= 1.0 + 1e-6, "the view moves one tile at most: ${t.view()} from $view")
+    }
+
+    @Test
+    fun `compact - a row of three, the middle one focused - the new one opens next to it, nothing moves`() = withNewm(RIGHT_OF_FOCUSED) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("w3")
+        t.eventually { assertEquals(listOf(2.0, 0.0, 1.0, 1.0), t.tile("w3")) }
+        t.onLoop { Config.loadConfig(mapOf("windows" to mapOf("new_placement" to "compact"), "screens" to mapOf("enabled" to false))) }
+        t.focus("w2")
+        val view = t.view()
+        t.open("w4")
+        t.eventually {
+            assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w1"))
+            assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w2"))
+            assertEquals(listOf(2.0, 0.0, 1.0, 1.0), t.tile("w3"))
+            val w4 = t.tile("w4")
+            assertTrue(w4 == listOf(1.0, 1.0, 1.0, 1.0) || w4 == listOf(1.0, -1.0, 1.0, 1.0), "below or above the focused one: $w4")
+        }
+        val moved = t.view().zip(view).sumOf { (a, b) -> Math.abs(a - b) }
+        assertTrue(moved <= 1.0 + 1e-6, "the view moves one tile at most: ${t.view()} from $view")
+    }
+
+    @Test
+    fun `compact on screens - the focused screen full, the next one has room - the new window goes there, no screen moves on`() = withNewm(screens()) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("w3")
+        t.eventually { assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w3")) }
+        t.focus("w1")
+        t.open("w4")
+        t.eventually {
+            assertEquals(listOf(0.0, 0.0, 0.5, 1.0), t.tile("w1"))
+            assertEquals(listOf(0.5, 0.0, 0.5, 1.0), t.tile("w2"))
+            assertEquals(listOf(1.0, 0.0, 0.5, 1.0), t.tile("w4"))
+            assertEquals(listOf(1.5, 0.0, 0.5, 1.0), t.tile("w3"))
+            assertEquals(listOf(1.0, 0.0, 1.0), t.view(), "one screen on")
+        }
+        t.assertCleanView()
+    }
+
+    // --- special workspaces sent to by a rule
+
+    @Test
+    fun `a Caulis rule sends spotify into the special workspace music - never on the wall, shown when toggled`() =
+        withNewm(emptyMap(), setup = { addRule { appId("spotify"); specialWorkspace = "music" } }) { t -> checkMusic(t, "Spotify") }
+
+    @Test
+    fun `a view rule sends spotify into the special workspace music - never on the wall, shown when toggled`() = withNewm(
+        mapOf("view" to mapOf("rules" to { v: View -> if (v.appId.equals("spotify", ignoreCase = true)) mapOf("special_workspace" to "music") else null })),
+    ) { t -> checkMusic(t, "spotify") }
+
+    // A window with the app id [appId] opens: into "music", hidden; the wall's window and the view stay; toggled: shown.
+    private fun checkMusic(t: T, appId: String) {
+        t.open("w1")
+        val tile = t.tile("w1")
+        val view = t.view()
+        t.client.window("player", appId, null).draw()
+        // (Watched while it opens: never a view of newm's, the wall never moves.)
+        val deadline = System.nanoTime() + 1_500_000_000
+        while (System.nanoTime() < deadline) {
+            t.onLoop {
+                assertTrue(t.layout.viewsNow().none { it.title == "player" }, "the player never on the wall")
+            }
+            assertEquals(tile, t.tile("w1"))
+            t.client.roundtrips(1)
+        }
+        t.eventually {
+            t.onLoop {
+                val w = t.caulis.desktop.allWindows.first { it.title == "player" }
+                val pad = t.caulis.desktop.scratchpadOf(w)
+                assertEquals("music", pad?.name, "in the special workspace music")
+                assertFalse(pad!!.shown, "hidden until shown")
+            }
+        }
+        assertEquals(tile, t.tile("w1"))
+        assertEquals(view, t.view())
+        assertEquals("w1", t.focused(), "the focus stays")
+        t.onLoop { t.layout.toggleSpecialWorkspace("music") }
+        t.eventually { t.onLoop { assertTrue(t.caulis.desktop.scratchpadOf(t.caulis.desktop.allWindows.first { it.title == "player" })!!.shown, "shown") } }
+        assertEquals(tile, t.tile("w1"))
+    }
+
     // --- the harness
 
     private class T(val caulis: Caulis, val layout: Layout, val client: Client) {
@@ -596,17 +704,18 @@ class LayoutBehaviourTest {
         }
     }
 
-    private fun withNewm(settings: Map<String, Any?>, test: (T) -> Unit) {
+    private fun withNewm(settings: Map<String, Any?>, setup: Caulis.() -> Unit = {}, test: (T) -> Unit) {
         assumeTrue(Files.isDirectory(Path.of("/dev/dri")), "no GPU")
         val dir = Files.createTempDirectory("newm-layout-test")
         // (The tests of newm's own wall without screens; those of screens say so.)
         Config.loadConfig(if ("screens" in settings) settings else settings + ("screens" to mapOf("enabled" to false)))
         val caulis = Caulis().apply {
             useConfigFile = false
-            mode = Caulis.Mode.HEADLESS
+            backend = Caulis.Backend.HEADLESS
             socketDirectory = dir
             exitAfterSeconds = 90 // (never a hanging test run)
-            mode(LOCKED_MODE) {}
+            keyMode(LOCKED_MODE) {}
+            setup()
         }
         val layout = Layout(caulis)
         val started = CompletableFuture<Unit>()

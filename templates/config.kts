@@ -305,7 +305,7 @@ gestures {
 
 // Where windows open.
 windows {
-    newPlacement = "right-of-focused"       // right of yours, the rest move on; "beside-focused", "end", "original" (newm's)
+    newPlacement = "compact"                // next to yours, the wall kept compact, nothing moves; "right-of-focused", "beside-focused", "end", "original" (newm's)
     childPlacement = "below"                // a dialog or a photo viewer: "below" its window, "right", "over" (floating, as newm)
     returnFocusToParent = true              // closing it gives the focus back to its window
     // childBySameApp = true                // a window of the focused program without a parent (Telegram's viewer) is its child
@@ -320,7 +320,8 @@ screens {
     // masterSide = "left"                  // "right", "top", "bottom"
     // gaps = 0                             // more room between windows, pixels
     // overflow = "right"                   // where the next screen is: "right" or "down"
-    // pullBack = true                      // a window closing: windows of the next screens move up
+    // pullBack = true                      // a window closing: the gap it leaves is closed
+    // pullBackMode = "compact"             // a neighbouring screen that fits moves in; "shift": every next screen moves up
     // windowsUnderBar = false              // true: the wall goes on under the bar, as newm
     // cycle = listOf("columns", "rows", "grid", "master", "monocle")   // what Super+Space goes through
     // enabled = false                      // newm's free wall of tiles instead
@@ -380,6 +381,8 @@ specialWorkspace {
     // newWindowsJoin = true                // windows opening while it is shown go into it
     // clickOutsideHides = true
 }
+// A program that always opens there, hidden until shown (Super+M below):
+// windowRule { appId("spotify"); specialWorkspace = "music" }
 
 // --- Permissions ----------------------------------------------------------------------------
 // Which programs may take pictures of the screen, see the window list, read the clipboard, show

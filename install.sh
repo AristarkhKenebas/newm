@@ -27,7 +27,8 @@ done
 # Built against Caulis's sources when they are next to this folder (until the Caulis it needs is released).
 local_caulis=""
 [ -d ../caulis/caulis-core ] && local_caulis="-Pcaulis.local=true"
-./gradlew installDist $local_caulis
+# (Warnings do not stop a build here: a newer Kotlin or JDK on your system may add some.)
+./gradlew installDist -Pnewm.strictWarnings=false -Pcaulis.strictWarnings=false $local_caulis
 
 if [ -n "$user" ]; then
     lib="$HOME/.local/lib/newm"; bin="$HOME/.local/bin"; as=""

@@ -317,7 +317,7 @@ view {
     floatingMinSize = true       // a floating window that asks for no size opens at its smallest
 }
 windows {
-    newPlacement = "right-of-focused"  // or "beside-focused", "end", "original" (newm's)
+    newPlacement = "compact"           // next to yours, compact; or "right-of-focused", "beside-focused", "end", "original" (newm's)
     childPlacement = "below"           // a dialog, a photo viewer: "below" its window, "right", "over" (floating, as newm)
     returnFocusToParent = true         // closing it gives the focus back to its window
 }

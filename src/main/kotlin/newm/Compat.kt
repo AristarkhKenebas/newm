@@ -63,13 +63,18 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
                 dev.caulis.ffi.Processes.Method.entries.firstOrNull { it.name.equals(v, ignoreCase = true) }?.let { caulis.processStart = it } ?: wrong("\"native\" or \"java\"")
             }
             "java_updated_notice" -> text { caulis.javaUpdatedNotice = it.ifEmpty { null } }
-            // compositor { stallReportMillis, trimMemory, trimMemoryEveryMinutes, mallocPools, quickCursor, widgetThreads }: Caulis' performance { }.
+            // compositor { stallReportMillis, trimMemory, trimMemoryEveryMinutes, mallocPools, quickCursor, widgetThreads, inputThread,
+            // glVendorByDriver }: Caulis' performance { }; keepHiddenMenusSeconds: caulis-compose's.
             "stall_report_ms" -> number { caulis.stallReportMillis = it.toLong().coerceIn(0, 60_000) }
             "trim_memory" -> flag { caulis.trimMemory = it }
             "trim_memory_every_minutes" -> number { caulis.trimMemoryEveryMinutes = it.coerceIn(0, 1440) }
             "malloc_pools" -> number { caulis.mallocPools = it.coerceIn(0, 64) }
             "quick_cursor" -> flag { caulis.quickCursorMoves = it }
             "widget_threads" -> number { caulis.widgetThreads = it.coerceIn(0, 16) }
+            "input_thread" -> flag { caulis.inputThread = it }
+            "malloc_map_above_kb" -> number { caulis.mallocMapAboveKb = if (it in 1..15) 16 else it.coerceIn(0, 65_536) }
+            "gl_vendor_by_driver" -> flag { caulis.glVendorByDriver = it }
+            "keep_hidden_menus_seconds" -> number { dev.caulis.compose.ComposeScenes.keepHiddenSeconds = it.coerceIn(0, 86_400) }
             // newm's own: compositor { configCompilerJvmOptions, configCompilerTimeoutSeconds } (the next compilation of config.kts).
             "config_compiler_jvm_options" -> text { KtsConfig.jvmOptions = it.trim().split(Regex("\\s+")).filter(String::isNotEmpty).ifEmpty { KtsConfig.DEFAULT_JVM_OPTIONS } }
             "config_compiler_timeout_seconds" -> number { KtsConfig.timeoutSeconds = it.toLong().coerceIn(5, 3600) }
@@ -107,7 +112,7 @@ fun keyBindingsOf(raw: Any?): List<Pair<String, () -> Unit>> = (raw as? List<*>)
         is List<*> -> {
             val keys = item.getOrNull(0) as? String
             val action = item.getOrNull(1) as? () -> Any?
-            if (keys != null && action != null) keys to { action(); Unit } else null
+            if (keys != null && action != null) keys to fun() { action() } else null
         }
         else -> null
     }

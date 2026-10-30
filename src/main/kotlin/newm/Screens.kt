@@ -67,7 +67,7 @@ internal object Screens {
 
     /** The layout after [layout] in screens { cycle }. */
     fun nextLayout(layout: String): String {
-        val cycle = confLayoutCycle().map { it.toString() }.ifEmpty { listOf("columns") }
+        val cycle = confLayoutCycle().ifEmpty { listOf("columns") }
         return cycle[(cycle.indexOf(layout) + 1).mod(cycle.size)]
     }
 
@@ -261,10 +261,21 @@ internal fun WorkspaceState.withScreenFullscreen(view: View, state: ViewState): 
     return result
 }
 
-/** After a window of screen [page] went: windows of the screens after it move up until that one is full again (screens { pullBack }). */
+/**
+ * After a window of screen [page] went (screens { pullBack }): "compact" (pullBackMode, the
+ * default) — a neighbouring screen whose windows fit into the room left moves in, nothing else
+ * (a screen left empty goes anyway); "shift" — windows of the screens after it move up until
+ * that one is full again.
+ */
 internal fun WorkspaceState.pullBackScreens(page: Int) {
     if (!Screens.pullBack() || page < 0) return
     val screens = readScreens()
+    if (Placement.pullBackMode() == "compact") {
+        val k = screens.indexOfFirst { s -> s.windows.firstOrNull()?.let { viewStates[it]?.page } == page }
+        if (k >= 0) Placement.closeGap(screens, k)
+        writeScreens(screens)
+        return
+    }
     for (k in screens.indices) {
         if (screens[k].windows.isEmpty()) continue
         val pageNow = viewStates[screens[k].windows.first()]?.page ?: continue

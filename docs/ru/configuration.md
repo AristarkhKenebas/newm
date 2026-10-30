@@ -319,7 +319,7 @@ view {
     floatingMinSize = true       // плавающее окно, не просящее размера, открывается наименьшим
 }
 windows {
-    newPlacement = "right-of-focused"  // или "beside-focused", "end", "original" (как в newm)
+    newPlacement = "compact"           // рядом с вашим, плотно; или "right-of-focused", "beside-focused", "end", "original" (как в newm)
     childPlacement = "below"           // диалог, просмотр фото: "below" — под своим окном, "right", "over" (плавает, как в newm)
     returnFocusToParent = true         // при закрытии фокус возвращается его окну
 }

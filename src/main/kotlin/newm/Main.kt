@@ -52,7 +52,7 @@ fun main(args: Array<String>) {
         keys.off()
         kept.forEach { (name, combination) -> keys[name] = combination }
         // While newm is locked: none of Caulis's keys (see Layout.ensureLocked).
-        mode(LOCKED_MODE) {}
+        keyMode(LOCKED_MODE) {}
         lateinit var layout: Layout
         val config = ConfigLoader(this, DeferredApi { LayoutApi(layout) })
         // No D-Bus session bus (a system without systemd, started without dbus-run-session): said in

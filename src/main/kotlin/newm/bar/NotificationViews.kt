@@ -142,6 +142,19 @@ private fun CardStack(model: BarModel, center: NotificationCenter) {
     }
 }
 
+/**
+ * A notification's card drawn ahead (Warmup, on its own thread): the first real card is not
+ * slow — it held newm ~0.4 s. A made-up notification, nothing kept, nothing sent.
+ */
+@Composable
+internal fun WarmNotificationCard(model: BarModel) {
+    val card = remember { NotificationCard(-1, 0L) }
+    val n = remember { Notification(-1, "newm", summary = "Notification", body = "A notification drawn ahead", actions = listOf("default" to "", "open" to "Open"), at = System.currentTimeMillis()) }
+    Column(Modifier.width((cardsWidth() + 2 * CARD_SHADOW).dp).padding(CARD_SHADOW.dp)) {
+        NotificationCardView(model, model.notifications, card, n, model.colorsNow())
+    }
+}
+
 @Composable
 private fun NotificationCardView(model: BarModel, center: NotificationCenter, card: NotificationCard, n: Notification, colors: BarColors) {
     val density = LocalDensity.current
