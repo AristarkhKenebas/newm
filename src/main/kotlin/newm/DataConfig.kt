@@ -74,6 +74,7 @@ object DataConfig {
                     k["model"]?.let { pywm["xkb_model"] = it }
                     k["numlock"]?.let { pywm["numlock"] = it }
                     k["binding_modifiers"]?.let { pywm["binding_modifiers"] = it }
+                    k["shortcuts_on_latin_layout"]?.let { pywm["shortcuts_on_latin_layout"] = it }
                     k["repeat_rate"]?.let { pywm["repeat_rate"] = it }
                     k["repeat_delay"]?.let { pywm["repeat_delay"] = it }
                 }

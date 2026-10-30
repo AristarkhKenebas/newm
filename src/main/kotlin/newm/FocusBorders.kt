@@ -170,6 +170,23 @@ class FocusBorders(private val wm: Layout) : Animatable {
         canvas.border(rect, confFocusW().toFloat(), borderPaint(true), radius.toFloat(), place.alpha, dev.caulis.render.PaintState(focused = false, urgent = true), confAnimate())
     }
 
+    /**
+     * The focus border as Caulis draws it around the windows of a special workspace (they have
+     * no view of newm's, so no border of this class): as wide, the same paint (the colour, a
+     * gradient, the shader; the urgent colour), nothing around the windows without the focus.
+     * Null with focus { enabled = false }.
+     */
+    internal fun caulisBorder(): dev.caulis.core.Border? {
+        if (!confEnabled()) return null
+        return dev.caulis.core.Border(
+            width = Math.round(confFocusW()).toInt().coerceAtLeast(1),
+            focused = borderPaint(false),
+            unfocused = Paint.solid(dev.caulis.render.Color.TRANSPARENT),
+            urgent = confUrgentColor().takeIf { it.isNotBlank() }?.let(::paintOf),
+            animate = confAnimate(),
+        )
+    }
+
     // The shader of focus.shader, made once per file (it reads the file again when it is saved).
     private var shader: Pair<String, Paint.Shader>? = null
 

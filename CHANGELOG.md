@@ -10,6 +10,50 @@ From now on every change people would notice gets a line under [Unreleased] in t
 
 ## [Unreleased]
 
+## [2026-10-30, on Caulis 0.1.7]
+
+### Added
+- The screenshot chooser shows the area chosen last again (as on a Mac): press Enter (or
+  Capture) to take it again at once, move or resize it, or clear it with the new clear button on
+  the toolbar (shown while there is an area) or Esc. It is forgotten when the monitors change.
+  Settings: `screenshots { rememberSelection = true; rememberAcrossRestarts = false;
+  escapeClearsSelection = true }` (config.json/Lua: `remember_selection`,
+  `remember_across_restarts`, `escape_clears_selection`).
+- `keyboard { shortcutsOnLatinLayout = true }` (config.json/Lua `shortcuts_on_latin_layout`):
+  key bindings work on every layout by the key they have in the first Latin layout, as in GNOME
+  and KDE — with "us,ru" Super+D, Super+Shift+M and Ctrl+Alt+T work on the Russian layout too,
+  for newm's own keys and Caulis's alike. A binding on the layout's own symbol
+  (`"L-Cyrillic_ve"`) still wins on that layout. `false`: only the symbols of the layout in use.
+- `clipboard { pasteOnLatinLayout = true }` (`paste_on_latin_layout`): the clipboard history's
+  paste keys (`onChoose = "paste"`) go in the first Latin layout while the Russian (or another
+  non-Latin) layout is on, and the layout comes back right after.
+- Super+drag a window of a shown special workspace onto the dimmed wall around it: it comes
+  back onto the wall (dropped inside, it goes back to its place).
+- `specialWorkspace { cornerRadius; padding }` (config.json/Lua `corner_radius`, `padding`; -1,
+  the default: as `view { }`).
+
+### Changed
+- In the screenshot chooser the first Esc clears an area shown and a second Esc closes. To close
+  with one Esc again (forgetting the area): `screenshots { escapeClearsSelection = false }`.
+- Windows in a special workspace look like the wall's: rounded corners (`view { cornerRadius }`),
+  room around each (`view { padding }`, twice it between two), the focus border of `focus { }`,
+  and the blur and opacity of `view { rules }`. They are tiled inside `gap`, centred, as big as
+  `size` says.
+
+### Fixed
+- Pasting from the clipboard history (`onChoose = "paste"`) works on the Russian layout in
+  Alacritty too (it matches Ctrl+Shift+V in the layout in use only), and on Dvorak/AZERTY the
+  paste key is the key that types V, not the key where a US keyboard has it.
+- Super+M (`special-workspace`) in the overview showed nothing (the overview hid it again at
+  once): the overview now ends and the special workspace shows. Moving a window in (not
+  silently) from the overview does the same.
+- `from-special-workspace` did nothing when the window behind had the focus (focus follows the
+  mouse took it as the pointer crossed the dimmed wall) or with the special workspace hidden: it
+  now moves the focused window out, else the one focused last in the special workspace; it
+  comes back onto the wall as a new window, next to the window focused before, focused.
+- A stall right after login while the mouse moved ("The main loop is stuck ... quickCursor"):
+  movements waiting are merged into one (Caulis).
+
 ## [2026-10-30, on Caulis 0.1.6]
 
 ### Changed

@@ -413,6 +413,14 @@ class KeyboardSection internal constructor(values: MutableMap<String, Any?>) : S
      */
     var bindingModifiers by setting<String>("binding_modifiers")
 
+    /**
+     * True (the default): key bindings work on every layout by the key they have in the first
+     * Latin layout — with "us,ru", Super+D is the key of "в", Super+Shift+M that of "Ь" (as in
+     * GNOME and KDE); a binding on the layout's own symbol ("L-Cyrillic_ve") still wins on it.
+     * False: the layout in use's symbols only (pywm's way: on Russian, Super+D does nothing).
+     */
+    var shortcutsOnLatinLayout by setting<Boolean>("shortcuts_on_latin_layout")
+
     /** Keys held down repeat this many times a second (Hyprland's repeat_rate; 25 by default). */
     var repeatRate by setting<Int>("repeat_rate")
 
@@ -951,6 +959,12 @@ class SpecialWorkspaceSection internal constructor(values: MutableMap<String, An
 
     /** The overview hides it (true): the overview shows the wall's windows only. */
     var hideInOverview by setting<Boolean>("hide_in_overview")
+
+    /** How round its windows' corners are, pixels (-1, the default: as view { cornerRadius }). */
+    var cornerRadius by setting<Double>("corner_radius")
+
+    /** Room around each of its windows, pixels: twice it between two (-1, the default: as view { padding }). */
+    var padding by setting<Double>("padding")
 }
 
 class PanelsSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
@@ -1339,6 +1353,18 @@ class ScreenshotsSection internal constructor(values: MutableMap<String, Any?>) 
     /** A click (not a drag) while choosing a part takes the window under the pointer (true); false (the default): a window by its key, W, or button. */
     var clickPicksWindow by setting<Boolean>("click_picks_window")
 
+    /**
+     * The part chosen last is there again when the chooser opens (true, the default; Enter takes
+     * it at once); dropped when the monitors change. False: none each time.
+     */
+    var rememberSelection by setting<Boolean>("remember_selection")
+
+    /** That part is kept across restarts too (false by default: for this session only). */
+    var rememberAcrossRestarts by setting<Boolean>("remember_across_restarts")
+
+    /** The first Escape clears a part shown, a second closes (true, the default); false: Escape closes and forgets the part. */
+    var escapeClearsSelection by setting<Boolean>("escape_clears_selection")
+
     /** Seconds to wait before taking it (0). */
     var delay by setting<Int>("delay")
 
@@ -1525,6 +1551,13 @@ class ClipboardSection internal constructor(values: MutableMap<String, Any?>) : 
     /** The keys "paste" sends ("C-v"), and those sent to a terminal ("C-S-v"). */
     var pasteKey by setting<String>("paste_key")
     var terminalPasteKey by setting<String>("terminal_paste_key")
+
+    /**
+     * The paste keys go in the first Latin layout while the layout in use is another script's
+     * (true, the default; the layout comes back right after): programs that match Ctrl+V in the
+     * layout in use only (Alacritty) paste on the Russian layout too. False: the layout in use.
+     */
+    var pasteOnLatinLayout by setting<Boolean>("paste_on_latin_layout")
 
     /** The window's size in pixels (980 x 620 at most, smaller on a small screen) and its top, a part of the screen's height (0.13). */
     var width by setting<Int>("width")

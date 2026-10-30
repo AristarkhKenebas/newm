@@ -22,16 +22,25 @@ object Mod {
     fun pressed(modifiers: Int, before: Int): Int = modifiers and before.inv()
 }
 
-/** newm's key_processor.py: one key (or a modifier alone) or the change of the modifiers. */
+/**
+ * newm's key_processor.py: one key (or a modifier alone) or the change of the modifiers.
+ * [keysyms] is the key for bindings (Latin on any layout: "d" for the key of "в"), [layoutKeysyms]
+ * what it is in the layout in use ("Cyrillic_ve"), for bindings written on that one.
+ */
 class KeyEvent private constructor(
     val isMod: Boolean,
     val pressed: Boolean,
     val keysyms: String,
     val modifiers: Int,
     val lastModifiers: Int,
+    val layoutKeysyms: String = keysyms,
 ) {
+    /** The same key as [keysym]. */
+    internal fun withKeysyms(keysym: String) = KeyEvent(isMod, pressed, keysym, modifiers, lastModifiers, layoutKeysyms)
+
     companion object {
-        fun fromKey(pressed: Boolean, keysyms: String, modifiers: Int) = KeyEvent(false, pressed, keysyms, modifiers, 0)
+        fun fromKey(pressed: Boolean, keysyms: String, modifiers: Int, layoutKeysyms: String = keysyms) =
+            KeyEvent(false, pressed, keysyms, modifiers, 0, layoutKeysyms)
         fun fromMod(modifiers: Int, lastModifiers: Int) = KeyEvent(true, false, "", modifiers, lastModifiers)
     }
 }
@@ -101,6 +110,10 @@ class KeyPress(keys: String) {
         return -1
     }
 
+    /** True if [event] with the key [keysym] is this press: going down with its modifiers, or let go after it. */
+    fun takes(event: KeyEvent, keysym: String): Boolean =
+        this.keysym == keysym && if (event.pressed) event.modifiers and Mod.LOCKS.inv() == mod else readyToFire
+
     fun clear() {
         readyToFire = false
     }
@@ -132,6 +145,9 @@ class KeyBinding(keys: String, private val action: () -> Unit) {
         return -1
     }
 
+    /** True if the press it waits for is [event] with the key [keysym]. */
+    fun takes(event: KeyEvent, keysym: String): Boolean = presses[at].takes(event, keysym)
+
     fun clear() {
         at = 0
         presses.forEach(KeyPress::clear)
@@ -150,7 +166,8 @@ class KeyProcessor {
         for ((keys, action) in bindings) this.bindings += KeyBinding(keys, action)
     }
 
-    fun onEvent(event: KeyEvent, locked: Boolean): Boolean {
+    fun onEvent(given: KeyEvent, locked: Boolean): Boolean {
+        val event = matching(given)
         var taken = false
         var triggered = false
         for (b in bindings) {
@@ -169,8 +186,17 @@ class KeyProcessor {
         return taken
     }
 
-    fun onKey(pressed: Boolean, keysyms: String, modifiers: Int, locked: Boolean): Boolean =
-        onEvent(KeyEvent.fromKey(pressed, keysyms, modifiers), locked)
+    // A binding on the key as the layout in use has it ("L-Cyrillic_ve") wins over the Latin one
+    // ("L-d"): the event with that key then; else as it is.
+    private fun matching(event: KeyEvent): KeyEvent {
+        val own = event.layoutKeysyms
+        if (event.isMod || own == event.keysyms || bindings.none { it.takes(event, own) }) return event
+        log.trace { "A binding on the layout's own symbol" }
+        return event.withKeysyms(own)
+    }
+
+    fun onKey(pressed: Boolean, keysyms: String, modifiers: Int, locked: Boolean, layoutKeysyms: String = keysyms): Boolean =
+        onEvent(KeyEvent.fromKey(pressed, keysyms, modifiers, layoutKeysyms), locked)
 
     fun onModifiers(modifiers: Int, lastModifiers: Int, locked: Boolean): Boolean =
         onEvent(KeyEvent.fromMod(modifiers, lastModifiers), locked)

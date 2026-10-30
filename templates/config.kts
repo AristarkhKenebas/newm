@@ -252,6 +252,7 @@ screenshots {
     start = "region"                        // the chooser starts choosing a part; W chooses a window
     // rememberKind = false                 // true: it starts with the kind used last
     // clickPicksWindow = false             // true: a click (not a drag) takes the window under it
+    // rememberSelection = true             // the area chosen last is there again (Esc clears it)
     // pointer = false                      // the pointer in the picture
     // then = "satty --filename {file}"     // a command run with each file saved
 }
@@ -380,6 +381,8 @@ specialWorkspace {
     // hideWhenEmpty = true
     // newWindowsJoin = true                // windows opening while it is shown go into it
     // clickOutsideHides = true
+    // cornerRadius = 12.0                  // its windows' corners (else as view { cornerRadius })
+    // padding = 6.0                        // room around each of its windows (else as view { padding })
 }
 // A program that always opens there, hidden until shown (Super+M below):
 // windowRule { appId("spotify"); specialWorkspace = "music" }

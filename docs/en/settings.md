@@ -185,8 +185,19 @@ its own; everything behind it dimmed (and blurred). Keys: `toggleSpecialWorkspac
 `moveOutOfSpecialWorkspace()`; in config.json/Lua the actions `special-workspace toggle [name]`,
 `move-to-special [name] [silent]`, `move-out-of-special`, `move-to-workspace special:name`;
 from a terminal `newm cmd special [name]`. A window moved in leaves the wall; moved out, it
-comes back onto the wall as a new window. The overview shows the wall only: a shown special
-workspace hides when it opens. The lock hides it too.
+comes back onto the wall as a new window (placed as a new window is: next to the window focused
+before), focused. `from-special-workspace` moves the focused window out — or, with the special
+workspace hidden, the window focused last in it. Super+drag a window of a shown special
+workspace onto the dimmed wall around it: it comes out there too (dropped inside, it goes back
+to its place). The overview shows the wall only: a shown special workspace hides when it
+opens, and showing one from the overview (Super+M) ends the overview. The lock hides it too.
+
+Its windows look like the wall's: rounded corners (`view { cornerRadius }`), room around each
+(`view { padding }`: twice it between two windows), the focus border of `focus { }`, and the
+blur and opacity of `view { rules }`. They are tiled like Hyprland's (dwindle) inside `gap`,
+centred, as big as `size` says — a screen of its own, not part of the wall's screens. While it
+is shown (and `clickOutsideHides`), the pointer passing over the dimmed wall does not take the
+focus away from it.
 
 | Setting | Default | What |
 |---|---|---|
@@ -200,6 +211,8 @@ workspace hides when it opens. The lock hides it too.
 | `newWindowsJoin` | `true` | windows opening while it is shown go into it |
 | `clickOutsideHides` | `true` | a click on the dimmed wall hides it |
 | `hideInOverview` | `true` | the overview hides it |
+| `cornerRadius` | `-1` | how round its windows' corners are, pixels (-1: as `view { cornerRadius }`) |
+| `padding` | `-1` | room around each of its windows, pixels (-1: as `view { padding }`) |
 
 ### A program that always opens there: Spotify in "music"
 
@@ -337,6 +350,7 @@ The launcher's keys without `keys { }`: ↓, Tab, Ctrl+N and Ctrl+J choose the n
 | `model` | `"pc105"` | the keyboard's model |
 | `numLock` | `false` | Num Lock on from the start |
 | `bindingModifiers` | `"xkb"` | modifiers in key bindings as the layout and its options say (`caps:super`), or `"physical"`: the printed keys |
+| `shortcutsOnLatinLayout` | `true` | key bindings work on every layout by the key they have in the first Latin layout (with `"us,ru"`, Super+D on the Russian layout too, as in GNOME and KDE); a binding on the layout's own symbol (`"L-Cyrillic_ve"`) still wins there. `false`: the layout in use's symbols only |
 | `repeatRate` | `25` | held keys repeat this many times a second (0: never) |
 | `repeatDelay` | `600` | after being held this long, milliseconds |
 
@@ -431,6 +445,9 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `start` | `"region"` | the chooser starts with `"region"`, `"window"` or `"screen"` |
 | `rememberKind` | `false` | `true`: it starts with the kind used last instead (a window after a window) |
 | `clickPicksWindow` | `false` | `true`: a click (not a drag) while choosing an area takes the window under the pointer; else a window is chosen with W or its button |
+| `rememberSelection` | `true` | the area chosen last is there again when the chooser opens: Enter takes it at once; the toolbar's clear button or Esc clears it; dropped when the monitors change. `false`: none each time |
+| `rememberAcrossRestarts` | `false` | `true`: that area is kept across restarts too (in `~/.local/state/newm/screenshot-selection`) |
+| `escapeClearsSelection` | `true` | the first Esc clears an area shown, a second closes; `false`: Esc closes at once and forgets the area (the close button and a right click close and keep it) |
 | `delay` | `0` | seconds to wait |
 | `selection` | `"adjust"` | an area: `"adjust"` (moved and resized after) or `"new"` (each drag a new one) |
 | `overviewStart` | `"windows"` | in the overview: `"windows"` (several, whole), `"region"`, `"window"`, `"screen"`, `""` (the last used) |
@@ -453,6 +470,7 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `clearAtOnce` | `true` | "Clear" clears at once; `false`: it asks first ("Really clear?"), and a second click or Enter clears |
 | `onChoose` | `"copy"` | choosing an entry: `"copy"` puts it on the clipboard; `"paste"` also pastes it into the window you were in (Ctrl+V sent to it) |
 | `pasteKey`, `terminalPasteKey` | `"C-v"`, `"C-S-v"` | the keys `"paste"` sends, to a terminal the second (`"S-Insert"` works too) |
+| `pasteOnLatinLayout` | `true` | the paste keys go in the first Latin layout while a layout of another script is on (Alacritty pastes on the Russian layout too); the layout comes back right after |
 | `width`, `height` | `980`, `620` (smaller on a small screen) | the window's size, pixels |
 | `top` | `0.13` | where its top is, as a part of the screen's height |
 | `pinKey` | `"C-p"` | the key that pins the chosen entry |

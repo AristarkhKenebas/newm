@@ -331,6 +331,7 @@ private val RU: Map<String, String> = mapOf(
     "Windows, whole" to "Окна целиком",
     "Move and resize the area" to "Область двигается и тянется",
     "A new area each time" to "Каждый раз новая область",
+    "Clear the selection" to "Сбросить область",
     "Pointer: in the picture" to "Курсор: на снимке",
     "Pointer: left out" to "Курсор: без него",
     "Timer: %s s" to "Таймер: %s с",

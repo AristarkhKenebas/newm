@@ -38,3 +38,44 @@ class SystemKeyboardTest {
         if (',' in k.layouts) kotlin.test.assertTrue(k.options.isNotEmpty(), k.toString())
     }
 }
+
+/**
+ * On a layout of another script the key is told twice: Latin ("d", for the usual bindings) and as
+ * the layout has it ("Cyrillic_ve"); a binding on the latter wins on that layout.
+ */
+class LatinLayoutKeysTest {
+
+    private fun press(p: KeyProcessor, keysym: String, own: String, modifiers: Int) {
+        p.onKey(true, keysym, modifiers, false, own)
+        p.onKey(false, keysym, modifiers, false, own)
+    }
+
+    @Test
+    fun `readable bindings fire by the Latin key on the Russian layout`() {
+        val fired = ArrayList<String>()
+        val p = KeyProcessor()
+        p.registerBindings(
+            KeyNotation.toNewm("Super+D") to { fired += "super+d" },
+            KeyNotation.toNewm("Super+Shift+M") to { fired += "super+shift+m" },
+            KeyNotation.toNewm("Ctrl+Alt+T") to { fired += "ctrl+alt+t" },
+        )
+        // What Caulis tells on "ru": the key of "в" is d, of "Ь" (with Shift) m, of "е" t.
+        press(p, "d", "Cyrillic_ve", Mod.LOGO)
+        press(p, "m", "Cyrillic_SOFTSIGN", Mod.LOGO or Mod.SHIFT)
+        press(p, "t", "Cyrillic_ie", Mod.CTRL or Mod.ALT)
+        assertEquals(listOf("super+d", "super+shift+m", "ctrl+alt+t"), fired)
+    }
+
+    @Test
+    fun `a binding on the layout's own symbol wins there, the Latin one elsewhere`() {
+        val fired = ArrayList<String>()
+        val p = KeyProcessor()
+        p.registerBindings(
+            "L-d" to { fired += "latin" },
+            "L-Cyrillic_ve" to { fired += "cyrillic" },
+        )
+        press(p, "d", "Cyrillic_ve", Mod.LOGO) // Russian
+        press(p, "d", "d", Mod.LOGO) // us
+        assertEquals(listOf("cyrillic", "latin"), fired)
+    }
+}

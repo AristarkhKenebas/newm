@@ -381,6 +381,12 @@ ru: какую часть экрана занимает
 en: windows opening while it is shown go into it
 ru: окна, открытые, пока оно показано, попадают в него
 
+en: its windows' corners (else as view { cornerRadius })
+ru: углы его окон (иначе как view { cornerRadius })
+
+en: room around each of its windows (else as view { padding })
+ru: отступ вокруг каждого его окна (иначе как view { padding })
+
 en: newm's own bar at the top: see-through islands floating at the edge — the focused window,
 ru: Собственная панель newm сверху: полупрозрачные острова у края — окно в фокусе,
 
@@ -488,6 +494,9 @@ ru: true: начинать с вида, выбранного в прошлый �
 
 en: true: a click (not a drag) takes the window under it
 ru: true: щелчок (не протягивание) берёт окно под указателем
+
+en: the area chosen last is there again (Esc clears it)
+ru: область, выбранная в прошлый раз, снова на месте (Esc убирает её)
 
 en: the pointer in the picture
 ru: указатель на снимке

@@ -494,6 +494,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.onStart { main() }
         // view { rules } may send windows into special workspaces too (as Caulis' rules do).
         caulis.onStart { specials.takeOverRules() }
+        // Windows in special workspaces look as the wall's (Caulis draws them: newm's corners, border, rules).
+        caulis.effectsFor { window, fx -> specials.effectsOf(window, fx) }
     }
 
     // --- pywm's part ---------------------------------------------------------------------------
@@ -882,6 +884,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         damage()
     }
 
+    /** For a drag with a mouse button: the pixels a gesture's 1 is (the window follows the pointer one to one). */
+    internal fun dragScale(): Double = moveResizeFactor() * ((activeMonitor() ?: caulis.desktop.monitors.firstOrNull())?.area?.width?.toDouble() ?: 1920.0)
+
     private fun setup(reconfigure: Boolean = true) {
         setupWidgets(keepBars = !reconfigure)
         // Sleep locks first (lock_on_wakeup) and waits up to lock { sleepWait } seconds for the lock screen to show.
@@ -918,7 +923,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         gestureProviders.forEach(GestureProvider::stop)
         val dbusProvider = if (confEnableDBusGestures()) DBusGestureProvider(::gestureProviderCallback) else null
         dbusEndpoint.gestureProvider = dbusProvider
-        gestureProviders = listOfNotNull(if (confEnableCGestures()) CGestureProvider(::gestureProviderCallback, ::every) { moveResizeFactor() * (activeMonitor() ?: caulis.desktop.monitors.firstOrNull())?.area?.width?.toDouble().let { it ?: 1920.0 } } else null, dbusProvider)
+        gestureProviders = listOfNotNull(if (confEnableCGestures()) CGestureProvider(::gestureProviderCallback, ::every, ::dragScale) else null, dbusProvider)
         gestureProviders.forEach(GestureProvider::start)
 
         if (reconfigure) views.values.forEach(View::update)
@@ -1374,11 +1379,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         modifiers = key.modifiers
         if (key.isModifier && key.modifiers != key.modifiersBefore) onModifiers(key.modifiers, key.modifiersBefore)
         // (Single letters as pywm gives them: without Shift's capital.)
-        val keysym = if (key.keysym.length == 1) key.keysym.lowercase() else key.keysym
-        return onKey(key.timeMillis, key.evdevCode, key.pressed, keysym)
+        fun pywm(keysym: String) = if (keysym.length == 1) keysym.lowercase() else keysym
+        // keyboard { shortcutsOnLatinLayout } (default true): "d" for the key of "в" on the Russian
+        // layout, as the first Latin layout has it; false: the layout in use's own (pywm's way).
+        val own = pywm(key.layoutKeysym)
+        val keysym = if (caulis.bindingsUseFirstLatinLayout) pywm(key.keysym) else own
+        return onKey(key.timeMillis, key.evdevCode, key.pressed, keysym, own)
     }
 
-    fun onKey(timeMillis: Int, keycode: Int, pressed: Boolean, keysyms: String): Boolean {
+    fun onKey(timeMillis: Int, keycode: Int, pressed: Boolean, keysyms: String, layoutKeysyms: String = keysyms): Boolean {
         // These are processed via onModifiers.
         if (keysyms in listOf("Super_L", "Super_R", "Alt_L", "Alt_R", "Logo_L", "Logo_R")) return false
         // The keys' help open: a key (but its own) closes it, and does nothing else.
@@ -1390,7 +1399,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             log.trace { "...passing to overlay $o" }
             if (o.onKey(timeMillis, keycode, pressed, keysyms)) return true
         }
-        return keyProcessor.onKey(pressed, keysyms, modifiers, isLocked())
+        return keyProcessor.onKey(pressed, keysyms, modifiers, isLocked(), layoutKeysyms)
     }
 
     fun onModifiers(modifiers: Int, lastModifiers: Int): Boolean {
@@ -1564,6 +1573,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val moveResize = confGestureBindingMoveResize()
         if (hasModifier(moveResize[0]) && (gesture.kind == moveResize[1] || gesture.kind == moveResize[2])) {
             log.trace { "...MoveResize" }
+            // A window of a special workspace under the pointer: dragged there, out onto the wall maybe.
+            if (gesture.kind == moveResize[1] && !overviewShown()) specials.dragOverlay()?.let { return enter(it) }
             // The window under the pointer (as Hyprland's Super+drag), focused; else the focused one.
             // (In the overview windows take no clicks: the one drawn under the pointer there.)
             val under = if (overviewShown()) viewUnderPointer() else caulis.desktop.let { d -> d.windowAt(d.pointerX, d.pointerY) }?.let(::viewOf)
@@ -2425,13 +2436,32 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
      * Shows the special workspace [name] (Hyprland's togglespecialworkspace; "special" without
      * a name) above the wall on the focused monitor, or hides it.
      */
-    fun toggleSpecialWorkspace(name: String = "special") = caulis.toggleSpecialWorkspace(name)
+    fun toggleSpecialWorkspace(name: String = "special") {
+        // In the overview: it ends, and the special workspace shows (above the wall as usual).
+        if (!specials.shownHere(name)) leaveOverviewFor("special workspace $name")
+        caulis.toggleSpecialWorkspace(name)
+    }
 
     /** Moves the focused window into the special workspace [name] — shown with it, or [silent]ly waiting there. */
-    fun moveToSpecialWorkspace(name: String = "special", silent: Boolean = false) = caulis.moveToSpecialWorkspace(null, name, silent)
+    fun moveToSpecialWorkspace(name: String = "special", silent: Boolean = false) {
+        if (!silent) leaveOverviewFor("special workspace $name")
+        caulis.moveToSpecialWorkspace(null, name, silent)
+    }
 
-    /** Moves the focused window out of its special workspace back onto the wall. */
+    /**
+     * Moves the focused window out of its special workspace back onto the wall — or, with no
+     * window of one focused (the special workspace hidden), the one focused last in it. It
+     * comes back as a new view, placed as a new window is, focused.
+     */
     fun moveOutOfSpecialWorkspace() = caulis.moveOutOfSpecialWorkspace(null)
+
+    // A special workspace is to show: the overview ends first (it shows newm's views only, and
+    // hides special workspaces as it opens).
+    private fun leaveOverviewFor(what: String) {
+        if (!overviewShown()) return
+        log.info { "The overview ends: $what shows" }
+        animateTo({ s -> null to s.withOverviewSet(false, null, findFocusedView()) }, "overview")
+    }
 
     /** The clipboard's history (Logo+V): what was copied lately, to copy again. */
     val clipboardHistory by lazy { ClipboardHistory(this) }

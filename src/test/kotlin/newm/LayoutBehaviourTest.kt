@@ -598,6 +598,175 @@ class LayoutBehaviourTest {
         assertEquals(tile, t.tile("w1"))
     }
 
+    // --- special workspaces by keys and the mouse
+
+    // The window [title] has a view of newm's on the wall now (placed in the layout).
+    private fun T.onWall(title: String): Boolean = onLoop {
+        val w = caulis.desktop.allWindows.firstOrNull { it.title == title } ?: return@onLoop false
+        caulis.desktop.scratchpadOf(w) == null && layout.viewOf(w)?.let { layout.state.findViewOrNull(it) } != null
+    }
+
+    private fun T.specialShown(name: String): Boolean = onLoop { caulis.desktop.monitors.any { caulis.desktop.shownSpecialOn(it)?.name == name } }
+
+    private fun T.inSpecial(title: String): String? = onLoop {
+        caulis.desktop.allWindows.firstOrNull { it.title == title }?.let { caulis.desktop.scratchpadOf(it)?.name }
+    }
+
+    @Test
+    fun `a window moved into the special workspace by mistake comes back out by keys - a view again, compact, focused`() = withNewm(emptyMap()) { t ->
+        t.open("w1")
+        t.open("w2")
+        t.open("chat")
+        val w1 = t.tile("w1")
+        val w2 = t.tile("w2")
+        t.onLoop { t.layout.moveToSpecialWorkspace("music") }
+        t.eventually {
+            assertEquals("music", t.inSpecial("chat"))
+            assertFalse(t.onWall("chat"), "its view left the wall")
+            assertEquals("chat", t.focused(), "it keeps the focus in there")
+        }
+        t.settle()
+        t.onLoop { t.layout.moveOutOfSpecialWorkspace() }
+        t.eventually {
+            assertEquals(null, t.inSpecial("chat"))
+            assertTrue(t.onWall("chat"), "a view on the wall again")
+            assertEquals("chat", t.focused())
+            assertFalse(t.specialShown("music"), "the empty special workspace hides")
+        }
+        t.settle()
+        assertEquals(w1, t.tile("w1"), "the others stay")
+        assertEquals(w2, t.tile("w2"), "the others stay")
+        val chat = t.tile("chat")
+        assertEquals(listOf(1.0, 1.0), chat.drop(2), "one tile: $chat")
+        assertTrue(chat.take(2) != w1.take(2) && chat.take(2) != w2.take(2), "a free tile: $chat")
+        assertTrue(Math.abs(chat[0] - w2[0]) + Math.abs(chat[1] - w2[1]) <= 1.0 + 1e-6, "next to the window focused before (w2 at $w2): $chat")
+    }
+
+    @Test
+    fun `from-special-workspace with the special workspace hidden brings its last focused window back`() = withNewm(emptyMap()) { t ->
+        t.open("w1")
+        t.open("chat")
+        t.onLoop { t.layout.moveToSpecialWorkspace("music") }
+        t.eventually { assertEquals("music", t.inSpecial("chat")) }
+        t.onLoop { t.layout.toggleSpecialWorkspace("music") }
+        t.eventually { assertEquals("w1", t.focused()) }
+        t.settle()
+        t.onLoop { t.layout.moveOutOfSpecialWorkspace() }
+        t.eventually {
+            assertEquals(null, t.inSpecial("chat"))
+            assertTrue(t.onWall("chat"))
+            assertEquals("chat", t.focused())
+        }
+    }
+
+    @Test
+    fun `special-workspace from the overview leaves the overview and shows it`() = withNewm(emptyMap()) { t ->
+        t.open("w1")
+        t.open("player")
+        t.onLoop { t.layout.moveToSpecialWorkspace("music", silent = true) }
+        t.eventually { assertEquals("music", t.inSpecial("player")) }
+        t.settle()
+        t.onLoop { t.layout.toggleOverview() }
+        t.eventually { assertTrue(t.onLoop { t.layout.overviewShown() }) }
+        t.settle()
+        t.onLoop { t.layout.toggleSpecialWorkspace("music") }
+        t.eventually {
+            assertFalse(t.onLoop { t.layout.overviewShown() }, "the overview ends")
+            assertTrue(t.specialShown("music"), "shown")
+        }
+        // (And it stays: nothing hides it again a moment later.)
+        Thread.sleep(500)
+        t.client.roundtrips(2)
+        assertTrue(t.specialShown("music"), "still shown")
+        assertEquals("player", t.focused())
+    }
+
+    @Test
+    fun `Super+drag a window of the shown special workspace onto the wall brings it out - inside, back to its tile`() =
+        withNewm(mapOf("gesture_bindings" to mapOf("move_resize" to listOf(null, "move-1", "swipe-2")))) { t ->
+            t.open("w1")
+            t.open("chat")
+            t.onLoop { t.layout.moveToSpecialWorkspace("music") }
+            t.eventually { assertTrue(t.specialShown("music")) }
+            t.settle()
+            // Drags the window by (dx, dy) pixels from its middle; returns where it was meanwhile.
+            fun drag(dx: Double, dy: Double): Pair<Int, Int> {
+                val (x, y) = t.onLoop {
+                    val w = t.caulis.desktop.allWindows.first { it.title == "chat" }
+                    val cx = w.x + w.visibleRect.width / 2.0
+                    val cy = w.y + w.visibleRect.height / 2.0
+                    t.caulis.desktop.pointerMoved(0, cx, cy)
+                    cx to cy
+                }
+                val g = NewmGesture("move-1")
+                assertTrue(t.onLoop { t.layout.gesture(g) }, "the drag is taken")
+                val scale = t.onLoop { t.layout.dragScale() }
+                val before = t.onLoop { t.caulis.desktop.allWindows.first { it.title == "chat" }.let { it.x to it.y } }
+                t.onLoop { g.update(mapOf("delta_x" to dx / scale, "delta_y" to dy / scale, "delta2_s" to 0.0)) }
+                // (The pointer goes along, as it would.)
+                t.onLoop { t.caulis.desktop.pointerMoved(0, x + dx, y + dy) }
+                val during = t.onLoop { t.caulis.desktop.allWindows.first { it.title == "chat" }.let { it.x to it.y } }
+                assertEquals(before.first + Math.round(dx).toInt(), during.first, "it follows the pointer")
+                t.onLoop { g.terminate() }
+                t.settle()
+                return during
+            }
+            // Within the special workspace: back to its tile.
+            val tile = t.onLoop { t.caulis.desktop.allWindows.first { it.title == "chat" }.let { it.x to it.y } }
+            drag(30.0, 20.0)
+            t.eventually {
+                assertEquals("music", t.inSpecial("chat"))
+                assertEquals(tile, t.onLoop { t.caulis.desktop.allWindows.first { it.title == "chat" }.let { it.x to it.y } }, "back to its tile")
+            }
+            // Onto the dimmed wall left of it: out, a view of newm's, focused.
+            val (left, middle) = t.onLoop {
+                val area = t.caulis.desktop.specialWorkspaceArea(t.caulis.desktop.focusedMonitor)!!
+                val w = t.caulis.desktop.allWindows.first { it.title == "chat" }
+                area.x to w.x + w.visibleRect.width / 2.0
+            }
+            drag(left - 10.0 - middle, 0.0)
+            t.eventually {
+                assertEquals(null, t.inSpecial("chat"))
+                assertTrue(t.onWall("chat"), "a view on the wall again")
+                assertEquals("chat", t.focused())
+            }
+        }
+
+    @Test
+    fun `windows in a special workspace look like the wall's - corners, focus border, padding, size`() = withNewm(
+        mapOf("view" to mapOf("corner_radius" to 20.0, "padding" to 10.0), "focus" to mapOf("width" to 3.0), "special_workspace" to mapOf("gap" to 50, "size" to 0.8)),
+    ) { t ->
+        t.open("w1")
+        t.open("chat")
+        t.onLoop { t.layout.moveToSpecialWorkspace("music") }
+        t.eventually { assertTrue(t.specialShown("music")) }
+        t.settle()
+        t.eventually {
+            t.onLoop {
+                val desktop = t.caulis.desktop
+                val w = desktop.allWindows.first { it.title == "chat" }
+                val fx = desktop.windowEffects(w)
+                assertEquals(20, fx.cornerRadius, "view { cornerRadius }")
+                assertEquals(3, fx.border?.width, "the focus border, as wide as focus { width }")
+                // One window: the special workspace's area (gap 50, 0.8 of the rest, centred) less the padding around it.
+                val monitor = desktop.focusedMonitor.usableArea
+                val area = desktop.specialWorkspaceArea(desktop.focusedMonitor)!!
+                assertEquals(Math.round((monitor.width - 100) * 0.8).toInt(), area.width, "size 0.8 inside the gap: $area of $monitor")
+                assertEquals(area.x + 10, w.x, "padding left")
+                assertEquals(area.y + 10, w.y, "padding above")
+                assertEquals(area.width - 20 to area.height - 20, w.configuredSize, "padding all round")
+                // The wall's windows are not touched (newm draws those).
+                assertEquals(0, desktop.windowEffects(t.window("w1")).cornerRadius)
+            }
+        }
+        // specialWorkspace { cornerRadius } of its own.
+        t.onLoop {
+            Config.loadConfig(mapOf("view" to mapOf("corner_radius" to 20.0, "padding" to 10.0), "special_workspace" to mapOf("corner_radius" to 4.0), "screens" to mapOf("enabled" to false)))
+            t.layout.updateConfig()
+        }
+        t.eventually { assertEquals(4, t.onLoop { t.caulis.desktop.windowEffects(t.caulis.desktop.allWindows.first { it.title == "chat" }).cornerRadius }) }
+    }
+
     // --- the harness
 
     private class T(val caulis: Caulis, val layout: Layout, val client: Client) {

@@ -53,6 +53,8 @@ fun applyPywmSettings(caulis: Caulis, pywm: Map<String, Any?>) {
             "binding_modifiers" -> text { v ->
                 dev.caulis.wm.BindingModifiers.entries.firstOrNull { it.name.equals(v, ignoreCase = true) }?.let { caulis.bindingModifiers = it } ?: wrong("\"xkb\" or \"physical\"")
             }
+            // keyboard { shortcutsOnLatinLayout }: Caulis's bindings and newm's own (Layout.onKeyInput).
+            "shortcuts_on_latin_layout" -> flag { caulis.bindingsUseFirstLatinLayout = it }
             "quit_while_locked" -> flag { caulis.keys.quitWhileLocked = it }
             "lock_failure" -> text { v ->
                 dev.caulis.wm.LockFailure.entries.firstOrNull { it.name.equals(v.replace('-', '_'), ignoreCase = true) }?.let { caulis.lockFailure = it } ?: wrong("\"own-lock\" or \"notice\"")

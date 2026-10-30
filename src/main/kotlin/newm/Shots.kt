@@ -30,6 +30,12 @@ private val confThen = configuredValue<String?>("screenshots.then", null)
 private val confRememberKind = configuredValue("screenshots.remember_kind", false)
 // screenshots { clickPicksWindow = false }: a click (not a drag) while choosing a part takes the window under it (true).
 private val confClickPicksWindow = configuredValue("screenshots.click_picks_window", false)
+// screenshots { rememberSelection = true }: the part chosen last is there again when the chooser opens (false: none).
+private val confRememberSelection = configuredValue("screenshots.remember_selection", true)
+// screenshots { rememberAcrossRestarts = false }: that part is kept across restarts too (true).
+private val confRememberAcrossRestarts = configuredValue("screenshots.remember_across_restarts", false)
+// screenshots { escapeClearsSelection = true }: the first Escape clears a part shown, a second closes (false: Escape closes and forgets it).
+private val confEscapeClearsSelection = configuredValue("screenshots.escape_clears_selection", true)
 private val confCornerRadius = configuredValue("view.corner_radius", 12.0)
 
 /**
@@ -78,7 +84,10 @@ internal class Shots(private val wm: Layout) {
         shots.jpegQuality = confQuality().coerceIn(10, 100) / 100f
         shots.then = confThen()
         // (A window is chosen by its key, W, or the toolbar's button; not by where the pointer happens to be.)
-        shots.chooser = shots.chooser.copy(rememberKind = confRememberKind(), clickPicksWindow = confClickPicksWindow())
+        shots.chooser = shots.chooser.copy(
+            rememberKind = confRememberKind(), clickPicksWindow = confClickPicksWindow(), rememberSelection = confRememberSelection(),
+            rememberAcrossRestarts = confRememberAcrossRestarts(), escapeClearsSelection = confEscapeClearsSelection(),
+        )
         shots.style = style()
     }
 
@@ -94,7 +103,7 @@ internal class Shots(private val wm: Layout) {
             timer = tr(d.timer), timerOff = tr(d.timerOff), capture = tr(d.capture), close = tr(d.close), oneWindow = tr(d.oneWindow),
             manyWindows = tr(d.manyWindows), dragFirst = tr(d.dragFirst), pointFirst = tr(d.pointFirst), pickFirst = tr(d.pickFirst),
             noFocusedWindow = tr(d.noFocusedWindow), hiddenWindow = tr(d.hiddenWindow), countdown = tr(d.countdown), title = tr(d.title),
-            savedTo = tr(d.savedTo), copied = tr(d.copied), notSaved = tr(d.notSaved),
+            savedTo = tr(d.savedTo), copied = tr(d.copied), notSaved = tr(d.notSaved), clearSelection = tr(d.clearSelection),
         )
         return dev.caulis.screenshot.ScreenshotStyle(
             background = of(c.island, 0.96f), text = of(c.text), dim = of(c.dim), border = of(c.edge), accent = of(c.accent),

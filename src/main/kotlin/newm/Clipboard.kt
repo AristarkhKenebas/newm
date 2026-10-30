@@ -100,6 +100,8 @@ private val confWidth = configuredValue("clipboard.width", 980)
 private val confHeight = configuredValue("clipboard.height", 620)
 private val confTop = configuredValue("clipboard.top", 0.13)
 private val confPinKey = configuredValue("clipboard.pin_key", "C-p")
+// clipboard { pasteOnLatinLayout = true }: the paste keys in the first Latin layout (see sendKeys).
+private val confPasteOnLatinLayout = configuredValue("clipboard.paste_on_latin_layout", true)
 
 // Keys by their xkb names (as in keys { }) as evdev codes, for pasting: the modifiers, letters, Insert.
 private val EVDEV_MODIFIERS = mapOf("C" to 29, "S" to 42, "A" to 56, "1" to 56, "L" to 125)
@@ -124,6 +126,50 @@ internal fun evdevCodes(combo: String): List<Int>? {
     }
     return (mods + (if (shift && 42 !in mods) listOf(42) else emptyList()) + key)
 }
+
+/**
+ * Presses and lets go [combo] (newm's notation: "C-S-v") as a keyboard would, by the keys' codes.
+ * With [onLatinLayout], while the layout in use is of another script (Russian, Greek) the keys go
+ * in the first Latin layout ("us" of "us,ru"), and the layout in use comes back right after:
+ * programs that match their shortcuts in the layout in use only (Alacritty) paste then too. The
+ * letter is the key that types it in that layout (on Dvorak V is not where a US keyboard has it).
+ * False if [combo] cannot be sent.
+ */
+internal fun sendKeys(caulis: dev.caulis.wm.Caulis, combo: String, onLatinLayout: Boolean): Boolean {
+    val codes = evdevCodes(combo)?.toMutableList() ?: return false
+    val now = caulis.keyboardLayoutNow
+    val layout = if (onLatinLayout) latinLayout(caulis, now) else now
+    val letter = combo.trim().substringAfterLast('-').lowercase().singleOrNull()?.takeIf { it in 'a'..'z' }
+    if (letter != null) keyTyping(caulis, letter, layout)?.let { codes[codes.size - 1] = it }
+    if (layout != now) {
+        log.trace { "The paste keys go in layout $layout (layout $now is not Latin)" }
+        caulis.switchKeyboardLayout(layout)
+    }
+    try {
+        codes.forEach { caulis.simulateKey(it, true) }
+        codes.reversed().forEach { caulis.simulateKey(it, false) }
+    } finally {
+        if (layout != now) caulis.switchKeyboardLayout(now)
+    }
+    return true
+}
+
+// The layout in use if its letter keys type Latin letters, else the first one whose do (us of
+// "us,ru"); none: the one in use.
+private fun latinLayout(caulis: dev.caulis.wm.Caulis, now: Int): Int {
+    fun latin(layout: Int) = caulis.keyText(KEY_A, false, layout)?.singleOrNull()?.let { it in 'a'..'z' } == true
+    if (latin(now)) return now
+    return caulis.keyboardLayoutNames.indices.firstOrNull(::latin) ?: now
+}
+
+// The key that types [letter] in [layout]: its place on a US keyboard if it does there.
+private fun keyTyping(caulis: dev.caulis.wm.Caulis, letter: Char, layout: Int): Int? {
+    val usual = evdevCodes(letter.toString())?.singleOrNull()
+    if (usual != null && caulis.keyText(usual, false, layout) == letter.toString()) return usual
+    return (1..0xff).firstOrNull { caulis.keyText(it, false, layout) == letter.toString() } ?: usual
+}
+
+private const val KEY_A = 30
 
 /**
  * One thing copied: text, or a picture (its PNG and a picture of it to show), the program it
@@ -386,10 +432,8 @@ class ClipboardHistory(private val wm: Layout) {
             val window = desktop.focusedWindow ?: return@after log.info { "Not pasted: no window has the keyboard" }
             if (wm.lockShown()) return@after
             val combo = if (isTerminalApp(window.appId)) confTerminalPasteKey() else confPasteKey()
-            val codes = evdevCodes(combo) ?: return@after log.warn("clipboard.paste_key: \"$combo\" cannot be sent (modifiers C, S, A, L and a letter, or Insert)")
             log.info { "Pasting into ${window.appId} with $combo" }
-            codes.forEach { simulateKey(it, true) }
-            codes.reversed().forEach { simulateKey(it, false) }
+            if (!sendKeys(this, combo, confPasteOnLatinLayout())) log.warn("clipboard.paste_key: \"$combo\" cannot be sent (modifiers C, S, A, L and a letter, or Insert)")
         }
     }
 
