@@ -30,6 +30,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - `keyboard { layouts = "us,ru" }` without `options` switches layouts with Alt+Shift, as the
   documentation says (before, only layouts found on the system did; set ones had no switch key).
   Options taken out of the configuration are gone after saving it, not kept.
+- config.json / config.lua: a misspelt setting in `keyboard`, `cursor` or `input`
+  (`keyboard.layout` for `layouts`) is told on screen with the settings there are, as in
+  `compositor`, instead of being left out without a word.
 
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again

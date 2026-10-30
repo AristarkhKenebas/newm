@@ -77,6 +77,7 @@ object DataConfig {
                     k["shortcuts_on_latin_layout"]?.let { pywm["shortcuts_on_latin_layout"] = it }
                     k["repeat_rate"]?.let { pywm["repeat_rate"] = it }
                     k["repeat_delay"]?.let { pywm["repeat_delay"] = it }
+                    unknownKeys(name, "keyboard", k, KEYBOARD_KEYS, problems)
                 }
                 // compositor { quit_while_locked, lock_failure, lock_show_millis, stop_programs_on_quit, process_start, java_updated_notice, config_compiler_* }.
                 "compositor" -> (value as? Map<*, *>)?.let { c ->
@@ -89,6 +90,7 @@ object DataConfig {
                     c["theme"]?.let { pywm["xcursor_theme"] = it }
                     c["size"]?.let { pywm["xcursor_size"] = it }
                     c["hide_after"]?.let { pywm["hide_cursor_after"] = it }
+                    unknownKeys(name, "cursor", c, CURSOR_KEYS, problems)
                 }
                 "input" -> (value as? Map<*, *>)?.let { i ->
                     val pywm = section("pywm")
@@ -101,6 +103,7 @@ object DataConfig {
                     for (key in INPUT_KEYS) i[key]?.let { pywm[key] = it }
                     // input { tablet { } } (its names as they are: monitor, left_handed, lower_button, ...).
                     (i["tablet"] as? Map<*, *>)?.let { pywm["tablet"] = merge(pywm["tablet"], it.entries.associate { (k, v) -> k.toString() to v }) }
+                    unknownKeys(name, "input", i, INPUT_OWN_KEYS + INPUT_KEYS, problems)
                 }
                 // launcher { } and lock { } at the top: the same as panels { launcher { } }, panels { lock { } }.
                 "launcher", "lock" -> out["panels"] = merge(out["panels"], linkedMapOf<String, Any?>(key to (value as? Map<*, *> ?: problems.add("$name: $key is a table").let { continue })))
@@ -364,6 +367,16 @@ private val MODULE_ACTIONS = setOf("on_click", "on_middle", "on_right", "on_scro
 
 // input { } settings passed on as they are (see applyDeviceSettings).
 private val INPUT_KEYS = listOf("pointer_speed", "accel_profile", "left_handed", "scroll_factor", "scroll_method", "scroll_button", "middle_button_emulation", "touchpad", "devices")
+
+// keyboard { }, cursor { } and input { }'s own settings in config.json / config.lua.
+private val KEYBOARD_KEYS = listOf("layouts", "variants", "options", "model", "numlock", "binding_modifiers", "repeat_rate", "repeat_delay")
+private val CURSOR_KEYS = listOf("theme", "size", "hide_after")
+private val INPUT_OWN_KEYS = listOf("tap_to_click", "natural_scroll", "focus_follows_mouse", "xwayland", "title_bars", "tablet")
+
+// A setting of [section] that is not one (a typo: "layout" for "layouts"): told, never silently left out.
+private fun unknownKeys(name: String, section: String, given: Map<*, *>, known: List<String>, problems: MutableList<String>) {
+    for (key in given.keys.map { it.toString() }.filter { it !in known }) problems += "$name: $section.$key: there is no such setting (there are: ${known.joinToString()})"
+}
 
 // "$name" in a text: a variable (unknown names, like a shell's $HOME, stay as they are).
 private val VARIABLE = Regex("\\$([A-Za-z_][A-Za-z0-9_]*)")

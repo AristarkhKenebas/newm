@@ -39,6 +39,27 @@ class DataConfigTest {
     }
 
     @Test
+    fun `a misspelt keyboard, cursor or input setting is told, not silently left out`() {
+        val (settings, problems) = DataConfig.settings(
+            mapOf(
+                "keyboard" to mapOf("layout" to "us,ru", "options" to "grp:caps_toggle"),
+                "cursor" to mapOf("thme" to "Adwaita"),
+                "input" to mapOf("tap_to_clik" to true, "pointer_speed" to 0.2),
+            ),
+            Caulis(), "config.json",
+        )
+        assertEquals(3, problems.size, problems.toString())
+        assertTrue(problems[0].startsWith("config.json: keyboard.layout: there is no such setting"), problems[0])
+        assertTrue(problems[1].startsWith("config.json: cursor.thme: there is no such setting"), problems[1])
+        assertTrue(problems[2].startsWith("config.json: input.tap_to_clik: there is no such setting"), problems[2])
+        // (What is right in them still counts.)
+        @Suppress("UNCHECKED_CAST")
+        val pywm = settings["pywm"] as Map<String, Any?>
+        assertEquals("grp:caps_toggle", pywm["xkb_options"])
+        assertEquals(0.2, pywm["pointer_speed"])
+    }
+
+    @Test
     fun `classic bar texts by name`() {
         val (settings, problems) = DataConfig.settings(mapOf("panels" to mapOf("top_bar" to mapOf("style" to "classic", "texts" to listOf("time", "newm")))), Caulis(), "config.json")
         assertEquals(emptyList(), problems)
