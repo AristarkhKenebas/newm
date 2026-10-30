@@ -153,6 +153,33 @@ private val miscGiven = HashSet<String>()
 /** Window swallowing (misc { swallow }): a window opened from a terminal takes its place. */
 object Swallowing {
     private val log = Logger("windows")
+
+    // A window's process, and a process's parent (tests: a made-up tree of processes).
+    internal var processOf: (View) -> Long = { it.pid.toLong() }
+    internal var parentOf: (Long) -> Long? = ::parentPid
+
+    /**
+     * The window whose program started [view]'s (a terminal a player was started from): the
+     * nearest of [view]'s process's ancestors that has a window, not [view]'s own process (a
+     * terminal server's new window is not swallowing its others); of several windows of that
+     * process, the one that had the focus when [view] opened, else the first.
+     */
+    internal fun launcherOf(view: View, candidates: List<View>): View? =
+        launcherOf(processOf(view), candidates.filter { it !== view }.map { it to processOf(it) }, view.focusedAtOpen, parentOf)
+
+    internal fun <V> launcherOf(pid: Long, candidates: List<Pair<V, Long>>, preferred: V?, parentOf: (Long) -> Long?): V? {
+        if (pid <= 1) return null
+        var p = parentOf(pid)
+        // (Deep enough for any wrapper; a loop in what /proc says ends here too.)
+        repeat(64) {
+            val ancestor = p ?: return null
+            if (ancestor <= 1) return null
+            val there = candidates.filter { it.second == ancestor }.map { it.first }
+            if (there.isNotEmpty()) return preferred?.takeIf { it in there } ?: there.first()
+            p = parentOf(ancestor)
+        }
+        return null
+    }
     private val confSwallow = configuredValue("misc.swallow", false)
     private val confApps = configuredValue("misc.swallow_apps", "(?i)foot|footclient|alacritty|kitty|org\\.wezfurlong\\.wezterm|com\\.mitchellh\\.ghostty|xterm|urxvt|konsole|org\\.kde\\.konsole|org\\.gnome\\.Console|org\\.gnome\\.Terminal|gnome-terminal.*|xfce4-terminal")
     private val confExcept = configuredValue("misc.swallow_except_titles", "")
@@ -160,8 +187,10 @@ object Swallowing {
     /** [view] was just shown: it swallows the terminal it was started from, if the settings say so. */
     fun shown(wm: Layout, view: View) {
         if (!confSwallow()) return
+        // (The terminal that started it: newm's findSwallower looks the other way, from the
+        // terminal to what it started, for the swallow key on the focused terminal.)
         val by = try {
-            view.findSwallower()
+            launcherOf(view, wm.views())
         } catch (e: Exception) {
             null.also { log.trace { "Swallowing: no terminal found ($e)" } }
         } ?: return

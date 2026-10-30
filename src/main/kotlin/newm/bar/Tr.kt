@@ -356,7 +356,7 @@ private val RU: Map<String, String> = mapOf(
     "Close the window" to "Закрыть окно",
     "Start a program" to "Запустить программу",
     "Window number n" to "Окно номер n",
-    "Swallow the window into the terminal that started it" to "Спрятать окно в запустивший его терминал",
+    "Hide the focused terminal behind the program started from it" to "Спрятать терминал в фокусе за запущенную из него программу",
     "Next monitor" to "Следующий монитор",
     "Previous monitor" to "Предыдущий монитор",
     "Window onto the next monitor" to "Окно на следующий монитор",

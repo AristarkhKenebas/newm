@@ -470,26 +470,48 @@ class LayoutBehaviourTest {
     @Test
     fun `screens - a window swallowing its terminal takes its place, and the terminal comes back there`() =
         withNewm(screens() + mapOf("misc" to mapOf("swallow" to true))) { t ->
-            // (One window besides: newm finds the swallower by the process, and the test's windows share one.)
-            t.open("term", appId = "foot")
-            t.eventually { assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("term")) }
-            val gui = t.open("player", appId = "mpv")
-            fun swallowed() = t.onLoop { t.layout.state.viewState(t.layout.viewOf(t.window("term"))!!).swallowed }
-            // The player in the terminal's place on its screen (the whole of it), the terminal hidden.
-            t.eventually {
-                assertTrue(swallowed() != null, "swallowed")
-                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("player"))
-                assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+            // (The test's windows share one process: a made-up tree instead — mpv (300) started
+            // by a shell (200) in foot (100).)
+            val before = Swallowing.processOf to Swallowing.parentOf
+            Swallowing.processOf = { v -> when (v.appId) { "foot" -> 100L; "mpv" -> 300L; else -> 999L } }
+            Swallowing.parentOf = { p -> mapOf(300L to 200L, 200L to 100L, 100L to 1L, 999L to 1L)[p] }
+            try {
+                t.open("term", appId = "foot")
+                t.eventually { assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("term")) }
+                val gui = t.open("player", appId = "mpv")
+                fun swallowed() = t.onLoop { t.layout.state.viewState(t.layout.viewOf(t.window("term"))!!).swallowed }
+                // The player in the terminal's place on its screen (the whole of it), the terminal hidden.
+                t.eventually {
+                    assertTrue(swallowed() != null, "swallowed")
+                    assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("player"))
+                    assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+                }
+                gui.close()
+                t.eventually {
+                    assertEquals(null, swallowed())
+                    assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("term"))
+                    assertTrue(t.onLoop { t.layout.shownArea(t.layout.viewOf(t.window("term"))!!) } != null, "the terminal shows again")
+                    assertEquals(listOf(0.0, 0.0, 1.0), t.view())
+                }
+                t.assertCleanView()
+            } finally {
+                Swallowing.processOf = before.first
+                Swallowing.parentOf = before.second
             }
-            gui.close()
-            t.eventually {
-                assertEquals(null, swallowed())
-                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("term"))
-                assertTrue(t.onLoop { t.layout.shownArea(t.layout.viewOf(t.window("term"))!!) } != null, "the terminal shows again")
-                assertEquals(listOf(0.0, 0.0, 1.0), t.view())
-            }
-            t.assertCleanView()
         }
+
+    @Test
+    fun `the window swallowing a terminal is the one started from it, not the other way`() {
+        val parents = mapOf(300L to 200L, 200L to 100L, 100L to 1L, 400L to 1L)
+        val windows = listOf("foot" to 100L, "other foot of the same server" to 100L, "firefox" to 400L)
+        // mpv (300), started by a shell (200) in foot (100): foot's window.
+        assertEquals("foot", Swallowing.launcherOf(300L, windows, null, parents::get))
+        // The window that had the focus when it opened, of several of that process.
+        assertEquals("other foot of the same server", Swallowing.launcherOf(300L, windows, "other foot of the same server", parents::get))
+        // foot (100) opening: it was not started from mpv (nor from a window of its own process).
+        assertEquals(null, Swallowing.launcherOf(100L, windows + ("mpv" to 300L), null, parents::get))
+        assertEquals(null, Swallowing.launcherOf(400L, windows, null, parents::get))
+    }
 
     private fun bar(): Map<String, Any?> = mapOf("panels" to mapOf("top_bar" to mapOf("native" to mapOf("enabled" to true))))
 

@@ -692,7 +692,7 @@ Hyprland's `misc` settings newm has.
 
 | Setting | Default | What |
 |---|---|---|
-| `swallow` | `false` | window swallowing: a window started from a terminal (a video player, an image viewer) takes the terminal's place, and the terminal comes back when it closes (Hyprland's `enable_swallow`; the key action `swallow` does the reverse for one window) |
+| `swallow` | `false` | window swallowing: a window started from a terminal (a video player, an image viewer) takes the terminal's place, and the terminal comes back when it closes (Hyprland's `enable_swallow`; the key action `swallow` does the same by hand, on the focused terminal) |
 | `swallowApps` | common terminals (foot, alacritty, kitty, wezterm, ghostty, konsole, GNOME's, xterm, ...) | the terminals that swallow: a regular expression for their app id (`swallow_regex`) |
 | `swallowExceptTitles` | `""` | a terminal whose title matches this does not swallow (`swallow_exception_regex`): `"wev|vim"` |
 | `focusOnActivate` | `true` | a window asking for the focus with a good reason (a link opened in a browser) gets it; `false`: only marked (`focus_on_activate`) |

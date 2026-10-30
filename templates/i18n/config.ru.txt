@@ -606,8 +606,8 @@ ru: история буфера обмена
 en: the window floats, and back
 ru: окно плавает и обратно
 
-en: into the terminal that started it
-ru: в запустивший его терминал
+en: the terminal hides behind what it started
+ru: терминал прячется за запущенное из него
 
 en: Monitors: each has a wall of its own
 ru: Мониторы: у каждого своя стена

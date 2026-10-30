@@ -16,6 +16,13 @@ From now on every change people would notice gets a line under [Unreleased] in t
   window's title) may be private. To keep them drawn: `lock { showPanels = true }` (config.json:
   `"panels": { "lock": { "show_panels": true } }`).
 
+### Fixed
+- `misc { swallow = true }` works: a window started from a terminal (mpv from foot)
+  takes the terminal's place. It looked for windows started *by* the new window and so never
+  found its terminal. A terminal server's new window (another foot of the same server) is not
+  swallowing the others. The key action `swallow` is described as what it does: the focused
+  terminal hides behind the program started from it.
+
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again
   after a restart, and the new newm came up unlocked: any program of the session could unlock

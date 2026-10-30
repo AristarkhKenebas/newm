@@ -50,7 +50,7 @@ object KeyActions {
         Action("window-taller", "", "Window taller") { resizeFocusedView(0, 1) },
         Action("fullscreen", "", "Fullscreen, and back") { toggleFullscreen() },
         Action("float", "", "Float, and back") { toggleFocusedViewFloating() },
-        Action("swallow", "", "Swallow the window into the terminal that started it") { swallowFocusedView() },
+        Action("swallow", "", "Hide the focused terminal behind the program started from it") { swallowFocusedView() },
         Action("next-monitor", "", "Next monitor") { moveWorkspace(1) },
         Action("previous-monitor", "", "Previous monitor") { moveWorkspace(-1) },
         Action("window-to-next-monitor", "", "Window onto the next monitor") { changeFocusedViewWorkspace(1) },

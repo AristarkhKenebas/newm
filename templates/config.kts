@@ -493,7 +493,7 @@ keys {
     bind("Super+F",               "fullscreen")
     bind("Super+V",               "clipboard")                 // the clipboard's history
     bind("Super+Shift+V",         "float")                     // the window floats, and back
-    // bind("Super+W",            "swallow")                   // into the terminal that started it
+    // bind("Super+W",            "swallow")                   // the terminal hides behind what it started
 
     // Monitors: each has a wall of its own
     // bind("Super+Period",       "next-monitor")

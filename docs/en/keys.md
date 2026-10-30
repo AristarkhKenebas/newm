@@ -85,7 +85,7 @@ action, or are your own: `bind("Super+B", "launch", "firefox", description = "Fi
 | `window-taller` |  | Window taller |
 | `fullscreen` |  | Fullscreen, and back |
 | `float` |  | Float, and back |
-| `swallow` |  | Swallow the window into the terminal that started it |
+| `swallow` |  | Hide the focused terminal behind the program started from it |
 | `next-monitor` |  | Next monitor |
 | `previous-monitor` |  | Previous monitor |
 | `window-to-next-monitor` |  | Window onto the next monitor |
