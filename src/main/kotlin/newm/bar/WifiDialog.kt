@@ -103,8 +103,14 @@ class WifiPasswordDialog(private val model: BarModel) {
         shown = target
         opened++
         fade.show()
+        // The keyboard only if newm's bar or popups have it (Connect was just clicked): a
+        // program you went on typing in while NetworkManager tried (seconds) keeps it — what
+        // you type there never goes to NetworkManager as a password. A click on the dialog
+        // gives it the keyboard.
+        val d = model.wm.caulis.desktop
+        val yours = d.keyboardWidget != null || d.keyboardFocus == null
         model.close()
-        widget?.let { model.wm.caulis.desktop.focusWidget(it) }
+        if (yours) widget?.let { d.focusWidget(it) } else log.info { "Wi-Fi password wanted: asked without taking the keyboard from the program in use" }
         quietKeys()
     }
 

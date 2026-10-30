@@ -49,6 +49,11 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - A password check still running when the screen was unlocked another way (`newm cmd unlock`)
   no longer unlocks the next lock when PAM answers late: each lock takes only the answers to what
   was typed on it.
+- The Wi-Fi password dialog no longer takes the keyboard from the program you are typing
+  in: NetworkManager says "wrong password" seconds after Connect, and what you typed meanwhile
+  (a sudo password in a terminal) went into the dialog and, with Enter, to NetworkManager as the
+  network's password. It takes the keyboard only when newm's bar or popups had it, or nothing
+  did; else a click on it does.
 
 ## [2026-10-30, on Caulis 0.1.7]
 

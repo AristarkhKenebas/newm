@@ -261,6 +261,27 @@ class LockTest {
     }
 
     @Test
+    fun `the Wi-Fi password dialog does not take the keyboard from the program in use`() = withNewm { caulis, layout, client ->
+        val window = client.window()
+        window.draw()
+        client.waitFor { onLoop(caulis) { caulis.desktop.keyboardFocus === caulis.desktop.windows.singleOrNull()?.surface } }
+        val network = newm.bar.WifiNetwork("Home", 70, true, "/", false, true)
+        // NetworkManager says "wrong password" seconds after Connect: you are typing in a terminal by then.
+        onLoop(caulis) { layout.barModel.askPassword(network) }
+        onLoop(caulis) {
+            assertNull(caulis.desktop.keyboardWidget, "the dialog did not take the keyboard")
+            assertSame(caulis.desktop.windows.single().surface, caulis.desktop.keyboardFocus, "the program keeps it")
+        }
+        onLoop(caulis) { layout.barModel.passwordDialog.cancel() }
+        // No program has the keyboard: the dialog takes it.
+        window.close()
+        client.waitFor { onLoop(caulis) { caulis.desktop.windows.isEmpty() && caulis.desktop.keyboardFocus == null } }
+        onLoop(caulis) { layout.barModel.askPassword(network) }
+        waitUntil("the dialog has the keyboard") { onLoop(caulis) { caulis.desktop.keyboardWidget != null } }
+        onLoop(caulis) { layout.barModel.passwordDialog.cancel() }
+    }
+
+    @Test
     fun `the launcher and the bar's popups do not open over the lock screen`() = withNewm { caulis, layout, _ ->
         onLoop(caulis) { layout.ensureLocked(anim = false) }
         try {
