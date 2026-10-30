@@ -28,7 +28,7 @@ vec4 wallpaper(vec2 at) {
         float age = time - clicks[i].z;
         if (age < 0.0 || age > 4.0) continue;
         float ring = length(p - c) - age * 0.45;
-        lift += exp(-ring * ring * 120.0) * exp(-age * 1.1);
+        lift += exp(-ring * ring * 160.0) * exp(-age * 0.9);
     }
     // And a soft swell round the pointer.
     if (pointer.x >= 0.0) {
@@ -70,13 +70,13 @@ vec4 wallpaper(vec2 at) {
     vec2 light = vec2(sin(t * 0.07) * 0.8, cos(t * 0.05) * 0.4 - 0.3);
     vec3 normal = normalize(vec3(bestLocal * vec2(0.9, 0.7), 0.7));
     float facing = clamp(dot(normal, normalize(vec3(light - p * 0.5, 0.9))), 0.0, 1.0);
-    float sheen = pow(facing, 14.0);
+    float sheen = pow(facing, 22.0);
     float hue = 0.5 + 0.5 * sin(id * 5.0 + facing * 4.0 + t * 0.15 + p.x * 1.5);
     vec3 film = mix(jade, amber, smoothstep(0.45, 0.95, hue));
     film = mix(film, ember, clamp(lift * 0.8, 0.0, 0.7));
     vec3 scale = mix(dark * 1.2, jade * 0.07, smoothstep(1.0, 0.0, d));
     scale += film * (0.025 + 0.5 * sheen) * intensity;
-    scale += film * lift * 0.45 * intensity;
+    scale += mix(film, amber, 0.5) * lift * 1.1 * intensity;
     // A bright lower edge; the scale above shades its top.
     float rim = smoothstep(0.78, 0.95, d) * smoothstep(1.0, 0.95, d) * smoothstep(-0.1, 0.4, bestLocal.y);
     scale += film * rim * (0.12 + 0.45 * sheen + 0.8 * lift) * intensity;
