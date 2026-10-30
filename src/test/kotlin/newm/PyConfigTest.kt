@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.io.TempDir
 
 /** A newm config.py of before runs as it did: its values, its key bindings calling the layout. */
 class PyConfigTest {
@@ -24,13 +25,23 @@ class PyConfigTest {
         override fun viewOf(handle: Int): View? = null
     }
 
-    private val nord: Path = Path.of(System.getProperty("user.home"), "projects/owl_dots/newm/newm_nord/.config/newm/config.py")
+    // A config.py shaped as newm_nord's (owl_dots), kept with the tests: never a file of the
+    // user running them (theirs may start programs or fail in its own ways).
+    @TempDir
+    lateinit var dir: Path
+
+    private fun nordLike(): Path {
+        val source = assertNotNull(javaClass.getResourceAsStream("/newm/nord-like-config.py"), "the test's config.py")
+        val file = dir.resolve("config.py")
+        source.use { Files.copy(it, file) }
+        return file
+    }
 
     @Test
-    fun `the newm_nord config loads, and its key bindings call the layout`() {
-        assumeTrue(Files.isRegularFile(nord), "no newm_nord config here")
+    fun `a newm_nord config loads, and its key bindings call the layout`() {
+        val nord = nordLike()
         val recorder = Recorder()
-        val python = assertNotNull(PyConfig.start(recorder))
+        val python = PyConfig.start(recorder) ?: return assumeTrue(false, "no python3 here")
         python.use {
             val settings = python.load(nord)
             @Suppress("UNCHECKED_CAST")
