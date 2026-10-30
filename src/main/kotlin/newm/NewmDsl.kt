@@ -1530,6 +1530,12 @@ class OverviewSection internal constructor(values: MutableMap<String, Any?>) : S
 
     /** The window under the pointer is the chosen one there: its border, and Super+drag moves it (true). */
     var followPointer by setting<Boolean>("follow_pointer")
+
+    /** A window pressed on and dragged there moves, onto another monitor's overview too, without Super (true). */
+    var drag by setting<Boolean>("drag")
+
+    /** How far the pointer goes with the button held before it is a drag, not a click (desktop units, 8). */
+    var dragThreshold by setting<Double>("drag_threshold")
 }
 
 /** mouse { }: the mouse with Super. */

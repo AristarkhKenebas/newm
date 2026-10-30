@@ -192,6 +192,41 @@ class MonitorsTest {
         t.eventually { assertEquals("HEADLESS-2", t.monitorOf("w1")) }
     }
 
+    @Test
+    fun `in the overview a window is dragged from one monitor's overview into the other's, and a click still chooses`() =
+        withNewm(wall, setup = { twoMonitors() }) { t ->
+            t.open("w1")
+            t.open("w2")
+            t.onLoop { t.layout.toggleOverview() }
+            t.eventually { assertTrue(t.onLoop { t.layout.overviewShown() }) }
+            t.settle()
+            Thread.sleep(500)
+            val r = t.onLoop { t.layout.shownArea(t.layout.viewOf(t.window("w2"))!!)!! }
+            t.onLoop { t.caulis.simulatePointer(r.x + r.width / 2.0, r.y + r.height / 2.0) }
+            t.onLoop { t.caulis.simulateButton(272, true) }
+            // Right, in steps as a mouse goes, well onto the second monitor.
+            repeat(60) {
+                t.onLoop { t.caulis.simulateMotion(25.0, 0.0) }
+                Thread.sleep(8)
+            }
+            t.onLoop { t.caulis.simulateButton(272, false) }
+            t.eventually {
+                assertEquals("HEADLESS-2", t.monitorOf("w2"))
+                assertEquals(listOf(1.0, 1.0), t.tile("w2").drop(2), "one tile still")
+            }
+            assertTrue(t.onLoop { t.layout.overviewShown() }, "still the overview")
+            assertEquals("HEADLESS-1", t.monitorOf("w1"))
+            // A click (no drag) on w1 chooses it: the overview ends.
+            t.settle()
+            Thread.sleep(500)
+            val a = t.onLoop { t.layout.shownArea(t.layout.viewOf(t.window("w1"))!!)!! }
+            t.onLoop { t.caulis.simulatePointer(a.x + a.width / 2.0, a.y + a.height / 2.0, 272) }
+            t.eventually {
+                assertEquals("w1", t.focused())
+                assertTrue(!t.onLoop { t.layout.overviewShown() }, "the overview ended there")
+            }
+        }
+
     private companion object {
         const val KEY_LEFTALT = 56
     }

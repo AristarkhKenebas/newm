@@ -367,6 +367,9 @@ ru: щелчок выбирает окно и заканчивает обзор
 en: the window under the pointer is the chosen one
 ru: выбранное окно — то, что под указателем
 
+en: a window dragged moves, onto another monitor too
+ru: окно, которое тянут, перемещается, и на другой монитор тоже
+
 en: Special workspaces (Hyprland's "special"): a layer above the wall with windows of its own,
 ru: Особые рабочие пространства ("special" в Hyprland): слой над стеной со своими окнами,
 

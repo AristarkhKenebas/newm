@@ -240,7 +240,8 @@ the focused window onto it: it keeps its size and lands next to the window focus
 The special workspace shows on the monitor you work on.
 A window dragged past the monitor's edge (Logo + drag, or the fingers' move) goes onto the
 next monitor's wall where it is let go, keeping its size; on screens it takes the screen and
-the place there, and the screen it left closes the gap. Zoomed out it reaches as far.
+the place there, and the screen it left closes the gap. Zoomed out it reaches as far. In the overview a window can be dragged as it is (no Logo),
+from one monitor's overview into another's.
 
 ## Leaving
 

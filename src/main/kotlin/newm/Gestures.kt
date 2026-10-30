@@ -184,6 +184,18 @@ class CGestureProvider(
         return 2
     }
 
+    /**
+     * A drag with [button] (held already) starts now as a "move-1" gesture, without the
+     * modifier (the overview's windows dragged as they are): true if the layout took it.
+     */
+    fun startDrag(button: Int): Boolean {
+        if (captured != null || heldButton != null) return false
+        if (start(1) != 2) return false
+        heldButton = button
+        active = true
+        return true
+    }
+
     override fun onTouchpad(gesture: dev.caulis.core.input.Gesture): Int = when (gesture) {
         is dev.caulis.core.input.Gesture.SwipeBegin -> start(gesture.fingers)
         is dev.caulis.core.input.Gesture.SwipeUpdate -> update(gesture.dx, gesture.dy)

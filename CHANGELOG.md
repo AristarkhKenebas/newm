@@ -53,6 +53,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   tiles (before, it was resized to cover as many pixels as before). A drag now reaches across
   the whole view and a window beyond (before, 3 tiles at most), so zoomed out a window can
   still be dragged onto another monitor. That monitor is the one worked on afterwards.
+- In the overview a window can be dragged as it is, without Super, also from one monitor's
+  overview into another's (`overview { drag = true }`, the default; `dragThreshold = 8.0`
+  desktop units tell a drag from a click; a click still chooses the window).
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

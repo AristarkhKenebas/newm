@@ -347,6 +347,7 @@ overview {
     input = false                           // true: the windows take clicks there
     choose = true                           // a click chooses a window and ends the overview
     followPointer = true                    // the window under the pointer is the chosen one
+    drag = true                             // a window dragged moves, onto another monitor too
 }
 
 // --- Window rules ---------------------------------------------------------------------------

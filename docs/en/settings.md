@@ -434,6 +434,8 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `input` | `false` | the windows take clicks in the overview (`true`: as the old newm) |
 | `choose` | `true` | a click chooses a window and ends the overview |
 | `followPointer` | `true` | the window under the pointer is the chosen one (its border; what Logo + drag moves) |
+| `drag` | `true` | a window pressed on and dragged moves, onto another monitor's overview too (no Logo needed); a click still chooses |
+| `dragThreshold` | `8.0` | how far (desktop units) the pointer goes with the button held before it is a drag |
 
 ## mouse { }
 

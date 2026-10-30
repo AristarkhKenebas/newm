@@ -82,6 +82,10 @@ private val confResizePushes = configuredValue("view.resize_pushes", false)
 private val confOverviewInput = configuredValue("overview.input", false)
 private val confOverviewChoose = configuredValue("overview.choose", true)
 private val confOverviewFollow = configuredValue("overview.follow_pointer", true)
+// overview { drag }: a window pressed on in the overview and dragged moves (onto another monitor's overview too), no Super needed.
+private val confOverviewDrag = configuredValue("overview.drag", true)
+// overview { dragThreshold }: how far (desktop units) the pointer goes with the button held before it is a drag, not a click.
+private val confOverviewDragThreshold = configuredValue("overview.drag_threshold", 8.0)
 private val confGestureBindingMoveResize = configuredValue<List<String?>>("gesture_bindings.move_resize", listOf("L", "move-1", "swipe-2"))
 private val confGestureBindingLauncher = configuredValue<List<String?>>("gesture_bindings.launcher", listOf(null, "swipe-5"))
 // gestures { on("swipe-4", "down") { } }: kind, direction, modifier, description, action.
@@ -371,6 +375,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     val authBackend = AuthBackend(this)
     val panelLauncher = PanelsLauncher(::every) { command, directory -> caulis.spawn(command, directory) }
     private var gestureProviders: List<GestureProvider> = emptyList()
+    private var cGestures: CGestureProvider? = null
+
+    // overview { drag }: where the left button went down on a window in the overview (x, y), until it is a click or a drag.
+    private var overviewPress: Pair<Double, Double>? = null
+    // A drag of the overview started: the gesture it makes moves the window without Super.
+    private var overviewDragging = false
 
     var workspaces: List<Workspace> = listOf(Workspace(null, 0, 0, 1280, 720).also { it.handle = 0 })
         private set
@@ -941,7 +951,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         gestureProviders.forEach(GestureProvider::stop)
         val dbusProvider = if (confEnableDBusGestures()) DBusGestureProvider(::gestureProviderCallback) else null
         dbusEndpoint.gestureProvider = dbusProvider
-        gestureProviders = listOfNotNull(if (confEnableCGestures()) CGestureProvider(::gestureProviderCallback, ::every, ::dragScale) else null, dbusProvider)
+        cGestures = if (confEnableCGestures()) CGestureProvider(::gestureProviderCallback, ::every, ::dragScale) else null
+        gestureProviders = listOfNotNull(cGestures, dbusProvider)
         gestureProviders.forEach(GestureProvider::start)
 
         if (reconfigure) views.values.forEach(View::update)
@@ -1447,6 +1458,17 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 v.focus()
             }
         }
+        overviewPress?.let { (x0, y0) ->
+            val d = caulis.desktop
+            if (overlay != null || !overviewShown()) {
+                overviewPress = null
+            } else if (Math.hypot(d.pointerX + dx - x0, d.pointerY + dy - y0) >= confOverviewDragThreshold() && confOverviewDrag()) {
+                overviewPress = null
+                overviewDragging = true
+                val started = try { cGestures?.startDrag(272) == true } finally { overviewDragging = false }
+                if (started) log.info { "Overview: a window dragged" }
+            }
+        }
         for (g in gestureProviders) {
             val res = g.onMotion(timeMillis, dx, dy)
             if (res == 2) return true
@@ -1498,7 +1520,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private fun chooseInOverview(button: Int, pressed: Boolean): Boolean {
         if (confOverviewInput() || !overviewShown() || overlay != null) return false
         if (button != 272) return true // (no other button inside the windows either)
-        if (pressed) return true
+        if (pressed) {
+            // (On a window: it may become a drag of it.)
+            overviewPress = caulis.desktop.takeIf { viewUnderPointer() != null }?.let { it.pointerX to it.pointerY }
+            return true
+        }
+        overviewPress = null
         if (!confOverviewChoose()) return true
         val d = caulis.desktop
         val view = views.values.lastOrNull { v ->
@@ -1589,7 +1616,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             return true
         }
         val moveResize = confGestureBindingMoveResize()
-        if (hasModifier(moveResize[0]) && (gesture.kind == moveResize[1] || gesture.kind == moveResize[2])) {
+        if ((hasModifier(moveResize[0]) || overviewDragging && gesture.kind == moveResize[1]) && (gesture.kind == moveResize[1] || gesture.kind == moveResize[2])) {
             log.trace { "...MoveResize" }
             // A window of a special workspace under the pointer: dragged there, out onto the wall maybe.
             if (gesture.kind == moveResize[1] && !overviewShown()) specials.dragOverlay()?.let { return enter(it) }
