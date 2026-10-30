@@ -27,6 +27,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   went to the invisible terminal. It now moves along with that window on the free wall too, and
   comes back where the window was when it closes; closing it while hidden no longer makes the
   screens close a gap that is not there.
+- `keyboard { layouts = "us,ru" }` without `options` switches layouts with Alt+Shift, as the
+  documentation says (before, only layouts found on the system did; set ones had no switch key).
+  Options taken out of the configuration are gone after saving it, not kept.
 
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again

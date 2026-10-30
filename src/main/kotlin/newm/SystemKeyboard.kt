@@ -23,6 +23,9 @@ data class SystemKeyboard(val layouts: String, val options: String) {
 
         private const val SWITCH = "grp:alt_shift_toggle"
 
+        /** The options for [layouts] when none are given: Alt+Shift switches when there are several. */
+        fun optionsFor(layouts: String): String = if (',' in layouts) SWITCH else ""
+
         fun detect(): SystemKeyboard {
             // XKB_DEFAULT_LAYOUT and _OPTIONS (as wlroots compositors read them; newm's NixOS
             // module sets them from services.xserver.xkb).

@@ -113,7 +113,7 @@ const val RESTART_EXIT = 3
 
 // The pywm and outputs sections, as Caulis's settings.
 @Suppress("UNCHECKED_CAST")
-private fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) {
+internal fun dev.caulis.wm.Caulis.applyHostSettings(settings: Map<String, Any?>) {
     // (A mistake here never stops newm: the rest of the settings still count, and it is shown.)
     try {
         applyHostSettingsNow(settings)
@@ -128,11 +128,11 @@ private val hostLog = dev.caulis.log.Logger("config")
 private fun dev.caulis.wm.Caulis.applyHostSettingsNow(settings: Map<String, Any?>) {
     // The keyboard's layouts: the configuration's, else the system's (with a switch between them).
     val pywm = settings["pywm"] as? Map<String, Any?>
-    if (pywm?.get("xkb_layout") == null) {
-        val system = SystemKeyboard.detect()
-        keyboardLayouts = system.layouts
-        if (pywm?.get("xkb_options") == null) keyboardOptions = system.options
-    }
+    val system = if (pywm?.get("xkb_layout") == null) SystemKeyboard.detect().also { keyboardLayouts = it.layouts } else null
+    // No options given: the system's with its layouts, else Alt+Shift switching when there
+    // are several (keyboard { layouts = "us,ru" } alone) — and on a reload options taken
+    // out are gone, not kept.
+    if (pywm?.get("xkb_options") == null) keyboardOptions = system?.options ?: SystemKeyboard.optionsFor(pywm?.get("xkb_layout") as? String ?: "")
     // The window under the pointer gets the keys, unless the configuration says otherwise.
     if (pywm?.get("focus_follows_mouse") == null) focusFollowsMouse = true
     // Java updated under the running newm (a system update): said once, with what to do.
