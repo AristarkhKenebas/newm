@@ -370,6 +370,38 @@ class BackgroundSection internal constructor(values: MutableMap<String, Any?>) :
 
     /** How quickly it follows, in seconds. */
     var timeScale by setting<Double>("time_scale")
+
+    /**
+     * A moving wallpaper drawn by the GPU instead of the picture: one of newm's own by name —
+     * "dragon-eye", "ember-sky", "scales", "deep-forest", "molten" — or a GLSL file of yours
+     * (`vec4 wallpaper(vec2 at)`, Caulis's wallpaper shaders; read again when saved). It moves
+     * with the view as the picture does and answers the pointer and clicks. "" (the default): the picture.
+     */
+    var shader by setting<String>("shader")
+
+    /** How often it is drawn anew, a second (30), and on battery (15; 0: as [fps]). */
+    var fps by setting<Int>("fps")
+    var fpsOnBattery by setting<Int>("fps_on_battery")
+
+    /** It stands still after so many seconds without input (120; 0: never), and while the screen is dimmed. */
+    var pauseAfter by setting<Int>("pause_after")
+
+    /** How sharp: 1.0 every pixel, 0.5 half each way (a quarter of the work); 0 (the default): 1.0 up to 2560x1600, 0.5 above. */
+    var resolution by setting<Double>("resolution")
+
+    /** Its pace and its strength (1.0 each). */
+    var speed by setting<Double>("speed")
+    var intensity by setting<Double>("intensity")
+
+    /**
+     * Its own settings by name: `shaderValues = mapOf("eyeSize" to 0.6, "blink" to 0.0)` — dragon-eye:
+     * eyeSize (0.38), blink (1: on); ember-sky: embers (1); scales: scaleSize (1); deep-forest:
+     * spores (1); molten: blobs (7). A file of yours reads each as a `float` of its name.
+     */
+    var shaderValues by setting<Map<String, Double>>("shader_values")
+
+    /** Its colours: jade, amber, ember, the dark (`listOf("#3ddc97", "#f2b33d", "#e8552d", "#060908")`); unset: the shader's own. */
+    var shaderColors by setting<List<String>>("shader_colors")
 }
 
 class OutputSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {

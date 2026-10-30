@@ -76,6 +76,8 @@ background {
     path = "resource:wallpaper.jpg"         // newm's own; or "~/Pictures/wallpaper.jpg" (an SVG stays sharp)
     mode = "follow"                         // "follow": moves and zooms with the view; "static": stands still
     // timeScale = 0.15                     // how quickly it follows (seconds)
+    // shader = "dragon-eye"                // a moving wallpaper instead: "dragon-eye", "ember-sky", "scales", "deep-forest", "molten" or a .glsl file
+    // fps = 30                             // how often it is drawn a second (fpsOnBattery = 15 on battery)
 }
 
 cornerRadius = 24                           // the screen's own corners rounded (0: square)

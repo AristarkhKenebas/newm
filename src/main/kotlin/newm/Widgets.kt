@@ -210,14 +210,27 @@ class BackgroundState(layoutState: LayoutState, wsState: WorkspaceState, wallpap
     override fun toString() = "<BackgroundState box=${box.toList()} opacity=$opacity>"
 }
 
-/** newm's Background widget: the wallpaper of one output, gliding behind the view's moves. */
-class Background(private val wm: Layout, val monitor: Monitor, private val workspace: Workspace, private val picture: Wallpaper) : Animatable {
+/**
+ * newm's Background widget: the wallpaper of one output, gliding behind the view's moves — a
+ * picture, or ([shader]) a moving one drawn by the GPU, as big as a picture half again the
+ * screen's size would be (it moves and zooms with the view just the same).
+ */
+class Background(
+    private val wm: Layout,
+    val monitor: Monitor,
+    private val workspace: Workspace,
+    private val picture: Wallpaper?,
+    private val shader: dev.caulis.core.WallpaperShader? = null,
+) : Animatable {
     private var preventAnim = when (confBackgroundMode()?.lowercase()) {
         "static", "still", "fixed" -> true
         "follow", "move", "parallax" -> workspace.preventAnim
         else -> !confAnimDefault() || workspace.preventAnim
     }
-    private val size = picture.width to picture.height
+    private val size = picture?.let { it.width to it.height } ?: (Math.round(monitor.pixelWidth * SHADER_SIZE).toInt() to Math.round(monitor.pixelHeight * SHADER_SIZE).toInt())
+
+    // A shader's own fading in (a picture's is the picture's).
+    private val appear = picture ?: Fade()
     private val output get() = monitor.area.width.toDouble() to monitor.area.height.toDouble()
     private var current = state(wm.state)
     private var target = state(wm.state)
@@ -248,7 +261,7 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
     }
 
     /** True while it glides towards where the view says, or fades in. */
-    val moving: Boolean get() = (!preventAnim && current.delta(target) > 1) || picture.fading
+    val moving: Boolean get() = (!preventAnim && current.delta(target) > 1) || appear.fading
 
     fun draw(canvas: OverlayCanvas) {
         if (!preventAnim) {
@@ -272,12 +285,18 @@ class Background(private val wm: Layout, val monitor: Monitor, private val works
         }
         val b = current.box
         val rect = Rect(monitor.area.x + Math.round(b[0]).toInt(), monitor.area.y + Math.round(b[1]).toInt(), Math.round(b[2]).toInt(), Math.round(b[3]).toInt())
-        canvas.image(picture.texture, rect, current.opacity.toFloat() * picture.appearing())
+        val alpha = current.opacity.toFloat() * appear.appearing()
+        if (shader != null) canvas.wallpaper(shader, rect, alpha) else if (picture != null) canvas.image(picture.texture, rect, alpha)
+    }
+
+    private companion object {
+        // A shader wallpaper is as big as a picture this many times the screen's size (room to move with the view).
+        const val SHADER_SIZE = 1.5
     }
 }
 
-/** A wallpaper picture on the GPU ("resource:wallpaper.jpg": newm's own). */
-class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
+/** Fading in once, from the first time it is asked (the animation "backgroundIn"). */
+open class Fade {
     // When it was first shown (System.nanoTime): it fades in from then, once (not again on a reload).
     private var shownAt = 0L
 
@@ -291,6 +310,10 @@ class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) {
 
     /** Still fading in. */
     val fading: Boolean get() = shownAt == 0L || System.nanoTime() - shownAt < NewmAnimations["backgroundIn"].effectiveMillis * 1_000_000L
+}
+
+/** A wallpaper picture on the GPU ("resource:wallpaper.jpg": newm's own), fading in the first time it shows. */
+class Wallpaper(val texture: GpuTexture, val width: Int, val height: Int) : Fade() {
 
     companion object {
         // The picture read from [path] (slow for a big one: not on the compositor's thread). Decoded

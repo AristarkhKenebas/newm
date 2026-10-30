@@ -35,6 +35,13 @@ setting in use.
 | `mode` | `"follow"` | `"follow"`: moves and zooms with the view; `"static"`: stands still |
 | `anim` | `true` | `false` is the same as `mode = "static"` |
 | `timeScale` | `0.15` | how quickly it follows, seconds (the animation `backgroundMove`) |
+| `shader` | `""` | a moving wallpaper drawn by the GPU instead of the picture: newm's own `"dragon-eye"`, `"ember-sky"`, `"scales"`, `"deep-forest"`, `"molten"`, or a GLSL file of yours (`vec4 wallpaper(vec2 at)`, read again when saved); it moves with the view and answers the pointer and clicks |
+| `fps`, `fpsOnBattery` | `30`, `15` | how often it is drawn anew a second, and on battery (`0`: as `fps`); only while it is seen |
+| `pauseAfter` | `120` | it stands still after so many seconds without input (`0`: never), and while the screen is dimmed |
+| `resolution` | `0` | how sharp: `1.0` every pixel, `0.5` half each way (a quarter of the GPU's work); `0`: 1.0 up to 2560x1600, 0.5 above |
+| `speed`, `intensity` | `1.0`, `1.0` | its pace and its strength |
+| `shaderValues` | the shader's | its own settings by name: dragon-eye `eyeSize` (0.38), `blink` (1); ember-sky `embers` (1); scales `scaleSize` (1); deep-forest `spores` (1); molten `blobs` (7) |
+| `shaderColors` | the shader's | its colours: jade, amber, ember, the dark (`listOf("#3ddc97", "#f2b33d", "#e8552d", "#060908")`) |
 
 ## warmup { }
 

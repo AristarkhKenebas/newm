@@ -841,6 +841,19 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         // The tray and the rest only with newm's islands bar (else another bar's tray stays its own).
         if ((topBars + bottomBars).any { it.islands }) barModel.start()
 
+        // A moving wallpaper (background.shader) instead of the picture: drawn by the GPU, no picture read.
+        val shaderName = ShaderWallpapers.configured()
+        val shader = shaderName?.let { ShaderWallpapers.shader(this, it) }
+        if (shader != null) {
+            wallpaper?.second?.texture?.close()
+            wallpaper = null
+            // (Its first colour, if given, is the colours' seed: as a picture's telling colour.)
+            wallpaperSeed = shader.colors.firstOrNull() ?: ShaderWallpapers.SEED
+            backgrounds = monitors.map { Background(this, it, workspaceFor(it), null, ShaderWallpapers.forMonitor(shader, it)) }
+            focusBorders.update()
+            damage()
+            return
+        }
         // The wallpaper (newm's background.path; an output may name its own: one picture for all
         // here), read on a thread of its own: shown when it is ready.
         val path = confBackgroundPath()?.takeIf { it.isNotBlank() }
@@ -1676,6 +1689,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     // ends, the screen does not dim or lock at once for the time that passed meanwhile.
     private fun idleTick() {
         idleInhibit.tick()
+        // A moving wallpaper stands still while nobody is there, and goes slower on battery.
+        ShaderWallpapers.tick(this, idleSince?.let { now() - it } ?: 0.0, "idle" in idleDone)
         val since = idleSince ?: return
         if (caffeineOn || idleInhibitUser) {
             idleSince = now()

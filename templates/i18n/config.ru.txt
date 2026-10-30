@@ -35,6 +35,12 @@ ru: Все настройки: https://github.com/AristarkhKenebas/newm/blob/mas
 en: newm's own; or "~/Pictures/wallpaper.jpg" (an SVG stays sharp)
 ru: обои newm; или "~/Pictures/wallpaper.jpg" (SVG остаётся чётким)
 
+en: a moving wallpaper instead: "dragon-eye", "ember-sky", "scales", "deep-forest", "molten" or a .glsl file
+ru: живые обои вместо картинки: "dragon-eye", "ember-sky", "scales", "deep-forest", "molten" или файл .glsl
+
+en: how often it is drawn a second (fpsOnBattery = 15 on battery)
+ru: сколько раз в секунду они рисуются (fpsOnBattery = 15 от батареи)
+
 en: "follow": moves and zooms with the view; "static": stands still
 ru: "follow": двигаются и масштабируются вместе с видом; "static": стоят на месте
 

@@ -10,6 +10,18 @@ From now on every change people would notice gets a line under [Unreleased] in t
 
 ## [Unreleased]
 
+### Added
+- Moving wallpapers drawn by the GPU: `background { shader = "dragon-eye" }` — newm's own
+  "dragon-eye" (a breathing reptile iris whose slit pupil follows the pointer), "ember-sky"
+  (jade and amber curtains of light, embers gathering round the pointer), "scales" (iridescent
+  scales rippling from clicks), "deep-forest" (glowing spores drifting in the mist) and "molten"
+  (lava-lamp blobs) — or a GLSL file of yours, read again when saved. They move and zoom with the
+  view as the picture does, are drawn only while seen and only as often as `fps` says (30; 15 on
+  battery: `fpsOnBattery`), stand still after `pauseAfter` seconds without input (120) and while
+  the screen is dimmed, and are drawn at half the pixels each way on screens above 2560x1600
+  (`resolution`). `speed`, `intensity`, `shaderValues` (each one's own settings) and `shaderColors` tune
+  them.
+
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips
   and X11's unmanaged windows are hidden as the windows are: what they show (a notification, a
