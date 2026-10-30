@@ -106,7 +106,8 @@ out and the overview show the screens side by side.
 
 A new window goes onto the focused screen, right after the focused window; if that screen is
 full, onto a neighbouring screen with room (the next, then the one before), else onto a new
-screen right after it (`windows { newPlacement }`: `"right-of-focused"` always a new screen,
+screen right after it (`windows { newPlacement }`: `"right-of-focused"` and `"beside-focused"`
+right after the focused window on its screen, a new screen after it when that one is full;
 `"end"` the last screen, `"original"` the first with room). A child window goes right after its
 window; a full screen sends it to the next screen if that has room, else to a new one. Each screen can have a layout of
 its own while newm runs (Super+Space).
