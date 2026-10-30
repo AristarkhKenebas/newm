@@ -185,6 +185,19 @@ class Panels(private val wm: Layout) {
     /** The lock screen gets the keyboard (and newm's own and Caulis's keys stop meanwhile). */
     fun locked() {
         lockWidget?.let { wm.caulis.desktop.focusWidget(it) }
+        layoutForLock()
+    }
+
+    fun unlocked() {
+        request = null
+        message = ""
+        if (wm.caulis.desktop.keyboardWidget === lockWidget) wm.caulis.desktop.focusWidget(null)
+        layoutAfterLock()
+    }
+
+    // lock { layoutOnLock = "first" }: the first layout while locked — whoever locks (newm's own
+    // lock screen, a lock panel program, a locker program such as swaylock).
+    private fun layoutForLock() {
         val now = wm.caulis.keyboardLayoutNow
         if (confLayoutOnLock().lowercase() == "first" && now != 0 && layoutBeforeLock == null) {
             layoutBeforeLock = now
@@ -193,11 +206,8 @@ class Panels(private val wm: Layout) {
         }
     }
 
-    fun unlocked() {
-        request = null
-        message = ""
-        if (wm.caulis.desktop.keyboardWidget === lockWidget) wm.caulis.desktop.focusWidget(null)
-        // (Back to the layout of before, unless it was switched on the lock screen meanwhile.)
+    // (Back to the layout of before, unless it was switched on the lock screen meanwhile.)
+    private fun layoutAfterLock() {
         layoutBeforeLock?.let { before -> if (wm.caulis.keyboardLayoutNow == 0) wm.caulis.switchKeyboardLayout(before) }
         layoutBeforeLock = null
     }
@@ -305,6 +315,8 @@ class Panels(private val wm: Layout) {
 
     fun start() {
         val desktop = wm.caulis.desktop
+        // (Any lock: newm's own, a lock panel program's, a locker program's.)
+        desktop.onLockChanged { locked -> if (locked) layoutForLock() else layoutAfterLock() }
         val post: (Runnable) -> Unit = { task -> wm.caulis.post { task.run() } }
         val lock = ComposeWidget(
             desktop, post,

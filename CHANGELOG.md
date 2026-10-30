@@ -42,6 +42,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   compositor's thread every 10 s and its scan stopped pictures and input for seconds.
 - The lock screen names the keyboard layout as the bar does (`layoutNames`): with
   `layoutNames = mapOf("ru" to "ЙЦ")` the bar showed "ЙЦ" and the lock screen "RU".
+- `lock { layoutOnLock = "first" }` also holds when a lock panel program or a locker
+  program (`lockProgram`, swaylock) locks the screen, as the documentation says; before, only
+  newm's own lock screen switched to the first layout.
 
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again

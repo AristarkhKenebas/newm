@@ -176,6 +176,26 @@ class LockTest {
         }
 
     @Test
+    fun `layoutOnLock first holds for a lock that is not newm's own screen too`() = withNewm({ keyboardLayouts = "us,ru" }) { caulis, _, _ ->
+        Config.loadConfig(mapOf("panels" to mapOf("lock" to mapOf("layout_on_lock" to "first"))))
+        val screen = object : dev.caulis.core.Widget {
+            override fun area(monitor: dev.caulis.core.Monitor) = dev.caulis.geometry.Rect(0, 0, 10, 10)
+            override fun draw(monitor: dev.caulis.core.Monitor, canvas: dev.caulis.core.OverlayCanvas, area: dev.caulis.geometry.Rect) {}
+        }
+        try {
+            onLoop(caulis) { caulis.switchKeyboardLayout(1) }
+            waitUntil("RU") { onLoop(caulis) { caulis.keyboardLayoutNow } == 1 }
+            // Locked by someone else (a locker program, a lock panel): the first layout all the same.
+            onLoop(caulis) { caulis.desktop.lockInternally(screen) }
+            waitUntil("the first layout") { onLoop(caulis) { caulis.keyboardLayoutNow } == 0 }
+            onLoop(caulis) { caulis.desktop.unlockInternally() }
+            waitUntil("the one before") { onLoop(caulis) { caulis.keyboardLayoutNow } == 1 }
+        } finally {
+            Config.loadConfig(emptyMap())
+        }
+    }
+
+    @Test
     fun `the lock screen names the layout as the bar does`() = withNewm({ keyboardLayouts = "us,ru" }) { caulis, layout, _ ->
         Config.loadConfig(mapOf("panels" to mapOf("top_bar" to mapOf("native" to mapOf("layout_names" to mapOf("us" to "Lat"))))))
         try {
