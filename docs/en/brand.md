@@ -13,7 +13,7 @@ It sets, wherever your configuration says nothing itself:
   lock screen — dark and light (`colors { source = "jadefire" }` alone sets only these; the
   colours menu offers it too);
 - **the focus border**: the shader `"jadefire"` — jade flowing into amber along the border, a
-  spark going round, an urgent window pulsing ember (`focus { shader = "jadefire" }`);
+  spark going round, an urgent window pulsing ember (`focus { shader = "jadefire"; fps = 30 }`: its flow drawn 30 times a second);
 - **the wallpaper**: `"dragon-eye"`, a breathing iris whose slit pupil follows the pointer
   (`background { shader = "dragon-eye" }`). A picture of your own (`background { path }`) keeps
   its place.

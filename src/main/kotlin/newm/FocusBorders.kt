@@ -19,6 +19,8 @@ private val confUrgentColor = configuredValue("focus.urgent_color", "")
 private val confShader = configuredValue("focus.shader", "")
 // False: a shader's own time (and a turning gradient) stands still.
 private val confAnimate = configuredValue("focus.animate", true)
+// A moving border drawn anew at most this often a second (0: every frame of the screen).
+internal val confFocusFps = configuredValue("focus.fps", 0)
 
 private val log = dev.caulis.log.Logger("focus")
 

@@ -34,6 +34,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   set up to the max in the Jadefire look — the dragon-eye wallpaper, the glowing border, curves
   and springs, blur, music in a special workspace, screens, a fuller bar, a start with a fade
   and a sound. docs/en/showcase.md shows it.
+- `focus { fps = 30 }`: a moving focus border (a turning gradient, a shader using time) is drawn
+  anew at most so many times a second (0, the default: every frame as before); half the work on
+  a 60 Hz screen. The Jadefire look sets 30.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

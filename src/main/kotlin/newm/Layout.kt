@@ -906,6 +906,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         caulis.lockBeforeSleep = confLockOnWakeup()
         caulis.sleepLockWaitMillis = (confSleepWait().toDouble() * 1000).toLong().coerceIn(0L, 30_000L)
         caulis.specialWorkspaces = specials.settings()
+        // A moving focus border (a turning gradient, a shader using time): at most focus.fps frames a second.
+        caulis.movingPaintsFps = confFocusFps().coerceIn(0, 240)
         // Animations on or off: Caulis's own (scale changes, notices, ...) follow — but never its
         // windows' (newm moves and draws its windows itself: Caulis's would come on top, a second
         // pop where the window was). With preset = "newm" alone (newm's look as it always was)

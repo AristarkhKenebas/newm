@@ -186,7 +186,7 @@ object NewmThemes {
         ),
         settings = mapOf(
             "colors" to mapOf("source" to "jadefire"),
-            "focus" to mapOf("shader" to "jadefire", "width" to 3.0),
+            "focus" to mapOf("shader" to "jadefire", "width" to 3.0, "fps" to 30),
             "background" to mapOf("shader" to "dragon-eye"),
             "panels" to mapOf("lock" to mapOf("background" to "#0b110eF2", "text" to "#e8f0ea", "accent" to "#3ddc97")),
         ),

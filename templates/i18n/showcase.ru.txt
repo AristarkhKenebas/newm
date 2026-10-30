@@ -111,6 +111,9 @@ ru: рамка плавно переходит к следующему окну
 en: a window wanting attention
 ru: окно, которое просит внимания
 
+en: its flow drawn 30 times a second: half the work on a 60 Hz screen
+ru: её течение рисуется 30 раз в секунду: вдвое меньше работы на экране 60 Гц
+
 en: set by the theme; or "border.glsl" of your own
 ru: задан обликом; или свой "border.glsl"
 

@@ -56,6 +56,7 @@ focus {
     width = 3.0
     animateOnChange = true                   // the border glides to the next window
     urgentColor = "rgb(e8552d)"              // a window wanting attention
+    fps = 30                                 // its flow drawn 30 times a second: half the work on a 60 Hz screen
     // shader = "jadefire"                   // set by the theme; or "border.glsl" of your own
 }
 

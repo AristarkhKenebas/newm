@@ -149,6 +149,7 @@ overview nothing is resized. A screen keeps its sizes until its windows or layou
 | `animTime` | `0.3` | how long its own glide takes (the animation `border`) |
 | `animateOnChange` | `false` | the line glides to the next window |
 | `urgentColor` | `""` | the border of a window wanting attention while it has not the focus (focusing it takes the wish away), as Hyprland's; `""`: none |
+| `fps` | `0` | a moving border (a turning gradient, a shader using `time`) drawn anew at most this often a second; `0`: every frame of the screen (`30`: half the work at 60 Hz) |
 | `shader` | `""` | a GLSL file of your own, `vec4 paint(vec2 at)`, read again when saved (see below); or newm's own `"jadefire"`: jade flowing into amber, a spark going round, an urgent window pulsing ember |
 | `animate` | `true` | `false`: a shader's own time (and a turning gradient) stands still |
 

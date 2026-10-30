@@ -971,6 +971,9 @@ class FocusSection internal constructor(values: MutableMap<String, Any?>) : Sect
 
     /** False: a shader's own time (and a turning gradient) stands still. */
     var animate by setting<Boolean>("animate")
+
+    /** A moving border is drawn anew at most this many times a second (0, the default: every frame; 30 is half the work at 60 Hz). */
+    var fps by setting<Int>("fps")
 }
 
 class SpecialWorkspaceSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
