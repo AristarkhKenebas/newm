@@ -213,6 +213,13 @@ internal val confWeekNumbers = configuredValue("calendar.week_numbers", false)
 
 // quick_settings { tiles; tile(...) { } }: the quick settings' tiles, in order, and tiles of one's own.
 internal val QUICK_TILES = listOf("wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver")
+
+/** Tiles there are besides the default ones, shown only when quickSettings { tiles } names them. */
+internal val MORE_QUICK_TILES = listOf("media", "mic", "night_light", "airplane", "record", "power_profile")
+// The tiles' own settings: the night light's warmth, the commands for airplane mode and a screen recording.
+internal val confNightLight = configuredValue("quick_settings.night_light", 0.4)
+internal val confAirplaneCommand = configuredValue("quick_settings.airplane_command", "rfkill toggle all")
+internal val confRecordCommand = configuredValue("quick_settings.record_command", "wf-recorder -f \"${'$'}HOME/Videos/screen-${'$'}(date +%Y%m%d-%H%M%S).mp4\"")
 internal val confQuickTiles = configuredValue("quick_settings.tiles", QUICK_TILES)
 internal val confQuickCustom = configuredValue<Map<String, Any?>>("quick_settings.custom", emptyMap())
 

@@ -156,6 +156,9 @@ class BarModel(val wm: Layout) {
 
     /** The media players (MPRIS), the processor/memory/temperature and the weather: each started only while a bar shows it. */
     val media = Media(wm.caulis)
+
+    /** The quick settings' night light, airplane mode and screen recording. */
+    val quickExtras = QuickExtras(wm)
     val system = SystemStats({ action -> wm.caulis.post { action() } })
     var weather by mutableStateOf<String?>(null)
         private set

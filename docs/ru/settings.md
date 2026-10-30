@@ -577,7 +577,10 @@ keys {
 | `calendar { weekend }` | `["SATURDAY", "SUNDAY"]` | бледные дни |
 | `calendar { firstDay }` | как в языке | первый день недели (`"MONDAY"`) |
 | `calendar { weekNumbers }` | `false` | номера недель |
-| `quickSettings { tiles }` | `["wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver"]` | плитки по порядку |
+| `quickSettings { tiles }` | `["wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver"]` | плитки по порядку; ещё `"media"`, `"mic"`, `"night_light"`, `"airplane"`, `"record"`, `"power_profile"` (см. [Панели](bars.md)) |
+| `quickSettings { nightLight }` | `0.4` | насколько тёплым делает экран ночной свет (0..1) |
+| `quickSettings { airplaneCommand }` | `"rfkill toggle all"` | что запускает плитка режима полёта (`""`: только показывает состояние) |
+| `quickSettings { recordCommand }` | wf-recorder в `~/Videos` | что запускает плитка записи экрана до второго щелчка |
 | `quickSettings { tile("name", icon, label, wide) { onClick { }; isOn { } } }` | | своя плитка (`isOn("команда")`: включена, если команда успешна) |
 | `caffeine { choices }` | `[30, 60, 120, 0]` | сроки кофеина, минуты (0: пока не выключите) |
 | `network { wifiName }` | nmcli, иначе iwgetid | команда, которая говорит имя сети Wi-Fi |

@@ -574,7 +574,10 @@ screens: that screen; else the window clicked, or the view centred there). Off b
 | `calendar { weekend }` | `["SATURDAY", "SUNDAY"]` | the days drawn faint |
 | `calendar { firstDay }` | the language's | the week's first day (`"MONDAY"`) |
 | `calendar { weekNumbers }` | `false` | the weeks' numbers |
-| `quickSettings { tiles }` | `["wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver"]` | the tiles, in order |
+| `quickSettings { tiles }` | `["wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver"]` | the tiles, in order; also `"media"`, `"mic"`, `"night_light"`, `"airplane"`, `"record"`, `"power_profile"` (see [Bars](bars.md)) |
+| `quickSettings { nightLight }` | `0.4` | the night light's warmth (0..1) |
+| `quickSettings { airplaneCommand }` | `"rfkill toggle all"` | what the airplane tile runs (`""`: it only shows the state) |
+| `quickSettings { recordCommand }` | wf-recorder into `~/Videos` | what the record tile runs until the second click |
 | `quickSettings { tile("name", icon, label, wide) { onClick { }; isOn { } } }` | | a tile of your own (`isOn("command")`: on when it succeeds) |
 | `caffeine { choices }` | `[30, 60, 120, 0]` | the caffeine tile's times, minutes (0: until turned off) |
 | `network { wifiName }` | nmcli, else iwgetid | a command saying the Wi-Fi's name |

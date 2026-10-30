@@ -127,8 +127,19 @@ class QuickSettingsSection internal constructor(values: MutableMap<String, Any?>
     /**
      * Which tiles, in order: "wifi", "bluetooth", "caffeine" (wide), "dark", "screenshot",
      * "clipboard", "colors", "keys", "dnd", "power_saver" (small), and yours (tile(...)).
+     * More, only when named here: "media" (wide: what plays), "mic", "night_light",
+     * "airplane", "record", "power_profile" (small).
      */
     var tiles by setting<List<String>>("tiles")
+
+    /** The tile "night_light": how warm the screen gets (0.4; 0..1). A reload of the configuration sets its own screen shader again. */
+    var nightLight by setting<Double>("night_light")
+
+    /** The tile "airplane": the command that switches airplane mode ("rfkill toggle all"; "": the tile only shows it). */
+    var airplaneCommand by setting<String>("airplane_command")
+
+    /** The tile "record": the command that records the screen until the second click (wf-recorder into ~/Videos). */
+    var recordCommand by setting<String>("record_command")
 
     /** A tile of your own, named in [tiles]: its icon (as a module's), its words (a wide one shows them), what a click does, whether it is on. */
     fun tile(name: String, icon: String? = null, label: String? = null, wide: Boolean = false, configure: QuickTile.() -> Unit) {

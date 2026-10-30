@@ -232,6 +232,9 @@ panels {
     }
 }
 
+// The quick settings' tiles (the bar's grid button), in order; more: "media", "mic", "night_light", "airplane", "record", "power_profile".
+// quickSettings { tiles = listOf("wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver", "media", "mic", "night_light") }
+
 // Notifications of programs (Telegram's messages, a download done): cards at the top right,
 // a history behind the bar's bell.
 notifications {

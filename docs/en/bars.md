@@ -68,6 +68,14 @@ As on a phone:
 - **power saving** (when power-profiles-daemon runs); turned off, it goes back to the mode
   it came from.
 
+More tiles, shown only when you name them in `tiles`: `media` (wide: what a media player
+plays; the icon plays or pauses, the words go to the next one), `mic` (the microphone off and
+on), `night_light` (the screen warmer, `nightLight = 0.4`), `airplane` (airplane mode: lit
+when rfkill says every radio is blocked; a click runs `airplaneCommand`, `"rfkill toggle all"`),
+`record` (a screen recording: `recordCommand`, wf-recorder into `~/Videos` by default, runs
+until the second click) and `power_profile` (goes through power saver, balanced and
+performance).
+
 Which tiles, in which order, and tiles of your own:
 
 ```kotlin

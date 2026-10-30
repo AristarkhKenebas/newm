@@ -100,6 +100,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - Bars on several monitors: `topBar { showOn = "primary" }` keeps the bar on the primary monitor
   only (`primaryOutput`, else the first), and `perOutput = mapOf("HDMI-A-1" to mapOf("left" to
   listOf("window")))` gives a monitor its own modules. The default stays a bar on each.
+- More quick settings tiles, shown only when named in `quickSettings { tiles }`: `media` (what
+  plays: play/pause and the next one), `mic` (the microphone off and on), `night_light` (the
+  screen warmer through Caulis' screen shader, `nightLight = 0.4`), `airplane` (rfkill's
+  state; a click runs `airplaneCommand`), `record` (a screen recording with `recordCommand`
+  until the second click) and `power_profile` (through the power profiles). The default
+  tiles are as before.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

@@ -74,6 +74,7 @@
 ```kotlin
 quickSettings {
     // две широкие плитки — ряд; широкая одна делит ряд с двумя маленькими; остальные маленькие — по пять в ряд
+    // ещё, только если названы: "media" (широкая: что играет), "mic", "night_light", "airplane", "record", "power_profile"
     tiles = listOf("wifi", "bluetooth", "caffeine", "dark", "screenshot", "clipboard", "colors", "keys", "dnd", "power_saver", "vpn")
     tile("vpn", icon = "lock", label = "VPN", wide = false) {
         onClick { launch("vpn-toggle") }

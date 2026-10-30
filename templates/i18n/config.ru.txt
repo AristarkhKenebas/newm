@@ -486,6 +486,9 @@ ru: "list" (список newm), "grid" (страницы значков) или 
 en: smaller rows
 ru: строки ниже
 
+en: The quick settings' tiles (the bar's grid button), in order; more: "media", "mic", "night_light", "airplane", "record", "power_profile".
+ru: Плитки быстрых настроек (кнопка-сетка на панели) по порядку; ещё: "media", "mic", "night_light", "airplane", "record", "power_profile".
+
 en: Notifications of programs (Telegram's messages, a download done): cards at the top right,
 ru: Уведомления программ (сообщения Telegram, готовая загрузка): карточки справа сверху,
 
