@@ -133,7 +133,8 @@ internal object Faillock {
 internal fun lockLayoutLabel(caulis: Caulis): String {
     val names = caulis.keyboardLayoutNames
     if (names.size <= 1) return ""
-    return names.getOrNull(caulis.keyboardLayoutNow)?.let { layoutLabel(it, emptyMap()) }.orEmpty()
+    // (With the bar's labels: layoutNames = mapOf("ru" to "ЙЦ") reads the same on both.)
+    return names.getOrNull(caulis.keyboardLayoutNow)?.let { layoutLabel(it, barLayoutNames()) }.orEmpty()
 }
 
 /** An eye: held, the password shows. */

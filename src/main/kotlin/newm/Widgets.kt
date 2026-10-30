@@ -521,6 +521,9 @@ private val confQuickButton = BarSetting("quick_button", true)
 private val confNotificationsButton = BarSetting("notifications_button", true)
 // layoutNames = mapOf("us" to "EN"): the keyboard layouts' labels at the bar (by the layout's name, or its code).
 private val confLayoutNames = BarSetting<Map<String, Any?>>("layout_names", emptyMap())
+
+/** The layouts' labels the bars were given (the top bar's first): the lock screen shows the same. */
+internal fun barLayoutNames(): Map<String, Any?> = confLayoutNames(false) + confLayoutNames(true)
 // outputs = listOf("eDP-1"): the monitors with the bar (empty: all).
 private val confBarOutputs = BarSetting("outputs", emptyList<String>())
 // clockHint: the clock's hint (java.time's pattern).

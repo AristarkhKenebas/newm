@@ -176,6 +176,16 @@ class LockTest {
         }
 
     @Test
+    fun `the lock screen names the layout as the bar does`() = withNewm({ keyboardLayouts = "us,ru" }) { caulis, layout, _ ->
+        Config.loadConfig(mapOf("panels" to mapOf("top_bar" to mapOf("native" to mapOf("layout_names" to mapOf("us" to "Lat"))))))
+        try {
+            assertEquals("Lat", onLoop(caulis) { lockLayoutLabel(caulis) })
+        } finally {
+            Config.loadConfig(emptyMap())
+        }
+    }
+
+    @Test
     fun `an account pam_faillock locked counts down and takes no password`() = withNewm { caulis, layout, _ ->
         val dir = Files.createTempDirectory("newm-faillock")
         val user = Users.current(Users.currentUid())!!

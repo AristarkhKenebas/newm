@@ -40,6 +40,8 @@ From now on every change people would notice gets a line under [Unreleased] in t
   the desktop: the Wi-Fi's name is asked of nmcli on a thread of its own, without a new scan and
   for at most 5 s; the bar shows the name it knows meanwhile. Before, nmcli ran on the
   compositor's thread every 10 s and its scan stopped pictures and input for seconds.
+- The lock screen names the keyboard layout as the bar does (`layoutNames`): with
+  `layoutNames = mapOf("ru" to "ЙЦ")` the bar showed "ЙЦ" and the lock screen "RU".
 
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again
