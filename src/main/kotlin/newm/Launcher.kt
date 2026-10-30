@@ -82,6 +82,8 @@ private val confHide = configuredValue("panels.launcher.hide", emptyList<String>
 private val confRunTyped = configuredValue("panels.launcher.run_typed", false)
 private val confEntries = configuredValue("panels.launcher.entries", emptyList<Map<String, Any?>>())
 private val confKeys = configuredValue("panels.launcher.keys", emptyMap<String, Any?>())
+// launcher { typos = 1 }: how many letters a word typed may have wrong and still find (0: none).
+private val confTypos = configuredValue("panels.launcher.typos", 1)
 
 /**
  * What a key of `launcher { keys { "C-n" { next() } } }` can do: choose the next or the
@@ -247,7 +249,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
         if (query.isBlank()) {
             if (frequentMost > 0) all.sortedWith(compareByDescending<DesktopApp> { it.id == "entry:reopen" }.thenByDescending { LaunchCounts.of(it) }.thenBy { it.name.lowercase() })
             else all.sortedWith(compareByDescending<DesktopApp> { it.id == "entry:reopen" }.thenBy { it.name.lowercase() })
-        } else DesktopApp.matching(all, query)
+        } else DesktopApp.matching(all, query, confTypos())
     }
     val frequent = if (query.isBlank() && frequentMost > 0 && shown.firstOrNull()?.id != "entry:reopen") shown.takeWhile { LaunchCounts.of(it) > 0 }.take(frequentMost).size else 0
     // (Kept in the list, not read here: reading it while composing composed the whole list anew at each row the pointer passed.)

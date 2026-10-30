@@ -345,6 +345,7 @@ newm's own launcher:
 | `remember` | `true` | which programs you start is kept (`~/.local/state/newm/launcher.json`); `false`: nothing written |
 | `hide` | `[]` | programs left out, by name or .desktop id: `listOf("htop", "org.gnome.Extensions")` |
 | `runTyped` | `false` | Enter with nothing found runs what you typed as a command |
+| `typos` | `1` | how many letters of a word you type may be wrong (changed, missing, extra, two swapped) and it still finds: `"fierfox"` finds Firefox. `2`: two in words of 8 letters or more; `0`: only exact. Words under 4 letters always match exactly. Typed on the other keyboard layout works either way (`"ашкуащч"` finds firefox), and the programs' names and keywords in your language (`Name[ru]`) are searched too |
 | `entries { "Lock"("Lock the screen") { ensureLocked() } }` | | entries of your own, with what they do |
 | `keys { "C-Return" { runTyped() } }` | | keys of your own in it: `next()`, `previous()`, `first()`, `last()`, `start()`, `runTyped()`, `close()` |
 

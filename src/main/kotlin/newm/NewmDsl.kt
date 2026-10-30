@@ -1129,6 +1129,13 @@ class LauncherPanelSection internal constructor(values: MutableMap<String, Any?>
     /** Enter with nothing found runs what was typed as a command (false: nothing happens). */
     var runTyped by setting<Boolean>("run_typed")
 
+    /**
+     * How many letters of a word typed may be wrong (changed, missing, extra, two swapped) and it
+     * still finds the program: "fierfox" finds Firefox (1; 2: two in words of 8 letters or more;
+     * 0: only what is typed exactly). Words under 4 letters always match exactly.
+     */
+    var typos by setting<Int>("typos")
+
     /** Entries of your own, with what they do: `entries { "Lock"("Lock the screen") { ensureLocked() } }`. */
     fun entries(configure: LauncherEntries.() -> Unit) {
         @Suppress("UNCHECKED_CAST")

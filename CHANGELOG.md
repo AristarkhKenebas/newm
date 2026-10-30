@@ -60,6 +60,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
   of each monitor with the screens (or tiles), the windows (the focused one in the accent
   colour) and the part in view; a click on it goes there. It shows for `showFor = 2.0` seconds
   after the view or a window moved (0: always); `corner`, `width`, `margin`, `opacity`.
+- The launcher forgives typos: a letter wrong, missing, extra or two swapped still finds the
+  program ("fierfox" finds Firefox), and a word's first letters do too ("gte" finds GNOME Text
+  Editor). Exact matches still come first. `launcher { typos = 1 }` (0: exact only; 2: two
+  letters in long words). Typing on the other keyboard layout now works both ways ("ашкуащч"
+  finds Firefox, "ntktuhfv" finds Телеграм), and the programs' names, kinds and keywords in your
+  language (`Name[ru]`, `Keywords[ru]`) are searched as well.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

@@ -507,6 +507,8 @@ data class DesktopApp(
     val name: String, val comment: String, val command: String, val keywords: String, val icon: String = "", val id: String = "",
     /** An entry of the configuration (launcher { entries { } }): what it does instead of a command. */
     val run: ((Layout) -> Unit)? = null,
+    /** Its XDG categories ("Network", "WebBrowser"): the launcher's categories view groups by them. */
+    val categories: List<String> = emptyList(),
 ) {
     companion object {
         /** The programs installed (applications folders of XDG_DATA_HOME and XDG_DATA_DIRS; the user's first). */
@@ -552,40 +554,27 @@ data class DesktopApp(
                 // %f, %U and the like: nothing to open, so left out.
                 var command = exec.replace(Regex("%[fFuUdDnNickvm]"), "").trim()
                 if (entry["Terminal"] == "true") command = "${defaultTerminal()} -e $command"
-                DesktopApp(entry["Name"] ?: file.fileName.toString().removeSuffix(".desktop"), entry["Comment"] ?: entry["GenericName"] ?: "", command, entry["Keywords"] ?: "", entry["Icon"] ?: "")
+                // The words found besides the name: its keywords and kind ("Web Browser"), also in the
+                // system's language (Name[ru]=…, Keywords[ru]=…): "браузер" finds Firefox.
+                val language = java.util.Locale.getDefault().language
+                val words = listOfNotNull(entry["Keywords"], entry["GenericName"], entry["Name[$language]"], entry["GenericName[$language]"], entry["Keywords[$language]"])
+                    .joinToString(" ") { it.replace(';', ' ') }.trim()
+                DesktopApp(entry["Name"] ?: file.fileName.toString().removeSuffix(".desktop"), entry["Comment"] ?: entry["GenericName"] ?: "", command, words, entry["Icon"] ?: "",
+                    categories = entry["Categories"].orEmpty().split(';').filter { it.isNotBlank() })
             }
         } catch (_: Exception) {
             null
         }
 
-        /** The programs for what was typed: names first (those starting with it first), then words. */
-        // Typed on the Russian layout meaning the Latin one ("ашкуащч" is "firefox").
-        private val RU = "йцукенгшщзхъфывапролджэячсмитьбю."
-        private val EN = "qwertyuiop[]asdfghjkl;'zxcvbnm,./"
-
-        private fun latinOf(text: String): String = text.map { c -> RU.indexOf(c).let { if (it >= 0) EN[it] else c } }.joinToString("")
-
-        fun matching(apps: List<DesktopApp>, query: String): List<DesktopApp> {
-            val q = query.trim().lowercase()
-            if (q.isEmpty()) return apps
-            val found = matchingExactly(apps, q)
-            val latin = latinOf(q)
-            return if (found.isNotEmpty() || latin == q) found else matchingExactly(apps, latin)
-        }
-
-        private fun matchingExactly(apps: List<DesktopApp>, q: String): List<DesktopApp> {
-            fun score(app: DesktopApp): Int? {
-                val name = app.name.lowercase()
-                return when {
-                    name.startsWith(q) -> 0
-                    name.split(' ', '-').any { it.startsWith(q) } -> 1
-                    q in name -> 2
-                    q in app.keywords.lowercase() || q in app.comment.lowercase() -> 3
-                    q in app.command.lowercase() -> 4
-                    else -> null
-                }
-            }
-            return apps.mapNotNull { app -> score(app)?.let { it to app } }.sortedWith(compareBy({ it.first }, { it.second.name.length })).map { it.second }
+        /**
+         * The programs for what was typed: names first (those starting with it first), then words,
+         * then a word's first letters, then (launcher { typos }) with a letter or two wrong; typed on
+         * the other keyboard layout too ("ашкуащч" is "firefox"). See [LauncherSearch.score].
+         */
+        fun matching(apps: List<DesktopApp>, query: String, typos: Int = 1): List<DesktopApp> {
+            if (query.isBlank()) return apps
+            return apps.mapNotNull { app -> LauncherSearch.score(app.name, app.keywords + " " + app.comment, app.command, query, typos)?.let { it to app } }
+                .sortedWith(compareBy({ it.first }, { it.second.name.length })).map { it.second }
         }
     }
 }

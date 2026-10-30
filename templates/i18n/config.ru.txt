@@ -465,6 +465,9 @@ ru: сколько самых запускаемых программ показ
 en: programs left out of it
 ru: программы, которых в нём нет
 
+en: letters a word typed may have wrong ("fierfox" finds Firefox; 0: exact only)
+ru: сколько букв в слове может быть неверно ("fierfox" найдёт Firefox; 0: только точно)
+
 en: Notifications of programs (Telegram's messages, a download done): cards at the top right,
 ru: Уведомления программ (сообщения Telegram, готовая загрузка): карточки справа сверху,
 
