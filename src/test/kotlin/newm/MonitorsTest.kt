@@ -227,6 +227,38 @@ class MonitorsTest {
             }
         }
 
+    @Test
+    fun `the minimap shows each monitor's wall in its corner, and a click on a screen goes there`() =
+        withNewm(screens + mapOf("minimap" to mapOf("enabled" to true, "show_for" to 0.0)), setup = { twoMonitors() }) { t ->
+            t.open("w1")
+            t.open("w2")
+            t.open("w3")
+            // Two to a screen: w3 on the second screen, in view.
+            t.eventually { assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w3")); assertEquals(1.0, t.view()[0]) }
+            val (box, screen1) = t.onLoop {
+                val ws = t.layout.workspaces.first()
+                val g = t.layout.minimap.geometry(ws)!!
+                g.box to g.rectOf(0.0, 0.0, 1.0, 1.0)
+            }
+            // In the bottom right corner of the first monitor (1920x1080), as wide as said at most.
+            assertTrue(box.x + box.width <= 1920 && box.y + box.height <= 1080 && box.x > 1920 / 2 && box.y > 1080 / 2, "bottom right: $box")
+            assertTrue(box.width <= 240, "at most 240 wide: $box")
+            // The second monitor's wall has no windows: no map there.
+            assertNull(t.onLoop { t.layout.minimap.geometry(t.layout.workspaces[1]) })
+            // A click on the first screen's map: the view goes there, its first window focused.
+            t.onLoop { t.caulis.simulatePointer(screen1.x + screen1.width / 4.0, screen1.y + screen1.height / 2.0, 272) }
+            t.eventually {
+                assertEquals(0.0, t.view()[0])
+                assertEquals("w1", t.focused())
+            }
+        }
+
+    @Test
+    fun `the minimap is off by default`() = withNewm(screens, setup = { twoMonitors() }) { t ->
+        t.open("w1")
+        assertNull(t.onLoop { t.layout.minimap.geometry(t.layout.workspaces.first()) })
+    }
+
     private companion object {
         const val KEY_LEFTALT = 56
     }

@@ -377,6 +377,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     private var gestureProviders: List<GestureProvider> = emptyList()
     private var cGestures: CGestureProvider? = null
 
+    /** minimap { }: the wall's map in a corner of each monitor. */
+    internal val minimap = Minimap(this)
+    // A click on the minimap: its button's release is taken too.
+    private var minimapButton: Int? = null
+
     // overview { drag }: where the left button went down on a window in the overview (x, y), until it is a click or a drag.
     private var overviewPress: Pair<Double, Double>? = null
     // A drag of the overview started: the gesture it makes moves the window without Super.
@@ -976,6 +981,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         lastGeometry = geometry
         setup(reconfigure = false)
         addWidgetDrawings({ backgrounds }, corners) { topBars + bottomBars }
+        // minimap { }: the wall's map in a corner (drawn only when on).
+        caulis.addDrawing(dev.caulis.core.DrawingLevel.ON_TOP, minimap)
         panelsUi.start()
         clipboardHistory.start()
         Warmup(this).start()
@@ -1543,6 +1550,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         if (isLocked()) return false
         // A click while Super is held: no "Super alone" (the overview) when it is let go.
         if (pressed) keyProcessor.onOtherAction()
+        // A click on the minimap: there, and nothing else gets it.
+        if (!pressed && button == minimapButton) {
+            minimapButton = null
+            return true
+        }
+        if (pressed && button == 272 && overlay == null && minimap.click(caulis.desktop.pointerX, caulis.desktop.pointerY)) {
+            minimapButton = button
+            return true
+        }
         for (g in gestureProviders) {
             val res = g.onButton(timeMillis, button, pressed)
             if (res == 2) return true
@@ -1979,6 +1995,24 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             if (wasFocused) focusBorders.unfocus()
             animateTo({ st -> null to st.withoutIt().constrain() }, "windowsOut", { views.remove(view.handle); view.releaseDamage() })
         }
+    }
+
+    /**
+     * The minimap clicked at [i], [j] (tiles) of [ws]'s wall: on screens that screen (the window
+     * clicked, else its first, focused), else the window there, else the view centred there.
+     */
+    internal fun minimapGoTo(ws: Workspace, i: Double, j: Double) {
+        val s = state.workspaceState(ws)
+        val hit = views(ws).firstOrNull { v -> s.viewStateOrNull(v)?.let { it.isTiled && i >= it.i && i < it.i + it.w && j >= it.j && j < it.j + it.h } == true }
+        if (Screens.on()) {
+            val page = Screens.pageAt(i, j)
+            val first = hit ?: s.copy().readScreens().getOrNull(page)?.windows?.firstOrNull()?.let { views[it] }
+            if (first != null) return focusView(first)
+            animateTo({ st -> null to st.settingWorkspaceState(ws, st.workspaceState(ws).focusingScreen(page)) }, "camera")
+            return
+        }
+        if (hit != null) return focusView(hit)
+        animateTo({ st -> null to st.replacingWorkspaceState(ws) { copy(i = i - size / 2, j = j - size / 2) } }, "camera")
     }
 
     /** [ws] is the wall worked on now ([view] the window focused there), whatever the pointer's monitor. */

@@ -355,6 +355,15 @@ ru: в vec4 paint(vec2 at) доступны progress, time, size и colors
 en: false: the shader's own time stands still
 ru: false: собственное время шейдера стоит на месте
 
+en: A small map of the wall in a corner; a click on it goes there.
+ru: Маленькая карта стены в углу; щелчок по ней переходит туда.
+
+en: top-left, top-right, bottom-left, bottom-right
+ru: сверху слева, сверху справа, снизу слева, снизу справа
+
+en: seconds after the view moved; 0: always
+ru: секунд после сдвига вида; 0 — всегда
+
 en: The overview (Logo alone): every window at once.
 ru: Обзор (одна Logo): все окна сразу.
 

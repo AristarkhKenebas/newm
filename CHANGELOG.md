@@ -56,6 +56,10 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - In the overview a window can be dragged as it is, without Super, also from one monitor's
   overview into another's (`overview { drag = true }`, the default; `dragThreshold = 8.0`
   desktop units tell a drag from a click; a click still chooses the window).
+- A minimap of the wall (`minimap { enabled = true }`, off by default): a small map in a corner
+  of each monitor with the screens (or tiles), the windows (the focused one in the accent
+  colour) and the part in view; a click on it goes there. It shows for `showFor = 2.0` seconds
+  after the view or a window moved (0: always); `corner`, `width`, `margin`, `opacity`.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

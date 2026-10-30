@@ -287,6 +287,9 @@ class NewmConfig(
     /** The overview (Super alone): clicks there. */
     fun overview(configure: OverviewSection.() -> Unit) = section("overview", ::OverviewSection, configure)
 
+    /** minimap { enabled = true }: the wall's map in a corner of each monitor (off by default). */
+    fun minimap(configure: MinimapSection.() -> Unit) = section("minimap", ::MinimapSection, configure)
+
     /** The mouse with Super: moving and resizing windows. */
     fun mouse(configure: MouseSection.() -> Unit) = section("mouse", ::MouseSection, configure)
 
@@ -1518,6 +1521,27 @@ class NotificationsSection internal constructor(values: MutableMap<String, Any?>
     fun onNotification(hook: (newm.bar.Notification) -> Unit) {
         values["on_notification"] = hook
     }
+}
+
+/** minimap { }: a small map of the wall in a corner of each monitor; a click on it goes there. */
+class MinimapSection internal constructor(values: MutableMap<String, Any?>) : Section(values) {
+    /** Shown (false, the default). */
+    var enabled by setting<Boolean>("enabled")
+
+    /** Which corner: "top-left", "top-right", "bottom-left", "bottom-right" (the default). */
+    var corner by setting<String>("corner")
+
+    /** How wide it is at most, in desktop units (240); its height follows the wall's shape. */
+    var width by setting<Double>("width")
+
+    /** How far from the monitor's edges, within the room the bars leave (16). */
+    var margin by setting<Double>("margin")
+
+    /** Seconds it shows after the view or a window moved (2.0); 0: always. */
+    var showFor by setting<Double>("show_for")
+
+    /** How strong its background is, 0..1 (0.85). */
+    var opacity by setting<Double>("opacity")
 }
 
 /** overview { }: the windows seen from afar (Super alone). */

@@ -342,6 +342,13 @@ resize {
     // mouseButton = "right"                // with Super held
 }
 
+// A small map of the wall in a corner; a click on it goes there.
+// minimap {
+//     enabled = true
+//     corner = "bottom-right"              // top-left, top-right, bottom-left, bottom-right
+//     showFor = 2.0                        // seconds after the view moved; 0: always
+// }
+
 // The overview (Logo alone): every window at once.
 overview {
     input = false                           // true: the windows take clicks there

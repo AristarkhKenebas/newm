@@ -427,6 +427,21 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `transform` | turned: 0 normal, 1 by 90°, 2 by 180°, 3 by 270° (4 to 7: mirrored) |
 | `anim` | `false`: its wallpaper stands still |
 
+## minimap { }
+
+A small map of the wall in a corner of each monitor: the screens (or tiles), the windows (the
+focused one in the accent colour) and the part in view outlined. A click on it goes there (on
+screens: that screen; else the window clicked, or the view centred there). Off by default.
+
+| Setting | Default | What |
+|---|---|---|
+| `enabled` | `false` | shown |
+| `corner` | `"bottom-right"` | `"top-left"`, `"top-right"`, `"bottom-left"`, `"bottom-right"` |
+| `width` | `240.0` | how wide at most (desktop units); its height follows the wall's shape (at most half the monitor) |
+| `margin` | `16.0` | how far from the monitor's edges, within the room the bars leave |
+| `showFor` | `2.0` | seconds it shows after the view or a window moved; `0`: always |
+| `opacity` | `0.85` | how strong its background is (0..1) |
+
 ## overview { }
 
 | Setting | Default | What |
