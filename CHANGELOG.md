@@ -39,6 +39,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   after a restart, and the new newm came up unlocked: any program of the session could unlock
   the screen that way, and a restart from a script (a rebuild, an update) left the computer
   open. Unlock first, then restart.
+- `newm cmd open-launcher` and `newm cmd bar <popup>` (any program can send them over D-Bus)
+  do nothing while the screen is locked: the launcher and the bar's popups showed over the lock
+  screen (they took no input).
 
 ## [2026-10-30, on Caulis 0.1.7]
 

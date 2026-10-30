@@ -1944,6 +1944,11 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     /** newm's commands (newm-cmd): restart (newm's own), lock, config, update-config, debug, inhibit-idle, finish-inhibit-idle, close-launcher, clean, unlock. */
     fun command(cmd: String, arg: String? = null): String? {
         log.trace { "Received command $cmd" }
+        // (Drawn above the lock screen, though they get no input: not while it is locked.)
+        if (cmd in SHOWN_ABOVE_THE_LOCK && (isLocked() || desktopOrNull()?.locked == true)) {
+            log.info { "newm cmd $cmd while the screen is locked: refused" }
+            return "The screen is locked"
+        }
         return when (cmd) {
             "lock" -> {
                 ensureLocked(anim = arg?.contains("anim") == true, dim = arg?.contains("dim") == true)
@@ -2910,3 +2915,6 @@ const val LOCKED_MODE = "newm-locked"
 private const val LOCK_PROGRAM_PATIENCE_MS = 10_000L
 
 private fun Double.toMillis(): Int = (this * 1000).toLong().toInt()
+
+// Commands whose launcher or popup would show over the lock screen (refused while locked).
+private val SHOWN_ABOVE_THE_LOCK = setOf("open-launcher", "bar")

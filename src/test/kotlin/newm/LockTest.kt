@@ -230,6 +230,22 @@ class LockTest {
     }
 
     @Test
+    fun `the launcher and the bar's popups do not open over the lock screen`() = withNewm { caulis, layout, _ ->
+        onLoop(caulis) { layout.ensureLocked(anim = false) }
+        try {
+            // (Any program of the session can send these over D-Bus.)
+            assertEquals("The screen is locked", onLoop(caulis) { layout.command("open-launcher") })
+            assertEquals("The screen is locked", onLoop(caulis) { layout.command("bar", "power") })
+            onLoop(caulis) {
+                assertNull(layout.overlay, "no launcher")
+                assertNull(layout.barModel.popup, "no popup")
+            }
+        } finally {
+            onLoop(caulis) { layout.trustedUnlock() }
+        }
+    }
+
+    @Test
     fun `programs' panels are hidden behind newm's lock screen unless lock showPanels`() = withNewm { caulis, layout, _ ->
         for (show in listOf(false, true)) {
             Config.loadConfig(if (show) mapOf("panels" to mapOf("lock" to mapOf("show_panels" to true))) else emptyMap())
