@@ -529,6 +529,8 @@ screens: that screen; else the window clicked, or the view centred there). Off b
 | `enabled` | `true` | newm shows notifications (org.freedesktop.Notifications); `false` leaves them to another daemon |
 | `seconds` | `6` | how long a card stays when the program does not say (critical ones stay until closed) |
 | `doNotDisturb` | `false` | no cards, the history only (the bell's switch changes it while newm runs) |
+| `quietFrom`, `quietUntil` | `""`, `""` | quiet hours: do not disturb by itself every day between them (`"22:00"`, `"07:00"`: past midnight). Turned off at the bell, it stays off until they end |
+| `groupAfter` | `3` | behind the bell a program's notifications are shown up to so many, the rest behind "N more" (a click shows them); `0`: all. Each program's heading says how many it has |
 | `readAfterFocusSeconds` | `3` | a program's window focused this long: its notifications are read, out of the history |
 | `keepHours`, `keep` | `24`, `100` | the history keeps them this many hours, and this many at most |
 | `remember` | `true` | the history kept across restarts (`~/.local/state/newm/notifications.json`, yours alone) |

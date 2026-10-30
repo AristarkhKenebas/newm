@@ -1562,6 +1562,17 @@ class NotificationsSection internal constructor(values: MutableMap<String, Any?>
     /** No cards at all, the history only (false; the bell's switch changes it while newm runs). */
     var doNotDisturb by setting<Boolean>("do_not_disturb")
 
+    /**
+     * Quiet hours: do not disturb by itself every day from [quietFrom] to [quietUntil] ("22:00" and
+     * "07:00": past midnight; "HH:mm"). Both "" (the default): none. Turned off at the bell, it
+     * stays off until they end.
+     */
+    var quietFrom by setting<String>("quiet_from")
+    var quietUntil by setting<String>("quiet_until")
+
+    /** Behind the bell a program's notifications are shown up to this many, the rest behind "N more" (3; 0: all). Each program's heading says how many it has. */
+    var groupAfter by setting<Int>("group_after")
+
     /** A program's window focused this long (seconds, 3), its notifications are read: out of the history. A glance is not reading. */
     var readAfterFocusSeconds by setting<Int>("read_after_focus_seconds")
 

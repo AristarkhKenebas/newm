@@ -58,6 +58,28 @@ private val confSeconds = configuredValue("notifications.seconds", 6)
 // notifications { doNotDisturb = false }: no cards at all, the history only (the bell's switch changes it while running).
 private val confDoNotDisturb = configuredValue("notifications.do_not_disturb", false)
 
+// notifications { quietFrom = "22:00"; quietUntil = "07:00" }: do not disturb by itself every day between them ("": never).
+private val confQuietFrom = configuredValue("notifications.quiet_from", "")
+private val confQuietUntil = configuredValue("notifications.quiet_until", "")
+
+// notifications { groupAfter = 3 }: a program's notifications behind the bell shown up to so many, the rest behind "more" (0: all).
+internal val confGroupAfter = configuredValue("notifications.group_after", 3)
+
+/**
+ * Whether [now] is in the quiet hours from [from] to [until] ("22:00" to "07:00" goes past
+ * midnight; "HH:mm"); false when either is empty or not a time.
+ */
+internal fun inQuietHours(from: String, until: String, now: java.time.LocalTime): Boolean {
+    if (from.isBlank() || until.isBlank()) return false
+    val a = runCatching { java.time.LocalTime.parse(from.trim()) }.getOrNull() ?: return false
+    val b = runCatching { java.time.LocalTime.parse(until.trim()) }.getOrNull() ?: return false
+    return when {
+        a == b -> false
+        a < b -> now >= a && now < b
+        else -> now >= a || now < b
+    }
+}
+
 // notifications { readAfterFocusSeconds = 3 }: a program's window focused this long, its notifications are read.
 private val confReadAfterFocus = configuredValue("notifications.read_after_focus_seconds", 3)
 
@@ -439,8 +461,12 @@ class NotificationCenter(private val model: BarModel) {
     /** Do not disturb as chosen at the bell (null: the configuration's). */
     private var dndChoice by mutableStateOf<Boolean?>(null)
 
-    /** No cards: the history only. */
-    val doNotDisturb: Boolean get() = dndChoice ?: confDoNotDisturb()
+    // The quiet hours now (notifications { quietFrom; quietUntil }), looked at in tick(); turned off at the bell until they end.
+    private var quietNow by mutableStateOf(false)
+    private var quietSkipped = false
+
+    /** No cards: the history only (chosen, or the quiet hours). */
+    val doNotDisturb: Boolean get() = (dndChoice ?: confDoNotDisturb()) || (quietNow && !quietSkipped)
 
     /** The bus name is newm's now: notifications come here. */
     var serving by mutableStateOf(false)
@@ -795,6 +821,8 @@ class NotificationCenter(private val model: BarModel) {
 
     /** Do not disturb on or off (kept in the history's file). */
     fun setDoNotDisturb(on: Boolean) {
+        // (Off during the quiet hours: off until they end; on again: as chosen.)
+        quietSkipped = !on && quietNow
         dndChoice = on
         log.info { "Do not disturb ${if (on) "on" else "off"}" }
         if (on) for (c in cards) closeCard(c.id)
@@ -807,6 +835,13 @@ class NotificationCenter(private val model: BarModel) {
         val dt = (now - lastTick).coerceIn(0, 1000)
         lastTick = now
         followEnabled()
+        val quiet = inQuietHours(confQuietFrom(), confQuietUntil(), java.time.LocalTime.now())
+        if (quiet != quietNow) {
+            quietNow = quiet
+            if (!quiet) quietSkipped = false
+            log.info { if (quiet) "Quiet hours: do not disturb" else "Quiet hours over" }
+            if (doNotDisturb) for (c in cards.toList()) closeCard(c.id)
+        }
         // (Five times a second: with no card and no notification there is nothing to count down
         // or read, and nothing is looked at — not even the focus.)
         if (dirtySince > 0 && now - dirtySince > 1000) save()

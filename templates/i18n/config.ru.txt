@@ -501,6 +501,9 @@ ru: сколько держится карточка
 en: true: no cards, only the history
 ru: true: без карточек, только история
 
+en: do not disturb by itself every night
+ru: «не беспокоить» само каждую ночь
+
 en: or "top_left", "top", "bottom_right", "bottom_left", "bottom"
 ru: или "top_left", "top", "bottom_right", "bottom_left", "bottom"
 

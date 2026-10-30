@@ -338,14 +338,33 @@ internal fun NotificationsPopup(model: BarModel, colors: BarColors, text: TextSt
             }
             return@Column
         }
-        // By program, the program with the newest one first.
+        // By program, the program with the newest one first; a program's many shown up to
+        // notifications { groupAfter }, the rest behind a "more" row (a click shows them all).
         val groups = items.groupBy { it.entry.ifBlank { it.app }.lowercase() }
-        ScrollingRows(colors, items.size + groups.size, rows = 7, rowHeight = 56.dp) {
-            for ((_, list) in groups) {
-                Section(verbatim(list.first().app.ifEmpty { "?" }), colors, text)
-                for (n in list) key(n.id) { HistoryRow(model, center, n, n.id in unreadAtOpen, colors, text) }
+        val after = confGroupAfter().coerceAtLeast(0)
+        val opened = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+        val rowsShown = groups.entries.sumOf { (k, list) -> if (after == 0 || k in opened || list.size <= after) list.size else after + 1 }
+        ScrollingRows(colors, rowsShown + groups.size, rows = 7, rowHeight = 56.dp) {
+            for ((k, list) in groups) {
+                Section(verbatim(list.first().app.ifEmpty { "?" }) + if (list.size > 1) " · ${list.size}" else "", colors, text)
+                val folded = after > 0 && k !in opened && list.size > after
+                for (n in if (folded) list.take(after) else list) key(n.id) { HistoryRow(model, center, n, n.id in unreadAtOpen, colors, text) }
+                if (folded) MoreRow(tr("%s more").replace("%s", (list.size - after).toString()), colors, text) { opened += k }
             }
         }
+    }
+}
+
+// "3 more": the rest of a program's notifications, shown on a click.
+@Composable
+private fun MoreRow(label: String, colors: BarColors, text: TextStyle, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (hovered) colors.hover else Color.Transparent).hoverable(source)
+            .tap(onClick).padding(start = 48.dp, top = 6.dp, bottom = 6.dp),
+    ) {
+        BasicText(label, style = text.copy(color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium))
     }
 }
 

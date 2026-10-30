@@ -91,6 +91,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
   a click starts a system monitor), `screens` (a dot for each screen of the wall, the one in
   view lit; a click goes there) and `weather` (wttr.in; the only module that asks the
   internet, only when placed — see the privacy note in the bars guide).
+- Quiet hours for notifications: `notifications { quietFrom = "22:00"; quietUntil = "07:00" }`
+  turns do not disturb on by itself every day between them (off by default). Turned off at the
+  bell, it stays off until they end.
+- Behind the bell each program's heading says how many notifications it has, and a program
+  with many shows the newest three and "N more" (a click shows the rest):
+  `notifications { groupAfter = 3 }` (0: all, as before).
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

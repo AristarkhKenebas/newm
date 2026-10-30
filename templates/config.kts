@@ -238,6 +238,7 @@ notifications {
     enabled = true                          // false: leave them to mako or dunst
     seconds = 6                             // how long a card stays
     // doNotDisturb = false                 // true: no cards, only the history
+    // quietFrom = "22:00"; quietUntil = "07:00"   // do not disturb by itself every night
     // corner = "top_right"                 // or "top_left", "top", "bottom_right", "bottom_left", "bottom"
     // showInFullscreen = false
 }
