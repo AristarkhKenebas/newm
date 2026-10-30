@@ -3,7 +3,6 @@ package newm
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,13 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -397,11 +393,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             // The search.
             Row(Modifier.fillMaxWidth().height(50.dp).background(colors.text.copy(alpha = 0.06f), RoundedCornerShape(13.dp)).padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Canvas(Modifier.size(18.dp)) {
-                    val r = size.minDimension * 0.33f
-                    drawCircle(colors.dim, r, Offset(size.width * 0.42f, size.height * 0.42f), style = Stroke(2.dp.toPx()))
-                    drawLine(colors.dim, Offset(size.width * 0.66f, size.height * 0.66f), Offset(size.width * 0.92f, size.height * 0.92f), 2.dp.toPx(), StrokeCap.Round)
-                }
+                newm.bar.GlyphIcon(newm.bar.Glyph.SEARCH, colors.dim, 20.dp)
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) BasicText(newm.bar.tr(if (sources.size > 1) "Search programs, files, actions" else "Search programs"), style = text.copy(color = colors.dim, fontSize = 18.sp))

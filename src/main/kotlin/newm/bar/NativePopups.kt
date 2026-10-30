@@ -407,31 +407,31 @@ internal fun QuickPopup(model: BarModel, popup: Popup, colors: BarColors, text: 
                     }
                     // What plays (MPRIS): the icon plays or pauses, the words go to the next one.
                     "media" -> model.media.now?.let { m ->
-                        WideTile(model, if (m.playing) "pause" else "play", verbatim(m.title.ifBlank { m.identity }), verbatim(m.artist.ifBlank { m.identity }), m.playing, colors, text,
+                        WideTile(model, if (m.playing) "pause" else "play_arrow", verbatim(m.title.ifBlank { m.identity }), verbatim(m.artist.ifBlank { m.identity }), m.playing, colors, text,
                             Modifier.weight(1f), onOpen = if (m.canNext) { { model.media.press("Next") } } else null) { model.media.press("PlayPause") }
                     }
                     // The microphone off and on (the default input).
                     "mic" -> {
                         val input = model.sound.inputs.firstOrNull { it.isDefault } ?: model.sound.inputs.firstOrNull()
                         val muted = input?.muted == true
-                        SmallTile(model, if (muted) "mic-off" else "mic", !muted, colors, Modifier.weight(smallWeight), height = smallHeight) {
+                        SmallTile(model, if (muted) "mic_off" else "mic", !muted, colors, Modifier.weight(smallWeight), height = smallHeight) {
                             input?.let { model.sound.toggleMute(it, output = false) }
                         }
                     }
                     // The night light: the screen warmer (quickSettings { nightLight }), and back.
-                    "night_light" -> SmallTile(model, "sunset", model.quickExtras.nightLight, colors, Modifier.weight(smallWeight), height = smallHeight) {
+                    "night_light" -> SmallTile(model, "nightlight", model.quickExtras.nightLight, colors, Modifier.weight(smallWeight), height = smallHeight) {
                         model.quickExtras.toggleNightLight()
                     }
                     // Airplane mode: rfkill's state, read; the click runs quickSettings { airplaneCommand }.
-                    "airplane" -> SmallTile(model, "plane", model.quickExtras.airplane, colors, Modifier.weight(smallWeight), height = smallHeight) {
+                    "airplane" -> SmallTile(model, "flight", model.quickExtras.airplane, colors, Modifier.weight(smallWeight), height = smallHeight) {
                         model.quickExtras.toggleAirplane()
                     }
                     // A screen recording: quickSettings { recordCommand } runs until the second click.
-                    "record" -> SmallTile(model, "circle-dot", model.quickExtras.recording, colors, Modifier.weight(smallWeight), height = smallHeight) {
+                    "record" -> SmallTile(model, "screen_record", model.quickExtras.recording, colors, Modifier.weight(smallWeight), height = smallHeight) {
                         model.quickExtras.toggleRecording()
                     }
                     // The power profile: the next one (power saver, balanced, performance).
-                    "power_profile" -> SmallTile(model, when (profiles.active) { "power-saver" -> "leaf"; "performance" -> "zap"; else -> "scale" },
+                    "power_profile" -> SmallTile(model, when (profiles.active) { "power-saver" -> "energy_savings_leaf"; "performance" -> "bolt"; else -> "balance" },
                         profiles.active != "balanced", colors, Modifier.weight(smallWeight), height = smallHeight) {
                         val all = profiles.profiles
                         if (all.isNotEmpty()) profiles.use(all[(all.indexOf(profiles.active) + 1) % all.size])

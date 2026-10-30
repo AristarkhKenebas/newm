@@ -121,7 +121,7 @@ panels {
         module("load") {
             text { "%.1f".format(java.lang.management.ManagementFactory.getOperatingSystemMXBean().systemLoadAverage) }
             everySeconds = 5
-            icon = "gauge"
+            icon = "speed"
             onClick { launch("$terminal -e btop") }
         }
     }

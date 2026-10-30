@@ -84,9 +84,12 @@ quickSettings {
 caffeine { choices = listOf(30, 60, 120, 0) }   // минуты; 0 — пока не выключите
 ```
 
-Значок — символ Material, который есть в newm (`wifi`, `bluetooth`, `coffee`, `dark_mode`,
-`palette`, `keyboard`, ...), один из значков newm (`lock`, `bell`, `power`, `settings`,
-`moon`, `sun`, ...), значок вашей темы значков (`firefox`) или файл картинки.
+Значок — символ Material (Rounded), который есть в newm, по имени Material (`wifi`,
+`bluetooth`, `coffee`, `dark_mode`, `palette`, `keyboard`, `lock`, `notifications`,
+`power_settings_new`, `settings`, `bedtime`, `light_mode`, `flight`, `nightlight`, `speed`,
+`memory`, `thermostat`, ...: см. `src/main/resources/newm/icons/material/`; прежние имена
+значков newm — `bell`, `power`, `moon`, `sun` — тоже работают), значок вашей темы значков
+(`firefox`) или файл картинки.
 
 ### Что нужно панели
 

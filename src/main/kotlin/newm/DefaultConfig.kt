@@ -82,6 +82,8 @@ fun defaultConfig(layout: Layout): Map<String, Any?> {
         "background" to mapOf("path" to "resource:wallpaper.jpg", "anim" to true),
         "key_bindings" to keyBindings,
         "key_help" to keys.map { (combo, words, _) -> combo to words },
+        // (Each key's named action, where its words are one's: its group in the keys' help.)
+        "key_actions" to keys.mapNotNull { (combo, words, _) -> KeyActions.ALL.firstOrNull { it.description == words }?.let { combo to it.name } }.toMap(),
         // newm's own lock screen and launcher (no panels.lock.cmd / panels.launcher.cmd), and its bar.
         "panels" to mapOf("top_bar" to mapOf("native" to mapOf("enabled" to true))),
     )

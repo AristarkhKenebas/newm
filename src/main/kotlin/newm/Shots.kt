@@ -60,6 +60,9 @@ internal class Shots(private val wm: Layout) {
         }
     }
 
+    /** The chooser's keys (for the keys' help). */
+    fun chooserKeys(): dev.caulis.screenshot.ChooserKeys = shots.chooser.keys
+
     /** The configuration's settings, again after each reload. */
     fun apply() {
         confFolder()?.takeIf { it.isNotBlank() }?.let { shots.folder = Path.of(expandHome(it)) }

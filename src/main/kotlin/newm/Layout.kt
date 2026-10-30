@@ -41,7 +41,6 @@ private val confGestureHints = configuredValue("gestures.hints", true)
 private val confLockProgram = configuredValue<String?>("panels.lock.program", null)
 private val confBackgroundPath = configuredValue<String?>("background.path", "resource:wallpaper.jpg")
 private val confSendFullscreenToViews = configuredValue("view.send_fullscreen", true)
-private val confKeyHelp = configuredValue<List<Pair<String, String>>>("key_help", emptyList())
 private val confKeyBindings = configuredValue<(Layout) -> List<Pair<String, () -> Unit>>>("key_bindings") { emptyList() }
 // newm fading in at the start and out at the end: the usual time of "startup" and "quit".
 private val confBlendT = configuredValue("blend_time", 1.0)
@@ -1041,7 +1040,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         barModel.showPopups()
         barModel.showOsd()
         barModel.showNotificationCards()
-        showKeyHelp()
+        keyHelpHandle?.close()
+        keyHelpHandle = showKeyHelp()
         every(1000) {
             (topBars + bottomBars).forEach(Bar::refresh)
             watchHeldFrames()
@@ -1426,10 +1426,15 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun onKey(timeMillis: Int, keycode: Int, pressed: Boolean, keysyms: String, layoutKeysyms: String = keysyms): Boolean {
         // These are processed via onModifiers.
         if (keysyms in listOf("Super_L", "Super_R", "Alt_L", "Alt_R", "Logo_L", "Logo_R")) return false
-        // The keys' help open: a key (but its own) closes it, and does nothing else.
-        if (keyHelpShown && keysyms != "slash" && keysyms !in listOf("Shift_L", "Shift_R", "Control_L", "Control_R")) {
-            if (pressed) keyHelpShown = false
-            return true
+        // The keys' help open: typing goes to its search (it has the keyboard), a laptop's keys
+        // still work; another key with Super closes it and does nothing else (but its own, Super+/).
+        if (keyHelpShown && !keysyms.startsWith("XF86")) {
+            val logo = modifiers and Mod.LOGO != 0
+            if (!logo) return false
+            if (keysyms != "slash") {
+                if (pressed) keyHelpShown = false
+                return true
+            }
         }
         overlay?.takeIf { it.ready }?.let { o ->
             log.trace { "...passing to overlay $o" }
@@ -2047,11 +2052,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
                 null
             }
             "debug" -> debugStr()
-            // Every key bound now, as it is written in words ("Super+Shift+H  Move the window left").
-            "keys" -> confKeyHelp().ifEmpty { confKeyBindings()(this).map { it.first to "" } }.let { all ->
-                val rows = all.map { (combo, words) -> KeyNotation.readable(combo) to newm.bar.tr(words) }
-                val width = rows.maxOfOrNull { it.first.length } ?: 0
-                rows.joinToString("\n") { (k, w) -> if (w.isBlank()) k else k.padEnd(width + 2) + w }.ifEmpty { "no keys" }
+            // Every key as the help (Super+/) has it, by group ("Super+Shift+H  Move the window left").
+            "keys" -> keyHelpEntries().let { all ->
+                val width = all.maxOfOrNull { e -> e.keys.joinToString(" / ") { keyHelpKeyText(it) }.length } ?: 0
+                all.groupBy { it.group }.entries.joinToString("\n\n") { (group, lines) ->
+                    newm.bar.tr(group.title) + "\n" + lines.joinToString("\n") { e -> "  " + e.keys.joinToString(" / ") { keyHelpKeyText(it) }.padEnd(width + 2) + newm.bar.tr(e.what) }
+                }.ifEmpty { "no keys" }
             }
             "inhibit-idle" -> {
                 idleInhibitUser = true
@@ -2573,24 +2579,35 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     var keyHelpShown: Boolean
         get() = keyHelpOpen
         set(value) {
+            if (value && !keyHelpOpen) keyHelpOpened++
             keyHelpOpen = value
             if (value) keyHelpFade.show() else keyHelpFade.hide()
+            // The keyboard to its search while it is open; back to the window after.
+            keyHelpHandle?.focus(value)
+            log.info { "The keys' help ${if (value) "opens" else "closes"}" }
         }
+
+    /** How many times the keys' help opened (it reads the keys anew each time). */
+    internal var keyHelpOpened by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+
+    // The keys' help's widget.
+    private var keyHelpHandle: dev.caulis.compose.ComposeHandle? = null
 
     /** The keys' help coming and going (done by the compositor). */
     internal val keyHelpFade = newm.bar.Fade("keyHelp", inMillis = 260, outMillis = 180)
 
     fun toggleKeyHelp() {
+        // (Not over the lock screen: the keyboard stays its own.)
+        if (!keyHelpShown && lockShown()) return
         keyHelpShown = !keyHelpShown
     }
 
-    /** The keys and what they do, as the configuration says (for the help): those given words, if any are. */
-    fun keyHelp(): List<Pair<String, String>> {
-        val all = confKeyHelp().ifEmpty { confKeyBindings()(this).map { it.first to "" } }
-        // Keys with words are the help ("L-b"("Firefox") { ... }); without any (config.py), all of them.
-        val described = all.filter { it.second.isNotBlank() }
-        return described.ifEmpty { all }
-    }
+    /** Every key bound now and its words, as the configuration says ("" where it gave none). */
+    fun keyHelp(): List<Pair<String, String>> = keyHelpSources().bindings
+
+    /** The screenshot chooser's keys (newm keeps Caulis's). */
+    internal fun screenshotChooserKeys(): dev.caulis.screenshot.ChooserKeys = shots?.chooserKeys() ?: dev.caulis.screenshot.ChooserKeys()
 
     fun basicScale(deltaS: Int) {
         val ws = activeWorkspace()

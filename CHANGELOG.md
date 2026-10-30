@@ -10,6 +10,8 @@ From now on every change people would notice gets a line under [Unreleased] in t
 
 ## [Unreleased]
 
+## [2026-10-30, on Caulis 0.1.8]
+
 ### Added
 - Moving wallpapers drawn by the GPU: `background { shader = "dragon-eye" }` — newm's own
   "dragon-eye" (a breathing reptile iris whose slit pupil follows the pointer), "ember-sky"
@@ -106,8 +108,29 @@ From now on every change people would notice gets a line under [Unreleased] in t
   state; a click runs `airplaneCommand`), `record` (a screen recording with `recordCommand`
   until the second click) and `power_profile` (through the power profiles). The default
   tiles are as before.
+- `bind(...)` outside `keys { }` takes `description = "..."` too, as inside it: the words the
+  keys' help shows for that key.
 
 ### Changed
+- The keys' help (Super+/) lists every key that does something now, in groups (Programs,
+  Windows, Screens & layouts, Monitors, Special workspaces, Overview & gestures, Mouse,
+  Screenshots, Clipboard, System keys, Lock & session, your own keys): the configuration's keys
+  in both forms (`"L-x"("words") { }` and `bind(...)`; a key without words is listed too),
+  newm's defaults, the laptop's keys and the text consoles and quit key Caulis keeps, the mouse
+  (Super+drag moves, Super+right drag resizes at the nearest corner, dragging between windows),
+  the touchpad's gestures, and the keys inside the launcher, the clipboard's history and the
+  screenshot chooser. Keys are written as in the configuration ("Super+Backspace"), words in
+  your language (English or Russian). Typing searches it (keys, words, groups), the list scrolls
+  (only the rows in sight are drawn), Esc or a click outside closes it. `newm cmd keys` prints
+  the same, by group.
+- newm's words follow `LANGUAGE` too (as gettext: LANGUAGE, LC_ALL, LC_MESSAGES, LANG), as the
+  templates' notes already did.
+- All of newm's icons — bar, quick settings, notifications, launcher, lock screen, popups — are
+  one set now: Google's Material Symbols Rounded (filled), Apache-2.0 (see
+  resources/newm/icons/NOTICE), instead of a mix of Lucide icons, Material ones and pictures drawn
+  in code (the battery, the launcher's magnifier, the lock screen's eye). Icon names in a
+  configuration's tiles and modules are Material names (`flight`, `nightlight`, `speed`); the
+  names newm's icons had before (`plane`, `sunset`, `gauge`, `bell`, `moon`, ...) still work.
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips
   and X11's unmanaged windows are hidden as the windows are: what they show (a notification, a
   window's title) may be private. To keep them drawn: `lock { showPanels = true }` (config.json:

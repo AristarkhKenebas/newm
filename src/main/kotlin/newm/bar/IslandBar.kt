@@ -1387,7 +1387,8 @@ private fun CustomModule(name: String, bar: Bar, model: BarModel, colors: BarCol
 @Composable
 internal fun NamedIcon(name: String, color: Color, size: androidx.compose.ui.unit.Dp, model: BarModel) {
     if (carriesIcon("material/$name")) return SymbolIcon(name, color, size)
-    if (carriesIcon(name)) return OwnIcon(name, color, size)
+    // (A name newm's icons had before: "plane", "sunset".)
+    OLD_ICON_NAMES[name]?.let { return SymbolIcon(it, color, size) }
     var picture by remember(name) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(name) {
         IconTheme.load(name.removePrefix("file://"), TRAY_ICON_PIXELS, null, post = { model.wm.caulis.post { it() } }) { p ->

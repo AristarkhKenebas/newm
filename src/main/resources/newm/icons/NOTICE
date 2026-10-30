@@ -1,0 +1,13 @@
+newm's icons
+============
+
+Every icon in material/ is a Material Symbol (Rounded, filled, weight 400, grade 0, optical
+size 24) by Google, from the official repository:
+
+    https://github.com/google/material-design-icons
+    (symbols/web/<name>/materialsymbolsrounded/<name>_fill1_24px.svg, master, 2026-10-30)
+
+Licensed under the Apache License, Version 2.0 (material/LICENSE-material-symbols). Changes:
+fill="currentColor" added to each <svg> (newm paints them in its colours), and
+battery_android_frame.svg is battery_android_frame_full.svg without its inner level (newm
+draws the level itself).

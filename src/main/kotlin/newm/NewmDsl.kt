@@ -316,13 +316,17 @@ class NewmConfig(
         val now = keys.bindings.toList()
         values["key_bindings"] = { layout: Layout -> now.map { (combo, action) -> combo to { action.invoke(layout) } } }
         values["key_help"] = now.map { (combo, _) -> combo to keys.descriptions[combo].orEmpty() }
+        values["key_actions"] = now.mapNotNull { (combo, _) -> keys.actions[combo]?.let { combo to it } }.toMap()
     }
 
     // The keys of every keys { } (a later one adds to and changes an earlier one).
     private val keySection = KeysSection()
 
-    /** A key and an action by its name, outside keys { } too: `bind("Super+Backspace", "close-window")`. */
-    fun bind(combination: String, action: String, vararg args: String) = keys { bind(combination, action, *args) }
+    /**
+     * A key and an action by its name, outside keys { } too: `bind("Super+Backspace", "close-window")`,
+     * with words of your own for the keys' help: `bind("Super+E", "launch", "thunar", description = "Files")`.
+     */
+    fun bind(combination: String, action: String, vararg args: String, description: String? = null) = keys { bind(combination, action, *args, description = description) }
 
     /** The key does nothing any more: `unbind("Super+Q")`. */
     fun unbind(combination: String) = keys { unbind(combination) }
@@ -1900,12 +1904,15 @@ class KeysSection internal constructor() {
     // In newm's notation ("L-S-q"), the last binding of a key winning; with their words.
     internal val bindings = LinkedHashMap<String, Layout.() -> Unit>()
     internal val descriptions = LinkedHashMap<String, String>()
+    // The named action of a key bound with bind() ("close-window"): its group in the keys' help.
+    internal val actions = LinkedHashMap<String, String>()
 
-    private fun put(combination: String, description: String?, action: Layout.() -> Unit) {
+    private fun put(combination: String, description: String?, action: Layout.() -> Unit, named: String? = null) {
         val key = KeyNotation.toNewm(combination)
         bindings.remove(key)
         bindings[key] = action
         if (description != null) descriptions[key] = description else descriptions.remove(key)
+        if (named != null) actions[key] = named else actions.remove(key)
     }
 
     /** A key and what it does: `"Super+Backspace" { closeFocusedView() }` (or newm's "L-BackSpace"). */
@@ -1924,7 +1931,7 @@ class KeysSection internal constructor() {
             "bind(\"$combination\", \"$action\"): there is no action \"$action\" (there are: ${KeyActions.names()})",
         )
         val list = args.toList()
-        put(combination, description ?: named.description) { named.run(this, list) }
+        put(combination, description ?: named.description, { named.run(this, list) }, named.name)
     }
 
     /** The key does nothing any more (a binding of the template you do not want). */
@@ -1932,6 +1939,7 @@ class KeysSection internal constructor() {
         val key = KeyNotation.toNewm(combination)
         bindings.remove(key)
         descriptions.remove(key)
+        actions.remove(key)
     }
 }
 

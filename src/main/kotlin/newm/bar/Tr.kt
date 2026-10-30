@@ -8,7 +8,7 @@ private val confLanguage = configuredValue("language", "auto")
 
 /**
  * newm's words in your language: English as written, Russian from [RU] when the system's
- * language is Russian (LC_ALL, LC_MESSAGES, LANG) or the configuration says language = "ru".
+ * language is Russian (LANGUAGE, LC_ALL, LC_MESSAGES, LANG) or the configuration says language = "ru".
  * Words with "%s" in them stand for any text there ("Connected to %s"). Words from outside
  * (a window's title, a network's or a device's name) given through [verbatim] stay as they are.
  */
@@ -69,11 +69,8 @@ fun dateLocale(): Locale = when {
 
 private val RUSSIAN: Locale = Locale.forLanguageTag("ru")
 
-private val systemLanguage: String by lazy {
-    val env = listOf("LC_ALL", "LC_MESSAGES", "LANG").firstNotNullOfOrNull { System.getenv(it)?.takeIf { v -> v.isNotBlank() && v != "C" && v != "POSIX" } }
-    val code = env?.substringBefore('_')?.substringBefore('.')?.lowercase() ?: Locale.getDefault().language
-    if (code == "ru") "ru" else "en"
-}
+// The first of LANGUAGE, LC_ALL, LC_MESSAGES and LANG that says one (as gettext reads them; the template's notes too).
+private val systemLanguage: String by lazy { if (newm.TemplateText.systemLanguage() == "ru") "ru" else "en" }
 
 private val templates: List<Triple<String, Regex, String>> by lazy {
     RU.filterKeys { "%s" in it }.map { (en, ru) ->
@@ -421,6 +418,88 @@ private val RU: Map<String, String> = mapOf(
     "Zoom out" to "Отдалить",
     "Zoom in (see fewer)" to "Приблизить (меньше окон)",
     "Zoom out (see more)" to "Отдалить (больше окон)",
+    // the keys' help (Super+/): its groups, and the words of every key in it
+    "Windows" to "Окна",
+    "Screens & layouts" to "Экраны и раскладки окон",
+    "Monitors" to "Мониторы",
+    "Special workspaces" to "Особые рабочие пространства",
+    "Overview & gestures" to "Обзор и жесты",
+    "Mouse" to "Мышь",
+    "Screenshots" to "Снимки экрана",
+    "System keys" to "Системные клавиши",
+    "Lock & session" to "Блокировка и сеанс",
+    "Your own keys" to "Ваши клавиши",
+    "In the launcher" to "В меню программ",
+    "In the clipboard's history" to "В истории буфера обмена",
+    "In the screenshot chooser" to "При выборе снимка",
+    "Type to search keys" to "Начните печатать, чтобы найти клавишу",
+    "Esc closes" to "Esc закрывает",
+    "No key does “%s”" to "Нет клавиши для «%s»",
+    "Your own (no words given)" to "Ваше действие (без описания)",
+    "Your own" to "Ваш жест",
+    "Web browser" to "Браузер",
+    "Next layout of the screen" to "Следующая раскладка окон экрана",
+    "Swap the window with the next one on its screen" to "Поменять окно местами со следующим на экране",
+    "Make the window the screen's master" to "Сделать окно главным на экране",
+    "Next screen" to "Следующий экран",
+    "Previous screen" to "Предыдущий экран",
+    "Move the window onto the next screen" to "Перенести окно на следующий экран",
+    "Move the window onto the previous screen" to "Перенести окно на предыдущий экран",
+    "Monitor to the left" to "Монитор слева",
+    "Monitor to the right" to "Монитор справа",
+    "Monitor above" to "Монитор сверху",
+    "Monitor below" to "Монитор снизу",
+    "Window onto the monitor to the left" to "Окно на монитор слева",
+    "Window onto the monitor to the right" to "Окно на монитор справа",
+    "Window onto the monitor above" to "Окно на монитор сверху",
+    "Window onto the monitor below" to "Окно на монитор снизу",
+    "Play or pause the music" to "Музыка: играть или пауза",
+    "Next song" to "Следующая песня",
+    "Previous song" to "Предыдущая песня",
+    "Touchpad off, and on" to "Тачпад выкл/вкл",
+    "Next display mode (laptop screen, mirror, extend)" to "Следующий режим экранов (ноутбук, зеркало, расширить)",
+    "Take the keys back from a window that keeps them" to "Вернуть клавиши у окна, которое их перехватило",
+    "Quit newm (every program closes)" to "Выйти из newm (все программы закроются)",
+    "Switch to a text console (and back to newm)" to "Текстовая консоль (и обратно в newm)",
+    "Resize the window (at the corner nearest the pointer)" to "Менять размер окна (за ближайший к курсору угол)",
+    "Resize the windows on both sides" to "Менять размер окон по обе стороны",
+    "In the overview: go to that window" to "В обзоре: перейти к этому окну",
+    "In the overview: move it, onto another monitor too" to "В обзоре: перенести его, в том числе на другой монитор",
+    "Move in the grid" to "Двигаться по сетке",
+    "A page back, a page on" to "Страница назад, вперёд",
+    "Next program" to "Следующая программа",
+    "Previous program" to "Предыдущая программа",
+    "First program" to "Первая программа",
+    "Last program" to "Последняя программа",
+    "Category before, next (nothing typed)" to "Категория назад, вперёд (если ничего не набрано)",
+    "Start the chosen one" to "Запустить выбранную",
+    "Run what was typed as a command" to "Выполнить набранное как команду",
+    "Paste the chosen one" to "Вставить выбранное",
+    "A part of the screen" to "Часть экрана",
+    "A window" to "Окно",
+    "The whole screen" to "Весь экран",
+    "Several windows, whole" to "Несколько окон целиком",
+    "Move and resize the part, or a new one each time" to "Двигать и тянуть область или каждый раз новую",
+    "The pointer in the picture, or not" to "Курсор на снимке или без него",
+    "Take it" to "Снять",
+    "Next kind (with Shift: the one before)" to "Следующий вид (с Shift: предыдущий)",
+    "Only copy it (not saved)" to "Только скопировать (не сохранять)",
+    "All the windows (over the overview)" to "Все окна (над обзором)",
+    "Move the part (Shift: by ten; Ctrl: resize it)" to "Двигать область (Shift: на десять, Ctrl: менять размер)",
+    "Super + mouse" to "Super + мышь",
+    "Super + middle drag" to "Super + тянуть колесом",
+    "left drag between windows" to "тянуть ЛКМ между окнами",
+    "right drag between windows" to "тянуть ПКМ между окнами",
+    "middle drag between windows" to "тянуть колесом между окнами",
+    "left drag" to "тянуть ЛКМ",
+    "right drag" to "тянуть ПКМ",
+    "middle drag" to "тянуть колесом",
+    "side drag" to "тянуть боковой кнопкой",
+    "extra drag" to "тянуть доп. кнопкой",
+    "mouse" to "мышь",
+    "Click a window" to "Нажать на окно",
+    "Drag a window" to "Тянуть окно",
+    "up / down" to "вверх / вниз",
     // (After "Keyboard: %s (a click switches)": the longer one is tried first.)
     "Keyboard: %s" to "Клавиатура: %s",
 )

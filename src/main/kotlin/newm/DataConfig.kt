@@ -40,11 +40,13 @@ object DataConfig {
                     // Keys as people write them ("Super+Backspace") or newm's ("L-BackSpace"); null or false: none.
                     val bindings = LinkedHashMap<String, (Layout) -> Unit>()
                     val help = LinkedHashMap<String, String>()
+                    val named = LinkedHashMap<String, String>()
                     for ((combo, action) in keys.entries) {
                         val key = KeyNotation.toNewmOrNull(combo.toString(), "$name: keys", problems) ?: continue
                         if (action == null || action == false) {
                             bindings.remove(key)
                             help.remove(key)
+                            named.remove(key)
                             continue
                         }
                         val run = actionOf(action, caulis, "$name: keys.$combo", problems) ?: continue
@@ -52,9 +54,12 @@ object DataConfig {
                         bindings[key] = run
                         // The help (Logo+/) says a named action's words, else the action as it is written ("move -1 0").
                         help[key] = (action as? String)?.let { a -> KeyActions.byName(a.trim().substringBefore(' '))?.description ?: a } ?: ""
+                        // (Its group in the help: by the named action, if it is one.)
+                        (action as? String)?.let { a -> KeyActions.byName(a.trim().substringBefore(' '))?.name }?.let { named[key] = it } ?: named.remove(key)
                     }
                     out["key_bindings"] = { layout: Layout -> bindings.map { (combo, run) -> combo to { run(layout) } } }
                     out["key_help"] = help.toList()
+                    out["key_actions"] = named.toMap()
                 }
                 "rules" -> {
                     val rules = (value as? List<*>)?.filterIsInstance<Map<*, *>>() ?: problems.add("$name: rules is a list of tables").let { continue }

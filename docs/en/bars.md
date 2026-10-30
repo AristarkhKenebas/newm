@@ -90,9 +90,12 @@ quickSettings {
 caffeine { choices = listOf(30, 60, 120, 0) }   // minutes; 0: until turned off
 ```
 
-An icon is a Material symbol newm carries (`wifi`, `bluetooth`, `coffee`, `dark_mode`,
-`palette`, `keyboard`, ...), one of newm's own (`lock`, `bell`, `power`, `settings`, `moon`,
-`sun`, ...), an icon of your icon theme (`firefox`), or a picture's file.
+An icon is a Material symbol (Rounded) newm carries, by its Material name (`wifi`,
+`bluetooth`, `coffee`, `dark_mode`, `palette`, `keyboard`, `lock`, `notifications`,
+`power_settings_new`, `settings`, `bedtime`, `light_mode`, `flight`, `nightlight`, `speed`,
+`memory`, `thermostat`, ...: see `src/main/resources/newm/icons/material/`; the names newm's
+icons had before, `bell`, `power`, `moon`, `sun`, still work), an icon of your icon theme
+(`firefox`), or a picture's file.
 
 ### What the bar needs
 
