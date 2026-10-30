@@ -46,6 +46,13 @@ From now on every change people would notice gets a line under [Unreleased] in t
   there. Both sets are in the template config.kts and newm's built-in keys.
 - The special workspace now shows on the monitor you work on (the focused window's, or the
   pointer's): before, with newm it always showed on the first monitor.
+- A window dragged past a monitor's edge (Super + drag, or the move gesture of the fingers)
+  lands on the other monitor's wall where it is let go, keeping its size: on screens it takes
+  the screen and place there and the screen it left closes the gap (before, its screen place
+  came along from the old monitor and the old screen kept its gap), on newm's wall it keeps its
+  tiles (before, it was resized to cover as many pixels as before). A drag now reaches across
+  the whole view and a window beyond (before, 3 tiles at most), so zoomed out a window can
+  still be dragged onto another monitor. That monitor is the one worked on afterwards.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

@@ -238,6 +238,9 @@ extend, only the laptop, only the other one. The display key (F7 on many laptops
 monitor: nothing has the keys, and a new window opens there). **Logo+Shift+Ctrl+arrows** take
 the focused window onto it: it keeps its size and lands next to the window focused there last.
 The special workspace shows on the monitor you work on.
+A window dragged past the monitor's edge (Logo + drag, or the fingers' move) goes onto the
+next monitor's wall where it is let go, keeping its size; on screens it takes the screen and
+the place there, and the screen it left closes the gap. Zoomed out it reaches as far.
 
 ## Leaving
 

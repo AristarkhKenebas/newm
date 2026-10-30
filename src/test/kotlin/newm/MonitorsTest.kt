@@ -129,4 +129,70 @@ class MonitorsTest {
             assertEquals("HEADLESS-1", t.workMonitor())
         }
     }
+
+    // Alt+drag in the tests (Super tapped alone would be a key of its own): the move gesture of the mouse and the fingers.
+    private val noModifier = mapOf("gesture_bindings" to mapOf("move_resize" to listOf("A", "move-1", "swipe-2")))
+
+    // The fingers' move with Alt held, let go after (the window lands when it is let go).
+    private fun T.drag(dx: Double, dy: Double) {
+        onLoop { caulis.simulateKey(KEY_LEFTALT, true) }
+        eventually { assertTrue(onLoop { layout.hasModifier("A") }, "Alt held") }
+        fingers("move-1", dx, dy)
+        onLoop { caulis.simulateKey(KEY_LEFTALT, false) }
+        settle()
+    }
+
+    @Test
+    fun `dragged past the monitor's edge a window goes onto the other wall, keeping its size`() =
+        withNewm(wall + noModifier, setup = { twoMonitors() }) { t ->
+            t.open("w1")
+            t.open("w2")
+            t.eventually { assertEquals(listOf(1.0, 0.0, 1.0, 1.0), t.tile("w2")) }
+            t.onLoop { t.caulis.simulatePointer(1500.0, 500.0) }
+            // The view shows two tiles of 960: a gesture's 1 is 4 tiles; 0.4 takes w2's middle
+            // (at 1440) 1.6 tiles on, onto the second monitor.
+            t.drag(0.4, 0.0)
+            t.eventually {
+                assertEquals("HEADLESS-2", t.monitorOf("w2"))
+                assertEquals(listOf(1.0, 1.0), t.tile("w2").drop(2), "one tile still")
+                assertEquals("HEADLESS-2", t.workMonitor())
+                t.onLoop { val r = t.layout.shownArea(t.layout.viewOf(t.window("w2"))!!)!!; assertTrue(r.x >= 1920, "on the second monitor: $r") }
+            }
+            assertEquals("HEADLESS-1", t.monitorOf("w1"))
+            // And back, by the fingers the other way.
+            t.drag(-0.4, 0.0)
+            t.eventually { assertEquals("HEADLESS-1", t.monitorOf("w2")) }
+        }
+
+    @Test
+    fun `on screens a window dragged onto the other monitor takes a screen there, the one it left tiled anew`() =
+        withNewm(screens + noModifier, setup = { twoMonitors() }) { t ->
+            t.open("w1")
+            t.open("w2")
+            t.eventually { assertEquals(listOf(0.5, 0.0, 0.5, 1.0), t.tile("w2")) }
+            t.onLoop { t.caulis.simulatePointer(1500.0, 500.0) }
+            // One screen in view: a gesture's 1 is 2 screens; 0.3 takes w2's middle (0.75) to 1.35.
+            t.drag(0.3, 0.0)
+            t.eventually {
+                assertEquals("HEADLESS-2", t.monitorOf("w2"))
+                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w2"), "a screen of its own there")
+                assertEquals(listOf(0.0, 0.0, 1.0, 1.0), t.tile("w1"), "w1 has its screen to itself")
+            }
+        }
+
+    @Test
+    fun `zoomed out a window can still be dragged onto the other monitor`() = withNewm(wall + noModifier, setup = { twoMonitors() }) { t ->
+        t.open("w1")
+        repeat(6) { t.onLoop { t.layout.basicScale(1) } }
+        t.eventually { assertEquals(8.0, t.view()[2]) }
+        t.onLoop { t.caulis.simulatePointer(200.0, 200.0) }
+        // Eight tiles of 240 in view, w1's middle near the monitor's: more than 4 tiles to the
+        // edge (a move reached 3 tiles before).
+        t.drag(0.5, 0.0)
+        t.eventually { assertEquals("HEADLESS-2", t.monitorOf("w1")) }
+    }
+
+    private companion object {
+        const val KEY_LEFTALT = 56
+    }
 }

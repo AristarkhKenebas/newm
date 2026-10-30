@@ -69,8 +69,12 @@ internal class MoveOverlay(private val layout: Layout, private val view: View) :
         } else {
             log.warn("Unexpected: Could not access view $view state")
         }
-        iGrid = Grid("i", pyRound((i - 3) * unit), pyRound((i + 3) * unit), i * unit, confMoveGridOvr(), confMoveGridM())
-        jGrid = Grid("j", pyRound((j - 3) * unit), pyRound((j + 3) * unit), j * unit, confMoveGridOvr(), confMoveGridM())
+        // (As far as the whole view and the window beyond it each way, at least 3 tiles: so it
+        // reaches past the monitor's edge onto the next monitor's wall, zoomed out too.)
+        val reachI = maxOf(3.0, wsState.size + w)
+        val reachJ = maxOf(3.0, wsState.size + h)
+        iGrid = Grid("i", pyRound((i - reachI) * unit), pyRound((i + reachI) * unit), i * unit, confMoveGridOvr(), confMoveGridM())
+        jGrid = Grid("j", pyRound((j - reachJ) * unit), pyRound((j + reachJ) * unit), j * unit, confMoveGridOvr(), confMoveGridM())
     }
 
     override fun resetGesture() {
@@ -243,6 +247,8 @@ internal class ResizeOverlay(private val layout: Layout, private val view: View)
  */
 class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout) {
     private var workspace = layout.workspaces[0]
+    // The workspace it was on at the start (let go on another monitor's: it lands there).
+    private var startWorkspace = workspace
     private var part: MoveResizePart? = null
     // The workspace the view glides on (its state read anew each time: a gesture replaces it).
     private var panWorkspace = workspace
@@ -275,6 +281,7 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         val found = layout.state.findViewOrNull(view)
         if (found != null) {
             workspace = layout.workspaces.first { it.handle == found.third }
+            startWorkspace = workspace
         } else {
             log.warn("Unexpected: Could not access view $view state")
         }
@@ -451,6 +458,20 @@ class MoveResizeOverlay(layout: Layout, private val view: View) : Overlay(layout
         val vs = layout.state.findViewOrNull(view)?.first ?: run {
             log.warn("Unexpected: Error accessing view $view state")
             return null to null
+        }
+        // Let go on another monitor's wall: it lands there (on screens the screen and place under
+        // its middle), the wall it left closes the gap, and that monitor is the one worked on.
+        if (workspace !== startWorkspace) {
+            layout.workOn(workspace, view)
+            if (Screens.on() && vs.isTiled) {
+                val back = layout.state.copy()
+                back.moveViewState(view, workspace, startWorkspace)
+                val landed = Monitors.moved(back, view, workspace, at = vs.i + vs.w / 2 to vs.j + vs.h / 2)
+                if (landed != null) {
+                    log.info { "${view.appId} let go on the monitor of workspace ${workspace.handle}" }
+                    return landed to NewmAnimations["moveResize"]
+                }
+            }
         }
         // On screens: onto the screen and the place under its middle (a resize changes nothing: the layout sizes it).
         if (Screens.on() && vs.isTiled) {

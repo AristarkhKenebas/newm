@@ -917,14 +917,9 @@ class View(val wm: Layout, val window: Window, val handle: Int) : Animate<ViewDo
             }
             for (wsp in wm.workspaces) {
                 if (wsp.posX < cx && cx < wsp.posX + wsp.width && wsp.posY < cy && cy < wsp.posY + wsp.height) {
-                    val wspState0 = wm.state.workspaceState(wsp)
-                    // Keep original size when moving to an overview state or leaving one
-                    val (wp, hp) = if (wspState0.isInOverview() || wsState.isInOverview()) {
-                        w0 to h0
-                    } else {
-                        max(1.0, min(wspState0.size, pyRound(b.w * wspState0.size / wsp.width).toDouble())) to
-                            max(1.0, min(wspState0.size, pyRound(b.h * wspState0.size / wsp.height).toDouble()))
-                    }
+                    // It keeps its size in tiles (on screens its share of a screen): a tile is
+                    // a screen's worth on each monitor, so what it takes of one stays the same.
+                    val (wp, hp) = w0 to h0
                     var ip = 0.0
                     var jp = 0.0
                     val statep = wm.state.copy()
