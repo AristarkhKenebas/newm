@@ -22,6 +22,11 @@ From now on every change people would notice gets a line under [Unreleased] in t
   found its terminal. A terminal server's new window (another foot of the same server) is not
   swallowing the others. The key action `swallow` is described as what it does: the focused
   terminal hides behind the program started from it.
+- A swallowed terminal (hidden behind the window started from it) never gets the focus:
+  moving the focus towards the window, closing a neighbour, or going through the windows in turn
+  went to the invisible terminal. It now moves along with that window on the free wall too, and
+  comes back where the window was when it closes; closing it while hidden no longer makes the
+  screens close a gap that is not there.
 
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again

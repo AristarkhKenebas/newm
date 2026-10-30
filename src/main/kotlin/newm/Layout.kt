@@ -1875,7 +1875,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
             if (bestView == null) {
                 var bestScore = 1000.0
                 for ((k, other) in wsState.views) {
-                    if (!other.isTiled || k == view.handle) continue
+                    if (!other.isTiled || k == view.handle || (other.swallowed != null && other.swallowed != view.handle)) continue
                     var i = s.i
                     var j = s.j
                     var w = s.w
@@ -1904,7 +1904,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
 
         // On screens: the window's screen tiled anew, taking windows of the next ones (screens { pullBack }).
-        val closedPage = s.page.takeIf { s.isTiled && Screens.on() }
+        // (Not for a swallowed one: hidden behind its swallower, nothing visible closed.)
+        val closedPage = s.page.takeIf { s.isTiled && s.swallowed == null && Screens.on() }
         fun LayoutState.withoutIt(): LayoutState {
             val r = unswallowing(view).withoutViewState(view)
             if (closedPage != null) r.workspaceStates[closedWs]?.pullBackScreens(closedPage)
@@ -2543,7 +2544,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         var best: Int? = null
         var bestScore = 1000.0
         for ((k, s) in wsState.views) {
-            if (!s.isTiled) continue
+            // (A swallowed window is hidden behind the one that took its place: never focused so.)
+            if (!s.isTiled || s.swallowed != null) continue
             val sc = score(i, j, w, h, deltaI, deltaJ, s.i, s.j, s.w, s.h)
             if (sc < bestScore) {
                 bestScore = sc
@@ -2554,7 +2556,7 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     }
 
     fun moveNextView(dv: Int = 1, activeWorkspace: Boolean = true) {
-        val list = views(if (activeWorkspace) activeWorkspace() else null)
+        val list = shownViews(if (activeWorkspace) activeWorkspace() else null)
         val focused = findFocusedView()
         if (focused != null && focused in list) {
             focusView(list[Math.floorMod(list.indexOf(focused) + dv, list.size)])
@@ -2571,8 +2573,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
 
     /** The window at [index] in turn, from 0 (newm PR #165's goto_view). */
     fun gotoView(index: Int, activeWorkspace: Boolean = true) {
-        views(if (activeWorkspace) activeWorkspace() else null).getOrNull(index)?.let(::focusView)
+        shownViews(if (activeWorkspace) activeWorkspace() else null).getOrNull(index)?.let(::focusView)
     }
+
+    // The windows in turn, less those swallowed (hidden behind the window that took their place).
+    private fun shownViews(workspace: Workspace?): List<View> =
+        views(workspace).filter { v -> state.findViewOrNull(v)?.first?.swallowed == null }
 
     /** Starts [command] inside newm (as in a shell). */
     fun launch(command: String) = caulis.launch(command)

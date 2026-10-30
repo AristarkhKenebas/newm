@@ -282,6 +282,9 @@ class WorkspaceState(
     fun constrain() {
         // On screens: the windows tiled on theirs (no rows or columns to close: a screen left empty goes).
         if (Screens.on()) tileScreens() else untileScreens()
+        // A swallowed window in its swallower's place on the free wall too (moved, pushed aside
+        // by a new window): when the swallower closes, it comes back there, not where it was.
+        for (s in viewStates.values) s.swallowed?.let { viewStates[it] }?.let { b -> s.i = b.i; s.j = b.j; s.w = b.w; s.h = b.h }
         var (minI, minJ, maxI, maxJ) = extent().toList()
         val minIi = floor(minI)
         val minJi = floor(minJ)

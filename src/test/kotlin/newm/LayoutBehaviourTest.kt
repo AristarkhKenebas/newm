@@ -501,6 +501,42 @@ class LayoutBehaviourTest {
         }
 
     @Test
+    fun `a swallowed terminal never gets the focus while hidden`() = withNewm(mapOf("misc" to mapOf("swallow" to true))) { t ->
+        val before = Swallowing.processOf to Swallowing.parentOf
+        Swallowing.processOf = { v -> when (v.appId) { "foot" -> 100L; "mpv" -> 300L; else -> 999L } }
+        Swallowing.parentOf = { p -> mapOf(300L to 200L, 200L to 100L, 100L to 1L, 999L to 1L)[p] }
+        try {
+            t.open("term", appId = "foot")
+            val gui = t.open("player", appId = "mpv")
+            fun swallowed() = t.onLoop { t.layout.state.viewState(t.layout.viewOf(t.window("term"))!!).swallowed }
+            t.eventually { assertTrue(swallowed() != null, "swallowed") }
+            t.open("w3")
+            t.focus("w3")
+            // Towards the player (which has the terminal's place, the terminal behind it): the player.
+            val (p, w) = t.tile("player") to t.tile("w3")
+            val dx = if (p[0] < w[0]) -1 else 1
+            val dy = if (p[1] < w[1]) -1 else if (p[1] > w[1]) 1 else 0
+            t.onLoop { if (dy != 0) t.layout.move(0, dy) else t.layout.move(dx, 0) }
+            t.eventually { assertEquals("player", t.focused()) }
+            // In turn: never the hidden terminal.
+            repeat(3) {
+                t.onLoop { t.layout.moveNextView() }
+                t.eventually { assertTrue(t.focused() in setOf("player", "w3"), "focused: ${t.focused()}") }
+            }
+            // The player moved: the terminal behind it goes along, and comes back there.
+            t.focus("player")
+            t.onLoop { t.layout.moveFocusedView(0, 1) }
+            t.eventually { assertEquals(t.tile("player"), t.tile("term"), "behind the player") }
+            val place = t.tile("player")
+            gui.close()
+            t.eventually { assertEquals(place, t.tile("term"), "back where the player was") }
+        } finally {
+            Swallowing.processOf = before.first
+            Swallowing.parentOf = before.second
+        }
+    }
+
+    @Test
     fun `the window swallowing a terminal is the one started from it, not the other way`() {
         val parents = mapOf(300L to 200L, 200L to 100L, 100L to 1L, 400L to 1L)
         val windows = listOf("foot" to 100L, "other foot of the same server" to 100L, "firefox" to 400L)
