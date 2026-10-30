@@ -81,7 +81,11 @@ class PanelsLauncher(private val every: (Long, () -> Unit) -> AutoCloseable, spa
         panels.forEach(PanelLauncher::stop)
     }
 
-    fun panelForPid(pid: Int): String? = panels.firstOrNull { it.pid == pid.toLong() }?.panel
+    // (Only a panel program running now, and the very process started: a window of a process
+    // that got its number after it ended is no panel — never the lock screen's place on top.)
+    fun panelForPid(pid: Int): String? = panels.firstOrNull { p ->
+        p.alive && p.pid == pid.toLong() && p.startTime.let { it == null || it == processStartTime(pid.toLong()) }
+    }?.panel
 
     /** The process of [panel]'s program now (null: none running). */
     fun pidOf(panel: String): Long? = panels.firstOrNull { it.panel == panel }?.takeIf { it.alive }?.pid

@@ -59,6 +59,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   (a sudo password in a terminal) went into the dialog and, with Enter, to NetworkManager as the
   network's password. It takes the keyboard only when newm's bar or popups had it, or nothing
   did; else a click on it does.
+- A window is taken for a panel program's (the lock screen's or launcher's, laid out on top of
+  everything) only while that program runs, and only from the very process started: a program that
+  got its process number after it ended, or an X11 window naming that number, is no panel.
 
 ## [2026-10-30, on Caulis 0.1.7]
 
