@@ -2246,6 +2246,8 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         val screen = panelsUi.lockScreenWidget() ?: return log.error("No lock screen to lock with")
         var panelPid = panelLauncher.pidOf("lock")
         log.info { "Locked${if (panelPid != null) " (the lock panel program's window takes the password)" else ""}" }
+        // (Programs' panels, menus and X11's unmanaged windows: hidden too unless lock { showPanels }.)
+        caulis.desktop.panelsShowWhileLocked = confShowPanels()
         caulis.desktop.lockInternally(screen, allowSurface = { surface ->
             // (Only the lock panel program's own windows: any other program stays behind the lock.
             // Its process is asked for each time: started again while locked, the new one's window

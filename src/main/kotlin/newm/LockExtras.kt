@@ -42,6 +42,10 @@ private val log = Logger("lock")
 // lock { layoutOnLock = "keep" }: "first" switches to the first keyboard layout (us of "us,ru")
 // when the screen locks, and back to the one before after unlocking; "keep" leaves it (shown either way).
 internal val confLayoutOnLock = configuredValue("panels.lock.layout_on_lock", "keep")
+// lock { showPanels = false }: programs' panels (waybar, mako's pop-ups), menus and X11's
+// unmanaged windows stay drawn while newm's own lock screen is up (true) — what they show may be
+// private, so not by default (as newm's windows, which fade out).
+internal val confShowPanels = configuredValue("panels.lock.show_panels", false)
 // lock { revealButton = true }: an eye beside the password shows it while held.
 internal val confRevealButton = configuredValue("panels.lock.reveal_button", true)
 // lock { onScreenKeyboard = false }: a small keyboard on the lock screen (touch screens, a broken keyboard).

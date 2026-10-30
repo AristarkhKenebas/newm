@@ -212,6 +212,7 @@ panels {
         // clock = "HH:mm"
         // layoutOnLock = "first"           // the first keyboard layout while locked ("keep": the one in use; shown either way)
         // onScreenKeyboard = true          // a small keyboard on the lock screen (touch screens)
+        // showPanels = true                // panels (waybar, mako) stay drawn while locked
     }
     launcher {
         w = 0.7; h = 0.7

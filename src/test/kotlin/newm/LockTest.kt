@@ -229,6 +229,20 @@ class LockTest {
         }
     }
 
+    @Test
+    fun `programs' panels are hidden behind newm's lock screen unless lock showPanels`() = withNewm { caulis, layout, _ ->
+        for (show in listOf(false, true)) {
+            Config.loadConfig(if (show) mapOf("panels" to mapOf("lock" to mapOf("show_panels" to true))) else emptyMap())
+            try {
+                onLoop(caulis) { layout.ensureLocked(anim = false) }
+                onLoop(caulis) { assertEquals(show, caulis.desktop.panelsShowWhileLocked, "lock { showPanels = $show }") }
+            } finally {
+                Config.loadConfig(emptyMap())
+                onLoop(caulis) { layout.trustedUnlock() }
+            }
+        }
+    }
+
     // --- the harness: newm's layout on a headless Caulis, and a small Wayland client
 
     @Test

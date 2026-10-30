@@ -1040,6 +1040,12 @@ class LockPanelSection internal constructor(values: MutableMap<String, Any?>) : 
      */
     var layoutOnLock by setting<String>("layout_on_lock")
 
+    /**
+     * Programs' panels (a waybar, mako's pop-ups), menus and X11's unmanaged windows stay drawn
+     * behind newm's own lock screen (false: hidden, as the windows are — what they show may be private).
+     */
+    var showPanels by setting<Boolean>("show_panels")
+
     /** An eye beside the password shows it while held (true). */
     var revealButton by setting<Boolean>("reveal_button")
 

@@ -723,6 +723,9 @@ ru: что не даёт экрану гаснуть (видео): по умол
 en: the first keyboard layout while locked ("keep": the one in use; shown either way)
 ru: первая раскладка, пока экран заблокирован ("keep": текущая; видна в любом случае)
 
+en: panels (waybar, mako) stay drawn while locked
+ru: панели (waybar, mako) остаются видны под блокировкой
+
 en: a small keyboard on the lock screen (touch screens)
 ru: маленькая клавиатура на экране блокировки (сенсорные экраны)
 

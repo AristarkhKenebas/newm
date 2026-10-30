@@ -10,6 +10,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
 
 ## [Unreleased]
 
+### Changed
+- Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips
+  and X11's unmanaged windows are hidden as the windows are: what they show (a notification, a
+  window's title) may be private. To keep them drawn: `lock { showPanels = true }` (config.json:
+  `"panels": { "lock": { "show_panels": true } }`).
+
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again
   after a restart, and the new newm came up unlocked: any program of the session could unlock
