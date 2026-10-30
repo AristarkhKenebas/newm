@@ -361,7 +361,7 @@ private val NATIVE_BAR_KEYS = setOf(
     "island_color", "text_color", "accent_color", "left", "center", "right", "clock", "date", "icon_size", "show_percent", "show_passive", "title_width", "tray_hide", "menu_button", "quick_button", "wheel",
     "notifications_button", "layout_names", "outputs", "clock_hint", "hint_delay_ms", "modules", "on",
     "media_width", "system_every_seconds", "memory_as", "temperature_sensor", "temperature_warning", "system_monitor",
-    "weather_place", "weather_every_minutes", "weather_url",
+    "weather_place", "weather_every_minutes", "weather_url", "show_on", "primary_output", "per_output",
 )
 
 // A bar module's settings that are actions (on_scroll, a function of config.lua, gets the notches as it is).

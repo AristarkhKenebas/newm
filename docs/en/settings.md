@@ -280,6 +280,8 @@ Or with newm's own rules, next to the others in `view { rules { } }`:
 | `notificationsButton` | `true` | the notifications' bell before the quick settings' button (also in a `right` of your own, unless you place `notifications` yourself) |
 | `layoutNames` | `{}` | the keyboard layouts' labels: `mapOf("us" to "EN")` (others: `us` EN, else the code's first two letters) |
 | `outputs` | `[]` | the monitors with the bar (`["eDP-1"]`); empty: all |
+| `showOn`, `primaryOutput` | `"all"`, `""` | on several monitors: the bar on each (`"all"`), or on the primary one only (`"primary"`: `primaryOutput`, else the first monitor) |
+| `perOutput` | `{}` | a monitor's own modules: `mapOf("HDMI-A-1" to mapOf("left" to listOf("window"), "right" to listOf("clock")))`; a list not given is the bar's |
 | `mediaWidth` | `220` | the module `media`: the title at its widest |
 | `systemEverySeconds` | `2` | the modules `cpu`, `memory`, `temperature`: how often they are read (only while shown) |
 | `memoryAs` | `"percent"` | the module `memory`: `"percent"` or `"used"` (GB) |

@@ -549,6 +549,25 @@ private val confLayoutNames = BarSetting<Map<String, Any?>>("layout_names", empt
 internal fun barLayoutNames(): Map<String, Any?> = confLayoutNames(false) + confLayoutNames(true)
 // outputs = listOf("eDP-1"): the monitors with the bar (empty: all).
 private val confBarOutputs = BarSetting("outputs", emptyList<String>())
+// showOn = "all": on every monitor, or "primary" only (primaryOutput, else the first monitor).
+private val confShowOn = BarSetting("show_on", "all")
+private val confPrimaryOutput = BarSetting("primary_output", "")
+// perOutput = mapOf("HDMI-A-1" to mapOf("left" to listOf("window"))): a monitor's own modules.
+private val confPerOutput = BarSetting<Map<String, Any?>>("per_output", emptyMap())
+
+/**
+ * Whether the bar shows on [monitor] of [monitors] with showOn = [showOn]: "all" (and
+ * anything else) everywhere, "primary" on [primary] only (or the first monitor when it is "").
+ */
+internal fun barShownOn(showOn: String, primary: String, monitor: String, monitors: List<String>): Boolean =
+    when (showOn.trim().lowercase()) {
+        "primary" -> monitor == primary.trim().ifEmpty { monitors.firstOrNull() ?: monitor }
+        else -> true
+    }
+
+/** A monitor's own list [name] ("left", "center", "right") of perOutput, or null. */
+internal fun perOutputList(perOutput: Map<String, Any?>, monitor: String, name: String): List<String>? =
+    ((perOutput[monitor] as? Map<*, *>)?.get(name) as? List<*>)?.map { it.toString() }
 // clockHint: the clock's hint (java.time's pattern).
 private val confClockHint = BarSetting("clock_hint", "EEEE, d MMMM yyyy")
 // hintDelayMs: how long the pointer stays on a part of the bar before its hint shows.
@@ -668,14 +687,14 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
      * there — also in a right list of one's own written before they existed — unless placed
      * elsewhere or turned off (topBar { quickButton = false; notificationsButton = false }).
      */
-    val left: List<String> get() = confLeft(top).let { left ->
+    val left: List<String> get() = perOutputList(confPerOutput(top), monitor.name, "left") ?: confLeft(top).let { left ->
         // The menu's button (three lines) first, unless it is placed elsewhere or turned off.
         if (confMenuButton(top) && !listWritten(top, "left") && "menu" !in left && "menu" !in confCenter(top) && "menu" !in confRight(top)) listOf("menu") + left else left
     }
     // (macos: the clock at the right end and nothing in the middle, unless the middle is written.)
     private val macosClock: Boolean get() = style == "macos" && !listWritten(top, "center")
-    val center: List<String> get() = if (macosClock) emptyList() else confCenter(top)
-    val right: List<String> get() = rightModules(confRight(top), confLeft(top), center, confQuickButton(top), confNotificationsButton(top)).let { r ->
+    val center: List<String> get() = perOutputList(confPerOutput(top), monitor.name, "center") ?: if (macosClock) emptyList() else confCenter(top)
+    val right: List<String> get() = rightModules(perOutputList(confPerOutput(top), monitor.name, "right") ?: confRight(top), left, center, confQuickButton(top), confNotificationsButton(top)).let { r ->
         if (macosClock && confCenter(top).any { it == "clock" } && "clock" !in r && "clock" !in left) r + "clock" else r
     }
     val clockPattern: String get() = confClock(top)
@@ -720,7 +739,8 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     val allModules: List<String> get() = left + center + right
 
     /** This monitor has the bar (topBar { outputs }: empty is all). */
-    val shownHere: Boolean get() = confBarOutputs(top).let { it.isEmpty() || monitor.name in it }
+    val shownHere: Boolean get() = confBarOutputs(top).let { it.isEmpty() || monitor.name in it } &&
+        barShownOn(confShowOn(top), confPrimaryOutput(top), monitor.name, wm.caulis.desktop.monitors.map { it.name })
 
     /** Tray icons not shown, by their name or title (those the bar shows itself: nm-applet's Wi-Fi, blueman's Bluetooth). */
     val trayHide: List<String> get() = confTrayHide(top)

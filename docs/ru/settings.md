@@ -280,6 +280,8 @@ keys {
 | `quickButton` | `true` | кнопка быстрых настроек перед кнопкой питания (и в вашем `right`, если `quick` не поставлен вами) |
 | `notificationsButton` | `true` | колокольчик уведомлений перед кнопкой быстрых настроек (и в вашем `right`, если `notifications` не поставлен вами) |
 | `layoutNames` | `{}` | подписи раскладок: `mapOf("us" to "EN")` (остальные: `us` — EN, иначе первые две буквы кода) |
+| `showOn`, `primaryOutput` | `"all"`, `""` | на нескольких мониторах: панель на каждом (`"all"`) или только на основном (`"primary"`: `primaryOutput`, иначе первый монитор) |
+| `perOutput` | `{}` | свои модули монитора: `mapOf("HDMI-A-1" to mapOf("left" to listOf("window"), "right" to listOf("clock")))`; не заданный список — как у панели |
 | `mediaWidth` | `220` | модуль `media`: самая большая ширина названия |
 | `systemEverySeconds` | `2` | модули `cpu`, `memory`, `temperature`: как часто читаются (только пока видны) |
 | `memoryAs` | `"percent"` | модуль `memory`: `"percent"` или `"used"` (ГБ) |

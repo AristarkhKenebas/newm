@@ -1428,6 +1428,16 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
     /** The monitors with this bar (`listOf("eDP-1")`); empty, the default: all. */
     var outputs by setting<List<String>>("outputs")
 
+    /** On several monitors: "all" (the default: the bar on each) or "primary" (on [primaryOutput] only, else the first monitor). */
+    var showOn by setting<String>("show_on")
+    var primaryOutput by setting<String>("primary_output")
+
+    /**
+     * A monitor's own modules, by its name: `perOutput = mapOf("HDMI-A-1" to mapOf("left" to
+     * listOf("window"), "right" to listOf("clock")))`; a list not given is the bar's.
+     */
+    var perOutput by setting<Map<String, Map<String, List<String>>>>("per_output")
+
     /** The clock's hint (java.time's pattern: "EEEE, d MMMM yyyy"; "" for none). */
     var clockHint by setting<String>("clock_hint")
 

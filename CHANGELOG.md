@@ -97,6 +97,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - Behind the bell each program's heading says how many notifications it has, and a program
   with many shows the newest three and "N more" (a click shows the rest):
   `notifications { groupAfter = 3 }` (0: all, as before).
+- Bars on several monitors: `topBar { showOn = "primary" }` keeps the bar on the primary monitor
+  only (`primaryOutput`, else the first), and `perOutput = mapOf("HDMI-A-1" to mapOf("left" to
+  listOf("window")))` gives a monitor its own modules. The default stays a bar on each.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips
