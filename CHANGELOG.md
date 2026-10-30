@@ -29,6 +29,11 @@ From now on every change people would notice gets a line under [Unreleased] in t
   stays. Only its colours: `colors { source = "jadefire" }`, also in the colours menu. Its tokens
   go to ~/.cache/newm/colors.json and colors.css for other programs. `focus { shader }` takes
   newm's own border shaders by name.
+- A showcase configuration, `showcase/config.kts` among the templates (written to
+  ~/.config/newm/showcase/ at the first start, its notes in Russian on a Russian system): newm
+  set up to the max in the Jadefire look — the dragon-eye wallpaper, the glowing border, curves
+  and springs, blur, music in a special workspace, screens, a fuller bar, a start with a fade
+  and a sound. docs/en/showcase.md shows it.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

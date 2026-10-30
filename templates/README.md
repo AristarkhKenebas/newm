@@ -10,6 +10,10 @@ newm reads **one** file of this folder, the first it finds:
 `examples/` has `config.lua` and `config.json` with the same look as `config.kts`. To use
 one, move it here and remove (or rename) `config.kts`.
 
+`showcase/config.kts` is newm with everything set up to the max in its Jadefire look (a moving
+wallpaper, a glowing border, springs, blur, music in a special workspace): copy it over
+`config.kts` to start from it (docs/en/showcase.md).
+
 `bars/` has bars to choose from:
 
 - `classic.kts` — the bar of the original newm (top and bottom), to paste into `config.kts`.

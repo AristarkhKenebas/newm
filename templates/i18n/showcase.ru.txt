@@ -1,0 +1,241 @@
+# The notes of showcase/config.kts in Russian, as config.ru.txt for config.kts.
+
+en: newm — the showcase: everything set up to the max, in newm's own "Jadefire" look.
+ru: newm — витрина: всё настроено по максимуму, в собственном облике newm «Jadefire».
+
+en: A starting point to copy and adjust: move this file to ~/.config/newm/config.kts (keep your
+ru: Отправная точка, чтобы скопировать и подогнать под себя: положите этот файл в ~/.config/newm/config.kts (свой
+
+en: own as config.kts.bak) and save. Every line is a setting of newm's; the notes say what it does
+ru: сохраните как config.kts.bak) и сохраните. Каждая строка — настройка newm; заметки говорят, что она делает
+
+en: and what else it can be. The full list: docs/en/settings.md, and docs/en/showcase.md shows it.
+ru: и чем ещё может быть. Полный список: docs/ru/settings.md, а docs/ru/showcase.md показывает её.
+
+en: What it turns on: a moving wallpaper that watches the pointer, newm's Jadefire colours on the
+ru: Что она включает: живые обои, следящие за указателем, цвета Jadefire на
+
+en: bar, the menus, the cards and the lock screen, a glowing focus border, rich animations with
+ru: панели, в меню, на карточках и экране блокировки, светящуюся рамку фокуса, богатые анимации с
+
+en: curves and springs, blur and round corners, a special workspace for music, screens of two
+ru: кривыми и пружинами, размытие и скруглённые углы, особое рабочее место для музыки, экраны по два
+
+en: windows, a fuller bar, a sound and a fade at the start, and programs started with the session.
+ru: окна, панель полнее, звук и плавное появление на старте и программы, запускаемые с сессией.
+
+en: --- Your programs --------------------------------------------------------------------------
+ru: --- Ваши программы ------------------------------------------------------------------------
+
+en: $TERMINAL, else the first installed: alacritty, foot, kitty, ...
+ru: $TERMINAL, иначе первый установленный: alacritty, foot, kitty, ...
+
+en: lives in the special workspace "music" (Super+M)
+ru: живёт на особом рабочем месте "music" (Super+M)
+
+en: --- The look: Jadefire ---------------------------------------------------------------------
+ru: --- Облик: Jadefire -----------------------------------------------------------------------
+
+en: newm's own look: jade and amber on near-black green, an ember red for what is urgent. It sets
+ru: собственный облик newm: нефрит и янтарь на почти чёрном зелёном, красные угли для срочного. Он задаёт
+
+en: the colours (bar, menus, cards, lock screen), the focus border's shader and the wallpaper —
+ru: цвета (панель, меню, карточки, экран блокировки), шейдер рамки фокуса и обои —
+
+en: each of them can still be set below, and what is set here wins.
+ru: каждое из них можно задать ниже, и заданное здесь важнее.
+
+en: Jadefire is made for the dark; "auto" follows the quick settings
+ru: Jadefire сделан для тёмного; "auto" следует быстрым настройкам
+
+en: the screen's own corners rounded
+ru: скругление углов самого экрана
+
+en: A moving wallpaper drawn by the GPU: a dragon's eye whose slit pupil follows the pointer.
+ru: Живые обои, которые рисует видеокарта: глаз дракона, чей зрачок-щель следит за указателем.
+
+en: Others of newm's: "ember-sky", "scales" (ripples from clicks), "deep-forest", "molten";
+ru: Другие от newm: "ember-sky", "scales" (рябь от щелчков), "deep-forest", "molten";
+
+en: or a GLSL file of your own next to this one ("my-wallpaper.glsl", read again when saved).
+ru: или ваш файл GLSL рядом с этим ("my-wallpaper.glsl", перечитывается при сохранении).
+
+en: it moves and zooms with the view, as a picture does
+ru: двигаются и масштабируются с видом, как картинка
+
+en: frames a second while it is seen (never under a fullscreen window)
+ru: кадров в секунду, пока их видно (никогда — под полноэкранным окном)
+
+en: fewer on battery
+ru: меньше от батареи
+
+en: it stands still after two minutes without input
+ru: замирают после двух минут без ввода
+
+en: half the pixels each way: a quarter of the GPU's work (4K: by itself)
+ru: вдвое меньше пикселей по каждой стороне: четверть работы видеокарты (на 4K — сами)
+
+en: its pace
+ru: их темп
+
+en: how strongly it glows
+ru: как сильно они светятся
+
+en: the eye's size; blink now and then (0: never)
+ru: размер глаза; иногда моргать (0: никогда)
+
+en: jade, amber, ember, the dark
+ru: нефрит, янтарь, угли, тьма
+
+en: Windows: gaps, round corners, a little see-through when not focused.
+ru: Окна: промежутки, скруглённые углы, чуть прозрачные без фокуса.
+
+en: windows without the focus a touch see-through
+ru: окна без фокуса слегка прозрачны
+
+en: windows fade in and out
+ru: окна плавно появляются и исчезают
+
+en: The focus border: the theme's shader — jade flowing into amber, a spark running round,
+ru: Рамка фокуса: шейдер облика — нефрит перетекает в янтарь, по кругу бежит искра,
+
+en: an urgent window pulsing ember. A plain gradient would be: color = "rgba(3ddc97ff) rgba(f2b33dff) 45deg".
+ru: срочное окно пульсирует углями. Простой градиент был бы таким: color = "rgba(3ddc97ff) rgba(f2b33dff) 45deg".
+
+en: how far outside the window
+ru: насколько снаружи окна
+
+en: the border glides to the next window
+ru: рамка плавно переходит к следующему окну
+
+en: a window wanting attention
+ru: окно, которое просит внимания
+
+en: set by the theme; or "border.glsl" of your own
+ru: задан обликом; или свой "border.glsl"
+
+en: --- Animations: curves and springs -----------------------------------------------------------
+ru: --- Анимации: кривые и пружины -----------------------------------------------------------
+
+en: newm's usual set, all on
+ru: привычный набор newm, всё включено
+
+en: the global time
+ru: общее время
+
+en: a Bézier curve of your own (Hyprland's numbers): quick, a hair past
+ru: своя кривая Безье (числа как в Hyprland): быстро, чуть дальше и назад
+
+en: a spring: settles with a soft bounce
+ru: пружина: успокаивается с мягким отскоком
+
+en: the global curve
+ru: общая кривая
+
+en: windows spring into their places
+ru: окна пружинят на свои места
+
+en: the view gliding over the wall
+ru: вид скользит по стене
+
+en: the focus border's glide
+ru: скольжение рамки фокуса
+
+en: the wallpaper fading in the first time
+ru: обои плавно появляются в первый раз
+
+en: --- Start: dark, then a fade, with a sound ------------------------------------------------------
+ru: --- Старт: темно, затем плавное появление со звуком ------------------------------------------
+
+en: Jadefire's abyss until newm is ready
+ru: «бездна» Jadefire, пока newm не готов
+
+en: "airy", "classic", "glass", "soft", or file = "~/sounds/hello.ogg"
+ru: "airy", "classic", "glass", "soft" или file = "~/sounds/hello.ogg"
+
+en: as newm fades in
+ru: когда newm проявляется
+
+en: Programs started with the session, one after another once newm shows.
+ru: Программы, запускаемые с сессией, одна за другой, когда newm показался.
+
+en: the music player, straight into its special workspace
+ru: музыкальный проигрыватель, сразу на своё особое рабочее место
+
+en: also the programs of ~/.config/autostart
+ru: а также программы из ~/.config/autostart
+
+en: --- The bar: islands in jade ----------------------------------------------------------------------
+ru: --- Панель: нефритовые острова -------------------------------------------------------------
+
+en: any installed font; unset: the system's
+ru: любой установленный шрифт; не задан: системный
+
+en: what is behind the islands blurred
+ru: то, что за островами, размыто
+
+en: the launcher's button, a small map of your wall, the window
+ru: кнопка лаунчера, маленькая карта вашей стены, окно
+
+en: A module of your own: the processor's load, every 5 seconds; a click opens btop.
+ru: Свой модуль: загрузка процессора каждые 5 секунд; щелчок открывает btop.
+
+en: The lock screen: Jadefire's colours (set by the theme too), a big clock.
+ru: Экран блокировки: цвета Jadefire (их задаёт и облик), большие часы.
+
+en: The launcher (Super+D): your programs, those you start most first.
+ru: Лаунчер (Super+D): ваши программы, чаще запускаемые — первыми.
+
+en: Wi-Fi, a cable or Bluetooth coming or going: a card
+ru: Wi-Fi, кабель или Bluetooth появились или пропали: карточка
+
+en: A cursor theme that suits Jadefire (if installed): Bibata Modern Classic or Ice.
+ru: Тема курсора, подходящая к Jadefire (если установлена): Bibata Modern Classic или Ice.
+
+en: --- Layout: screens of two windows ---------------------------------------------------------------
+ru: --- Раскладка: экраны по два окна ---------------------------------------------------------
+
+en: "rows", "grid", "master", "dwindle", "monocle"
+ru: "rows", "grid", "master", "dwindle", "monocle"
+
+en: what Super+Space goes through
+ru: что перебирает Super+Space
+
+en: --- Special workspace: music above the wall -----------------------------------------------------
+ru: --- Особое рабочее место: музыка над стеной -------------------------------------------------
+
+en: the wall behind darker
+ru: стена позади темнее
+
+en: and blurred
+ru: и размыта
+
+en: the player always opens there, hidden until Super+M
+ru: проигрыватель всегда открывается там, скрытый до Super+M
+
+en: --- Window rules: floating tools, see-through terminals with blur -----------------------------------
+ru: --- Правила окон: плавающие утилиты, прозрачные терминалы с размытием -----------------------
+
+en: --- Input and gestures -----------------------------------------------------------------------------
+ru: --- Ввод и жесты -------------------------------------------------------------------------
+
+en: what a gesture does, shown at the bottom while it runs
+ru: что делает жест — внизу, пока он идёт
+
+en: seconds without input: dim, lock, suspend
+ru: секунды без ввода: притушить, заблокировать, усыпить
+
+en: --- Keys ------------------------------------------------------------------------------------------
+ru: --- Клавиши ------------------------------------------------------------------------------
+
+en: Super tapped alone: all windows
+ru: одна нажатая Super: все окна
+
+en: the screen's next layout (cycle above)
+ru: следующая раскладка экрана (cycle выше)
+
+en: the music, and back
+ru: музыка, и обратно
+
+en: A key with code of your own inside { }: any of newm's functions, any Kotlin.
+ru: Клавиша со своим кодом внутри { }: любые функции newm, любой Kotlin.

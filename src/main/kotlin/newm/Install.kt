@@ -150,7 +150,7 @@ The guide: https://github.com/AristarkhKenebas/newm/blob/master/docs/en/README.m
 object Templates {
     val FILES = listOf(
         "config.kts", "README.md", "examples/config.lua", "examples/config.json",
-        "bars/classic.kts", "bars/waybar/config.jsonc", "bars/waybar/style.css",
+        "bars/classic.kts", "bars/waybar/config.jsonc", "bars/waybar/style.css", "showcase/config.kts",
     )
 
     /**
@@ -162,10 +162,10 @@ object Templates {
             val target = dir.resolve(name)
             if (Files.exists(target)) continue
             Files.createDirectories(target.parent)
-            if (name == "config.kts") {
+            if (name == "config.kts" || name == "showcase/config.kts") {
                 val english = Templates::class.java.getResourceAsStream("/newm/templates/$name")!!.use { String(it.readAllBytes()) }
-                Files.writeString(target, TemplateText.translate(english, language))
-                log.info { "config.kts written with its notes in \"$language\"" }
+                Files.writeString(target, TemplateText.translate(english, language, if (name == "config.kts") "config" else "showcase"))
+                log.info { "$name written with its notes in \"$language\"" }
             } else {
                 Templates::class.java.getResourceAsStream("/newm/templates/$name")!!.use { Files.copy(it, target) }
             }
@@ -182,8 +182,9 @@ object Templates {
                 val target = to.resolve(from.relativize(file).toString())
                 if (Files.exists(target)) continue
                 Files.createDirectories(target.parent)
-                if (from.relativize(file).toString() == "config.kts") {
-                    Files.writeString(target, TemplateText.translate(Files.readString(file), language))
+                val relative = from.relativize(file).toString()
+                if (relative == "config.kts" || relative == "showcase/config.kts") {
+                    Files.writeString(target, TemplateText.translate(Files.readString(file), language, if (relative == "config.kts") "config" else "showcase"))
                 } else {
                     Files.copy(file, target)
                 }

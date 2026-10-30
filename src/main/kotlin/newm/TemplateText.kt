@@ -31,14 +31,18 @@ object TemplateText {
         return if (code in LANGUAGES) code else "en"
     }
 
-    // Each language's table: the English note → its words (read once).
-    private val tables = HashMap<String, Map<String, String>>()
+    // Each template's and language's table: the English note → its words (read once).
+    private val tables = HashMap<Pair<String, String>, Map<String, String>>()
 
-    /** The table of [language]: each English note and its words there (empty for English or a language without one). */
-    fun table(language: String): Map<String, String> = tables.getOrPut(language) {
+    /**
+     * The table of [language] for the template [of] ("config": config.kts; "showcase":
+     * showcase/config.kts): each English note and its words there (empty for English or a
+     * language without one).
+     */
+    fun table(language: String, of: String = "config"): Map<String, String> = tables.getOrPut(language to of) {
         if (language == "en") return@getOrPut emptyMap()
-        val text = TemplateText::class.java.getResourceAsStream("/newm/templates/i18n/config.$language.txt")?.use { String(it.readAllBytes()) }
-            ?: return@getOrPut emptyMap<String, String>().also { log.warn("No notes in \"$language\" for config.kts: English") }
+        val text = TemplateText::class.java.getResourceAsStream("/newm/templates/i18n/$of.$language.txt")?.use { String(it.readAllBytes()) }
+            ?: return@getOrPut emptyMap<String, String>().also { log.warn("No notes in \"$language\" for $of: English") }
         parse(text, language)
     }
 
@@ -64,16 +68,16 @@ object TemplateText {
 
     // Any language's words of a note → its English (to write a template in another language
     // from one already translated, the system's /etc/newm).
-    private fun english(note: String): String {
-        for (language in LANGUAGES) table(language).entries.firstOrNull { it.value == note }?.let { return it.key }
+    private fun english(note: String, of: String): String {
+        for (language in LANGUAGES) table(language, of).entries.firstOrNull { it.value == note }?.let { return it.key }
         return note
     }
 
-    /** [template] (config.kts, its notes in any language newm knows) with its notes in [language]. */
-    fun translate(template: String, language: String): String {
-        val table = table(language)
+    /** [template] (config.kts, or the template [of], its notes in any language newm knows) with its notes in [language]. */
+    fun translate(template: String, language: String, of: String = "config"): String {
+        val table = table(language, of)
         return mapNotes(template) { note ->
-            val en = english(note)
+            val en = english(note, of)
             if (language == "en") en else table[en] ?: note
         }
     }
