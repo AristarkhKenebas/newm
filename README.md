@@ -26,6 +26,9 @@ window gets its new size, so it stays usable. Tap Logo alone to see all of them 
 |---|---|
 | ![Every window at once](docs/assets/overview.png) | ![The launcher](docs/assets/launcher.png) |
 
+<p align="center"><img src="docs/assets/wallpapers/dragon-eye.webp" alt="The dragon-eye wallpaper following the pointer" width="560"><br>
+<sub>A moving wallpaper that follows the pointer, in newm's own <a href="docs/en/brand.md">Jadefire</a> look — <a href="docs/en/showcase.md">the showcase configuration</a></sub></p>
+
 ## What it has
 
 - **Touchpad gestures** that follow your fingers: move, zoom, the overview, the launcher.

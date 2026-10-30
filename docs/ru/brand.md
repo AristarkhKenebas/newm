@@ -18,7 +18,7 @@ theme = "jadefire"
   (`background { shader = "dragon-eye" }`). Своя картинка (`background { path }`) остаётся на месте.
 
 То, что вы задали сами, всегда важнее: `theme = "jadefire"` и `focus { width = 2.0 }` — это
-Jadefire с более тонкой рамкой.
+Jadefire с более тонкой рамкой. [Конфигурация-витрина](showcase.md) показывает всё это вместе.
 
 ## Эмблема
 

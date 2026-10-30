@@ -19,7 +19,7 @@ It sets, wherever your configuration says nothing itself:
   its place.
 
 What you set yourself always wins: `theme = "jadefire"` and `focus { width = 2.0 }` is Jadefire
-with a thinner border.
+with a thinner border. The [showcase configuration](showcase.md) shows all of it set up.
 
 ## The emblem
 

@@ -24,6 +24,7 @@ Then, when you need them:
   key can do, and `newm cmd`.
 - [The start](startup.md): programs started with the session, the smooth start and its sound.
 - [newm as the login screen](greeter.md): greetd with newm's own lock screen asking for the user and password.
+- [The showcase](showcase.md): a configuration with everything set up to the max, ready to copy.
 - [The Jadefire look](brand.md): newm's own colours, focus border and moving wallpapers, at once with `theme = "jadefire"`.
 - [Animations](animations.md): newm's look, on in the starting configuration; off with one line, or each one by name as in Hyprland.
 - [Bars](bars.md): newm's own bar and its popups, waybar and other bars, or no bar at all.

@@ -27,6 +27,9 @@ newm — это композитор Wayland. Обычные оконные ме
 |---|---|
 | ![Все окна сразу](docs/assets/overview.png) | ![Лаунчер](docs/assets/launcher.png) |
 
+<p align="center"><img src="docs/assets/wallpapers/dragon-eye.webp" alt="Обои dragon-eye следят за указателем" width="560"><br>
+<sub>Живые обои, которые следят за указателем, в собственном облике newm <a href="docs/ru/brand.md">Jadefire</a> — <a href="docs/ru/showcase.md">конфигурация-витрина</a></sub></p>
+
 ## Что в нём есть
 
 - **Жесты тачпада**, которые следуют за пальцами: движение, масштаб, обзор, лаунчер.

@@ -1,8 +1,12 @@
 # Credits for the pictures in this folder
 
-- `desktop.png`, `overview.png`, `launcher.png`: screenshots of newm,
-  taken in a headless newm (`CAULIS_MODE=headless`, 2560×1600 at scale 1.25) with `grim`.
-- The wallpaper in them is newm's default wallpaper (`templates/wallpaper.jpg`, shown as
+- `desktop.png`, `overview.png`, `launcher.png`: screenshots of newm with the showcase
+  configuration (`templates/showcase/config.kts`, the Jadefire look and newm's own "dragon-eye"
+  wallpaper shader), taken in a headless newm (`CAULIS_MODE=headless`, 2560×1600 at scale 1.25)
+  with `grim`; the bar without its network and Bluetooth parts.
+- `wallpapers/*.jpg`, `wallpapers/dragon-eye.webp`: newm's own wallpaper shaders, drawn on the
+  GPU with the same values newm hands them (the pointer drawn into the animation); MIT as newm.
+- newm's default picture wallpaper (`templates/wallpaper.jpg`, shown as
   `resource:wallpaper.jpg`): "On the edge of reflection", the northern lights over Þórsmörk,
   Iceland, photographed by Jonatan Pie (Unsplash user r3dmax) on 1 March 2017.
   Licence: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (published on
@@ -15,5 +19,5 @@
 - `brand/logo.svg`, `brand/logo-256.png`, `brand/banner.png`: newm's own emblem and banner
   (the Jadefire look), made for newm with its own shader "dragon-eye" (rendered on the GPU) and
   the Inter typeface (SIL Open Font License 1.1); MIT as the rest of newm. No outside pictures.
-- The terminal is [foot](https://codeberg.org/dnkl/foot), with the Catppuccin Mocha colours;
+- The terminal is [foot](https://codeberg.org/dnkl/foot), with the Jadefire colours (docs/en/brand.md);
   the programs in it are `bat`, `fastfetch` and `btop`.
