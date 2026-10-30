@@ -679,6 +679,9 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         override fun moveRequested(window: Window): Boolean = true
 
         override fun resizeRequested(window: Window, edges: Int): Boolean = true
+
+        // The special workspace shows on the monitor worked on: the focused window's, or the pointer's.
+        override fun workMonitor(): Monitor? = activeWorkspace().outputs.firstOrNull { it != null }
     }
 
     // A view's downstream state as Caulis places windows: its box, the part shown (the mask,
@@ -1951,6 +1954,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }
     }
 
+    /** [ws] is the wall worked on now ([view] the window focused there), whatever the pointer's monitor. */
+    internal fun workOn(ws: Workspace, view: View?) {
+        view?.let { ws.focusViewHint = it.handle }
+        activeWorkspacePair = activeWorkspacePair.first to ws
+    }
+
     fun focusHint(view: View) {
         val wsHandle = state.findViewOrNull(view)?.third ?: return log.warn("Missing state: $this")
         val ws = workspaces.firstOrNull { it.handle == wsHandle } ?: return
@@ -2608,16 +2617,50 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
     fun moveWorkspace(ds: Int = 1) {
         val ws = activeWorkspace()
         val i = workspaces.indexOfFirst { it.handle == ws.handle }
-        val wsNew = workspaces[Math.floorMod(i + ds, workspaces.size)]
-        val list = views(wsNew)
-        wsNew.focusViewHint?.let { hint ->
-            val view = list.filter { it.handle == hint }
-            if (view.size == 1) {
-                focusView(view[0])
-                return
-            }
-        }
-        if (list.isNotEmpty()) focusView(list[0])
+        focusWorkspace(workspaces[Math.floorMod(i + ds, workspaces.size)])
+    }
+
+    // --- monitors: each with a wall of its own ---------------------------------------------------
+
+    /** The monitor in the direction [dx], [dy] (-1, 0 or 1) gets the focus: the window focused there last, else its first. */
+    fun focusMonitor(dx: Int, dy: Int) {
+        val target = Monitors.beside(workspaces, activeWorkspace(), dx, dy) ?: return log.info { "No monitor that way ($dx, $dy)" }
+        focusWorkspace(target)
+    }
+
+    // [ws] (a monitor's wall) is the one worked on: the window focused there last, else its
+    // first; none there: nothing has the keys, and a new window opens there.
+    private fun focusWorkspace(ws: Workspace) {
+        val list = views(ws)
+        val view = ws.focusViewHint?.let { hint -> list.singleOrNull { it.handle == hint } } ?: list.firstOrNull()
+        if (view != null) return focusView(view)
+        log.info { "Monitor of workspace ${ws.handle}: no windows there, nothing focused" }
+        activeWorkspacePair = activeWorkspacePair.first to ws
+        caulis.desktop.focus(null)
+    }
+
+    /** The focused window (a dialog: its window, which takes it along) onto the monitor in the direction [dx], [dy] (-1, 0 or 1). */
+    fun moveFocusedViewToMonitor(dx: Int, dy: Int) {
+        val view = findFocusedView()?.let { v -> generateSequence(v) { it.parent }.last() } ?: return
+        val from = state.findViewOrNull(view)?.third?.let { h -> workspaces.firstOrNull { it.handle == h } } ?: return
+        val target = Monitors.beside(workspaces, from, dx, dy) ?: return log.info { "No monitor that way ($dx, $dy)" }
+        moveViewToWorkspace(view, target)
+    }
+
+    /**
+     * [view] onto [target] (another monitor's wall), focused there: it keeps its size and goes
+     * next to the window focused there last, or (on [at], tiles of [target]'s wall) where it
+     * was let go. A fullscreen window leaves fullscreen first.
+     */
+    internal fun moveViewToWorkspace(view: View, target: Workspace, at: Pair<Double, Double>? = null) {
+        if (state.findViewOrNull(view)?.second?.isFullscreen() == true && view.isFocused()) toggleFullscreen(false)
+        animateTo({ s ->
+            val next = Monitors.moved(s, view, target, at) ?: return@animateTo null to null
+            if (!view.isFocused()) view.focus()
+            workOn(target, view)
+            focusBorders.updateFocus(view, null to next)
+            null to next
+        }, "windowsMove")
     }
 
     // --- 5. the focused view --------------------------------------------------------------------------------
@@ -2645,22 +2688,12 @@ class Layout(val caulis: Caulis) : Animate<LayoutDown>(), Animatable {
         }, "windowsMove")
     }
 
+    /** The focused window onto the next monitor ([ds] 1) or the one before (-1), keeping its size. */
     fun changeFocusedViewWorkspace(ds: Int = 1) {
-        animateTo({ s ->
-            val view = findFocusedView() ?: return@animateTo null to s
-            try {
-                val (vs, _, wsHandle) = s.findView(view)
-                val i = workspaces.indexOfFirst { it.handle == wsHandle }
-                val ws = workspaces[i]
-                if (!vs.isTiled) return@animateTo null to null
-                val wsNew = workspaces[Math.floorMod(i + ds, workspaces.size)]
-                if (ws === wsNew) return@animateTo null to null
-                val without = s.withoutViewState(view)
-                view.showTiled(wsNew, without, without.workspaceState(wsNew))
-            } catch (e: Exception) {
-                null to s
-            }
-        }, "windowsMove")
+        val view = findFocusedView()?.let { v -> generateSequence(v) { it.parent }.last() } ?: return
+        val i = state.findViewOrNull(view)?.third?.let { h -> workspaces.indexOfFirst { it.handle == h } }?.takeIf { it >= 0 } ?: return
+        val target = workspaces[Math.floorMod(i + ds, workspaces.size)]
+        if (target !== workspaces[i]) moveViewToWorkspace(view, target)
     }
 
     fun moveFocusedView(di: Int, dj: Int) {

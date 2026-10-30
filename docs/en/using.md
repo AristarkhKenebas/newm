@@ -234,6 +234,11 @@ in for the first time is used beside the laptop's screen, and a choice is shown:
 extend, only the laptop, only the other one. The display key (F7 on many laptops) or
 `newm cmd displays mirror` (or `extend`, `laptop`, `other`) changes it later.
 
+**Logo+Alt+arrows** go to the monitor that way (the window focused there last; an empty
+monitor: nothing has the keys, and a new window opens there). **Logo+Shift+Ctrl+arrows** take
+the focused window onto it: it keeps its size and lands next to the window focused there last.
+The special workspace shows on the monitor you work on.
+
 ## Leaving
 
 **Logo+Shift+Escape** or "Log out" in the power menu. From another console (Ctrl+Alt+F3),

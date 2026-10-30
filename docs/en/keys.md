@@ -90,6 +90,14 @@ action, or are your own: `bind("Super+B", "launch", "firefox", description = "Fi
 | `previous-monitor` |  | Previous monitor |
 | `window-to-next-monitor` |  | Window onto the next monitor |
 | `window-to-previous-monitor` |  | Window onto the previous monitor |
+| `focus-monitor-left` |  | Monitor to the left |
+| `focus-monitor-right` |  | Monitor to the right |
+| `focus-monitor-up` |  | Monitor above |
+| `focus-monitor-down` |  | Monitor below |
+| `window-to-monitor-left` |  | Window onto the monitor to the left (it keeps its size) |
+| `window-to-monitor-right` |  | Window onto the monitor to the right |
+| `window-to-monitor-up` |  | Window onto the monitor above |
+| `window-to-monitor-down` |  | Window onto the monitor below |
 | `special-workspace` | `[name]` | Special workspace, and back |
 | `to-special-workspace` | `[name]` | Window into the special workspace |
 | `from-special-workspace` |  | Window back onto the wall |
@@ -112,6 +120,13 @@ The screens' keys of the template (screens { }): Super+Space `next-layout`, Supe
 `window-to-next-screen` / `window-to-previous-screen`. On screens Super+Shift+arrows swap the
 window with its neighbour on the screen (at the screen's edge: onto the next screen), and
 Super+Ctrl+arrows resize it within its screen.
+
+Several monitors (each has a wall of its own): Super+Alt+arrows `focus-monitor-left` ...
+(the monitor that way gets the focus: the window focused there last; an empty one: nothing
+has the keys, a new window opens there), Super+Shift+Ctrl+arrows `window-to-monitor-left` ...
+(the window goes onto the monitor that way and keeps its size: on newm's wall its tiles, on
+screens a place on a screen next to the window focused there last; a fullscreen window leaves
+fullscreen first; its dialogs go along). With one monitor they do nothing.
 
 Special workspaces by name — a music player kept in "music", shown and hidden with Super+M:
 

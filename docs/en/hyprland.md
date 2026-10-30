@@ -218,7 +218,7 @@ newm's animations are named as Hyprland's, with Hyprland's curves and springs; s
 | `workspace n` | `"go-to-window", "n"` (the n-th window), `"next-screen"`, `"previous-screen"` |
 | `movetoworkspace n` | `"window-to-next-screen"`, `"window-to-previous-screen"` |
 | `togglespecialworkspace`, `movetoworkspace special` | `"special-workspace"`, `"to-special-workspace"`, `"from-special-workspace"` |
-| `focusmonitor`, `movewindow mon:` | `"next-monitor"`, `"window-to-next-monitor"` |
+| `focusmonitor`, `movewindow mon:` | `"next-monitor"`, `"window-to-next-monitor"`; by direction `"focus-monitor-left"`, `"window-to-monitor-left"` (and `-right`, `-up`, `-down`) |
 | `cyclenext` | `"next-window"`, `"previous-window"` |
 | `layoutmsg` (`togglesplit`, `swapwithmaster`, ...) | `"next-layout"`, `"promote-to-master"` |
 | `toggle_swallow` | `"swallow"` |

@@ -37,6 +37,15 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - `focus { fps = 30 }`: a moving focus border (a turning gradient, a shader using time) is drawn
   anew at most so many times a second (0, the default: every frame as before); half the work on
   a 60 Hz screen. The Jadefire look sets 30.
+- Several monitors: Super+Alt+arrows give the focus to the monitor that way
+  (`focus-monitor-left`, `-right`, `-up`, `-down`), Super+Shift+Ctrl+arrows move the focused
+  window onto it (`window-to-monitor-left`, ...). The window keeps its size (on newm's wall its
+  tiles, on screens a place on a screen) and lands next to the window focused there last, as
+  "compact" places a new window; its dialogs go along; a fullscreen window leaves fullscreen
+  first. An empty monitor can have the focus: nothing has the keys then and a new window opens
+  there. Both sets are in the template config.kts and newm's built-in keys.
+- The special workspace now shows on the monitor you work on (the focused window's, or the
+  pointer's): before, with newm it always showed on the first monitor.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips
@@ -46,6 +55,11 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - The clipboard's history keeps pictures up to 64 MB in all (`clipboard { picturesTotalMb }`,
   config.json `clipboard.pictures_total_mb`; it was 256 MB, fixed). A photo kept as PNG may be many
   times its JPEG: a few of them filled newm's memory (at most 384 MB for Java) and could stop it.
+- `window-to-next-monitor` / `window-to-previous-monitor` keep the window's size and place it
+  next to the window focused there last (before: one tile, placed as a new window), move
+  floating windows too, and take a window's dialogs along. `next-monitor` /
+  `previous-monitor` to an empty monitor now make that monitor the one worked on (nothing
+  focused) instead of doing nothing.
 
 ### Fixed
 - `misc { swallow = true }` works: a window started from a terminal (mpv from foot)

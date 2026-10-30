@@ -597,6 +597,9 @@ ru: следующая раскладка экрана
 en: the window changes places with the next one
 ru: окно меняется местами со следующим
 
+en: it keeps its size
+ru: размер сохраняется
+
 en: the window becomes the screen's master
 ru: окно становится главным на экране
 

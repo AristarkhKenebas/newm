@@ -499,6 +499,14 @@ keys {
     // bind("Super+W",            "swallow")                   // the terminal hides behind what it started
 
     // Monitors: each has a wall of its own
+    bind("Super+Alt+Left",        "focus-monitor-left")
+    bind("Super+Alt+Right",       "focus-monitor-right")
+    bind("Super+Alt+Up",          "focus-monitor-up")
+    bind("Super+Alt+Down",        "focus-monitor-down")
+    bind("Super+Shift+Ctrl+Left", "window-to-monitor-left")    // it keeps its size
+    bind("Super+Shift+Ctrl+Right", "window-to-monitor-right")
+    bind("Super+Shift+Ctrl+Up",   "window-to-monitor-up")
+    bind("Super+Shift+Ctrl+Down", "window-to-monitor-down")
     // bind("Super+Period",       "next-monitor")
     // bind("Super+Shift+Period", "window-to-next-monitor")
 
