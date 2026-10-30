@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -94,6 +95,15 @@ private val confPerKind = configuredValue("panels.launcher.per_kind", 6)
 // launcher { pinned = listOf("firefox", "foot"); recent = 0 }: programs always first, and those started last.
 private val confPinned = configuredValue("panels.launcher.pinned", emptyList<String>())
 private val confRecent = configuredValue("panels.launcher.recent", 0)
+// launcher { view = "list" }: "list" (newm's), "grid" (pages of icons), "categories" (XDG categories beside the list); compact: smaller rows.
+private val confView = configuredValue("panels.launcher.view", "list")
+private val confCompact = configuredValue("panels.launcher.compact", false)
+private val confGridColumns = configuredValue("panels.launcher.grid_columns", 6)
+private val confGridRows = configuredValue("panels.launcher.grid_rows", 4)
+private val confCategories = configuredValue<Map<String, Any?>>("panels.launcher.categories", DEFAULT_LAUNCHER_CATEGORIES)
+
+/** The launcher's view now: "list", "grid" or "categories" (anything else: list). */
+internal fun launcherView(): String = confView().trim().lowercase().takeIf { it in setOf("list", "grid", "categories") } ?: "list"
 
 /**
  * What a key of `launcher { keys { "C-n" { next() } } }` can do: choose the next or the
@@ -311,7 +321,23 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             pinned.size to pinned + recent
         }
     }
-    val listed = if (head.isEmpty()) shown else head + shown
+    // The view (launcher { view }): a grid of pages, or the categories beside the list.
+    val view = launcherView()
+    val grid = view == "grid"
+    val byCategory = view == "categories"
+    val headings = remember(view) { confCategories().mapValues { (_, v) -> (v as? List<*>)?.map { it.toString() }.orEmpty() } }
+    val categories = remember(all, headings) { if (byCategory) categoriesOf(all, headings) else emptyList() }
+    var category by remember(opened) { mutableStateOf("") }
+    // A category chosen (and nothing typed): its programs by name, without headings.
+    val inCategory = byCategory && query.isBlank() && category.isNotEmpty()
+    val listed = when {
+        inCategory -> remember(all, category, headings) { all.filter { categoryOf(it, headings) == category }.sortedBy { it.name.lowercase() } }
+        head.isEmpty() -> shown
+        else -> head + shown
+    }
+    val columns = confGridColumns().coerceIn(2, 12)
+    val rows = confGridRows().coerceIn(1, 10)
+    val perPage = columns * rows
     // (Kept in the list, not read here: reading it while composing composed the whole list anew at each row the pointer passed.)
     LaunchedEffect(listed) { if (selected >= listed.size) selected = (listed.size - 1).coerceAtLeast(0) }
     // Chosen with the keys: scrolled into sight if it is not (the pointer only chooses what it is on:
@@ -391,6 +417,29 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                                 return@onPreviewKeyEvent true
                             }
                             val ctrl = e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
+                            fun gridTo(by: Int) {
+                                selected = gridStep(selected, by, listed.size)
+                                byKeys++
+                            }
+                            // The grid: the arrows go across and down, Page Up and Down a page.
+                            if (grid && !ctrl) when (e.key) {
+                                Key.DirectionLeft -> { gridTo(-1); return@onPreviewKeyEvent true }
+                                Key.DirectionRight -> { gridTo(1); return@onPreviewKeyEvent true }
+                                Key.DirectionUp -> { gridTo(-columns); return@onPreviewKeyEvent true }
+                                Key.DirectionDown -> { gridTo(columns); return@onPreviewKeyEvent true }
+                                Key.PageUp -> { gridTo(-perPage); return@onPreviewKeyEvent true }
+                                Key.PageDown -> { gridTo(perPage); return@onPreviewKeyEvent true }
+                                else -> {}
+                            }
+                            // The categories: left and right (nothing typed) the one before and the next.
+                            if (byCategory && query.isEmpty() && (e.key == Key.DirectionLeft || e.key == Key.DirectionRight)) {
+                                val ring = listOf("") + categories
+                                val at = ring.indexOf(category).coerceAtLeast(0)
+                                category = ring[(at + if (e.key == Key.DirectionRight) 1 else ring.size - 1) % ring.size]
+                                selected = 0
+                                byKeys++
+                                return@onPreviewKeyEvent true
+                            }
                             when {
                                 e.key == Key.Tab && e.isShiftPressed -> { control.previous(); true }
                                 e.key == Key.DirectionDown || e.key == Key.Tab || ctrl && (e.key == Key.N || e.key == Key.J) -> { control.next(); true }
@@ -413,7 +462,31 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             if (listed.isEmpty()) {
                 BasicText(if (apps.isEmpty()) newm.bar.tr("Looking for programs…") else newm.bar.tr(if (confRunTyped()) "Nothing called “%s” — Enter runs it" else "Nothing called “%s”").replace("%s", query), style = text.copy(color = colors.dim), modifier = Modifier.padding(14.dp))
             }
-            LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(opened) {
+            // The grid: a page at a time (the wheel turns the pages).
+            if (grid) {
+                var turned by remember(opened) { mutableStateOf(0f) }
+                LauncherGrid(listed, page = selected / perPage, columns, rows, { selected }, colors, text, icons, wm,
+                    onHover = { selected = it }, onClick = ::start, onPage = { p -> selected = p * perPage },
+                    modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(opened, listed.size) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                if (e.type != PointerEventType.Scroll) continue
+                                val c = e.changes.firstOrNull() ?: continue
+                                turned += c.scrollDelta.y + c.scrollDelta.x
+                                if (Math.abs(turned) >= 1f) {
+                                    val pages = (listed.size + perPage - 1) / perPage
+                                    val next = (selected / perPage + if (turned > 0) 1 else -1).coerceIn(0, (pages - 1).coerceAtLeast(0))
+                                    selected = next * perPage
+                                    turned = 0f
+                                }
+                                e.changes.forEach { it.consume() }
+                            }
+                        }
+                    })
+            } else Row(Modifier.weight(1f).fillMaxWidth()) {
+            if (byCategory) CategoryColumn(categories, if (query.isBlank()) category else "", colors, text, onChoose = { c -> category = c; selected = 0; byKeys++ })
+            LazyColumn(state = list, modifier = Modifier.weight(1f).fillMaxHeight().pointerInput(opened) {
                 awaitPointerEventScope {
                     while (true) {
                         val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -426,15 +499,18 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                 }
             }) {
                 // (A pinned or recent program is in the list below too: its key says which place it is.)
-                itemsIndexed(listed, key = { i, app -> (if (i < head.size) "head:" else "") + app.id.ifEmpty { app.name } }) { i, app ->
-                    if (query.isBlank() && i == 0 && pinnedCount > 0) Label(newm.bar.tr("Pinned"), colors)
-                    if (query.isBlank() && i == pinnedCount && head.size > pinnedCount) Label(newm.bar.tr("Recent"), colors)
-                    if (query.isBlank() && i == head.size && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
-                    if (query.isBlank() && i == head.size + frequent) Label(newm.bar.tr("All programs"), colors)
+                itemsIndexed(listed, key = { i, app -> (if (!inCategory && i < head.size) "head:" else "") + app.id.ifEmpty { app.name } }) { i, app ->
+                    if (query.isBlank() && !inCategory) {
+                        if (i == 0 && pinnedCount > 0) Label(newm.bar.tr("Pinned"), colors)
+                        if (i == pinnedCount && head.size > pinnedCount) Label(newm.bar.tr("Recent"), colors)
+                        if (i == head.size && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
+                        if (i == head.size + frequent) Label(newm.bar.tr("All programs"), colors)
+                    }
                     // Something typed: the kind of what follows, where it changes (when more than programs were found).
                     if (query.isNotBlank() && kindsShown > 1 && (i == 0 || listed[i - 1].group != app.group)) Label(newm.bar.tr(app.group), colors)
-                    AppRow(app, { selected == i }, colors, text, icons, wm, intro = -1, onHover = { selected = i }, onClick = { start(app) })
+                    AppRow(app, { selected == i }, colors, text, icons, wm, intro = -1, compact = confCompact(), onHover = { selected = i }, onClick = { start(app) })
                 }
+            }
             }
         }
     }
@@ -447,7 +523,7 @@ private fun Label(title: String, colors: BarColors) {
 }
 
 @Composable
-private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, intro: Int, onHover: () -> Unit, onClick: () -> Unit) {
+private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, text: TextStyle, icons: MutableMap<String, ImageBitmap?>, wm: Layout, intro: Int, compact: Boolean = false, onHover: () -> Unit, onClick: () -> Unit) {
     // The first rows come in one after another ([intro]: its place; -1: shown at once).
     // (Without the animation "launcherList": all there at once.)
     val coming = intro >= 0 && NewmAnimations["launcherList"].on
@@ -464,18 +540,8 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
     // The chosen one lit: read only while drawing, so choosing another redraws two rows, not
     // the whole list composed anew (that cost a heavy frame at each row the pointer passed).
     val lit = colors.accent.copy(alpha = 0.18f)
-    // (Results that are not programs draw a glyph: no icon looked up for them.)
-    val key = if (app.kind == "app" || app.kind == "entry") app.icon.ifEmpty { app.id } else ""
-    val iconPixels = with(androidx.compose.ui.platform.LocalDensity.current) { 40.dp.roundToPx() }
-    LaunchedEffect(key) {
-        if (key.isNotEmpty() && key !in icons) {
-            icons[key] = null
-            // At the size it is drawn in pixels: drawn as it is, not shrunk anew each frame.
-            IconTheme.load(key, iconPixels, null, post = { wm.caulis.post { it() } }) { icons[key] = it }
-        }
-    }
     Row(
-        Modifier.fillMaxWidth().height(58.dp)
+        Modifier.fillMaxWidth().height(if (compact) 40.dp else 58.dp)
             // A layer of its own only while it comes in (each one costs a picture drawn apart).
             .then(if (come.value < 1f) Modifier.graphicsLayer {
                 alpha = come.value
@@ -486,30 +552,11 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val picture = icons[key]
-        // What is not a program: a picture of its kind.
-        val glyph = when (app.kind) {
-            "calc" -> newm.bar.Glyph.CALCULATOR
-            "command" -> newm.bar.Glyph.TERMINAL
-            "action" -> newm.bar.Glyph.SETTINGS
-            "file" -> newm.bar.Glyph.FILE
-            else -> null
-        }
-        if (glyph != null) {
-            Box(Modifier.size(40.dp).background(colors.accent.copy(alpha = 0.16f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                newm.bar.GlyphIcon(glyph, colors.text, 20.dp)
-            }
-        } else if (picture != null) {
-            Image(picture, null, Modifier.size(40.dp), filterQuality = FilterQuality.Low)
-        } else {
-            Box(Modifier.size(40.dp).background(colors.accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                BasicText(app.name.take(1).uppercase(), style = text.copy(fontWeight = FontWeight.Bold))
-            }
-        }
-        Spacer(Modifier.width(12.dp))
+        LauncherIcon(app, if (compact) 26 else 40, colors, text, icons, wm)
+        Spacer(Modifier.width(if (compact) 10.dp else 12.dp))
         Column(Modifier.weight(1f)) {
-            BasicText(app.name, style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (app.comment.isNotBlank()) BasicText(if (app.kind == "calc" || app.kind == "command") newm.bar.tr(app.comment) else app.comment, style = text.copy(color = colors.dim, fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicText(app.name, style = text.copy(fontSize = if (compact) 14.sp else 15.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!compact && app.comment.isNotBlank()) BasicText(if (app.kind == "calc" || app.kind == "command") newm.bar.tr(app.comment) else app.comment, style = text.copy(color = colors.dim, fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         BasicText("↵", style = text.copy(color = colors.dim, fontSize = 14.sp), modifier = Modifier.graphicsLayer { alpha = if (selected()) 1f else 0f })
     }

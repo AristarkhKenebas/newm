@@ -75,6 +75,11 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - Pinned and recent programs in the launcher: `launcher { pinned = listOf("firefox", "foot") }`
   shows them first, under "Pinned", and `launcher { recent = 4 }` the programs started last
   under "Recent" (off by default; kept only with `remember`).
+- Launcher views: `launcher { view = "grid" }` shows pages of big icons as Launchpad (the
+  arrows go across and down, Page Up/Down and the wheel turn the pages), `view = "categories"`
+  shows the XDG categories beside the list (← and → go through them), and `compact = true`
+  makes the rows of the list smaller. `gridColumns`, `gridRows` and `categories` (the headings
+  and the XDG categories under each) are settings too. The default stays the list.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

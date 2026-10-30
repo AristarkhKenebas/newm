@@ -352,6 +352,10 @@ newm's own launcher:
 | `openWith` | `"xdg-open"` | the program a file found opens with |
 | `perKind` | `6` | at most this many actions, and files, are shown |
 | `pinned` | `[]` | programs always first when nothing is typed, in this order, by .desktop id or name: `listOf("firefox", "org.gnome.Nautilus", "foot")` |
+| `view` | `"list"` | how the programs are shown: `"list"` (newm's), `"grid"` (pages of big icons as Launchpad; the arrows go across and down, Page Up/Down and the wheel turn the pages, dots below), `"categories"` (the XDG categories beside the list; ← and → go through them while nothing is typed). Typing searches everything in each view. The grid and the categories are bigger by default (1040 × 720 and 900 × 600 at most) |
+| `compact` | `false` | smaller rows in the list and the categories, without the comment |
+| `gridColumns`, `gridRows` | `6`, `4` | the grid's programs across and down on a page |
+| `categories` | newm's nine | the categories' headings and the XDG categories under each, in order: `mapOf("Internet" to listOf("Network", "WebBrowser"), "Games" to listOf("Game"))`; a program in none is under "Other" |
 | `recent` | `0` | how many of the programs you started last come next (after the pinned ones); `0`: none. Kept in `~/.local/state/newm/launcher-recent.json` only with `remember` |
 | `entries { "Lock"("Lock the screen") { ensureLocked() } }` | | entries of your own, with what they do |
 | `keys { "C-Return" { runTyped() } }` | | keys of your own in it: `next()`, `previous()`, `first()`, `last()`, `start()`, `runTyped()`, `close()` |

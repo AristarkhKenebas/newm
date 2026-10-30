@@ -142,10 +142,20 @@ class Panels(private val wm: Layout) {
     // most); launcher { width, height } as given (within the screen).
     private fun launcherSize(m: Monitor): Pair<Int, Int> {
         val a = m.area
+        // (The grid and the categories want more room: 1040 x 720 and 900 x 600 at most.)
+        val view = launcherView()
         val w = if (Config.lookup("panels.launcher.width") != null) confLauncherWidth().coerceIn(200, a.width)
-        else minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
+        else when (view) {
+            "grid" -> minOf(1040, (a.width * 0.72).toInt()).coerceAtLeast(420)
+            "categories" -> minOf(900, (a.width * 0.66).toInt()).coerceAtLeast(420)
+            else -> minOf(720, (a.width * 0.6).toInt()).coerceAtLeast(420)
+        }
         val h = if (Config.lookup("panels.launcher.height") != null) confLauncherHeight().coerceIn(120, a.height)
-        else minOf(560, (a.height * 0.62).toInt())
+        else when (view) {
+            "grid" -> minOf(720, (a.height * 0.74).toInt())
+            "categories" -> minOf(600, (a.height * 0.66).toInt())
+            else -> minOf(560, (a.height * 0.62).toInt())
+        }
         return w to h
     }
 

@@ -480,6 +480,12 @@ ru: всегда первыми
 en: the programs started last, next
 ru: последние запущенные программы, следом
 
+en: "list" (newm's), "grid" (pages of icons) or "categories"
+ru: "list" (список newm), "grid" (страницы значков) или "categories"
+
+en: smaller rows
+ru: строки ниже
+
 en: Notifications of programs (Telegram's messages, a download done): cards at the top right,
 ru: Уведомления программ (сообщения Telegram, готовая загрузка): карточки справа сверху,
 

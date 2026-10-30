@@ -1162,6 +1162,28 @@ class LauncherPanelSection internal constructor(values: MutableMap<String, Any?>
     /** How many of the programs started last are shown first with nothing typed, after the pinned ones (0, the default: none; at most 24). Needs remember. */
     var recent by setting<Int>("recent")
 
+    /**
+     * How the programs are shown: "list" (newm's, the default), "grid" (pages of big icons as
+     * Launchpad: the arrows go across and down, Page Up/Down and the wheel turn the pages) or
+     * "categories" (the XDG categories beside the list: left and right go through them).
+     * Typing searches everything in each view.
+     */
+    var view by setting<String>("view")
+
+    /** Smaller rows in the list (and the categories): no comment under the name (false). */
+    var compact by setting<Boolean>("compact")
+
+    /** The grid's programs across and down on a page (6, 4). */
+    var gridColumns by setting<Int>("grid_columns")
+    var gridRows by setting<Int>("grid_rows")
+
+    /**
+     * The categories' headings and the XDG categories under each, in order:
+     * `mapOf("Internet" to listOf("Network", "WebBrowser"), "Games" to listOf("Game"))` (newm's
+     * nine by default; a program in none of them is under "Other").
+     */
+    var categories by setting<Map<String, List<String>>>("categories")
+
     /** Entries of your own, with what they do: `entries { "Lock"("Lock the screen") { ensureLocked() } }`. */
     fun entries(configure: LauncherEntries.() -> Unit) {
         @Suppress("UNCHECKED_CAST")

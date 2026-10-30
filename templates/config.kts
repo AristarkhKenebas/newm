@@ -227,6 +227,8 @@ panels {
         // commandPrefix = ">"              // "> htop" runs htop
         // pinned = listOf("firefox", "foot")   // always first
         // recent = 4                       // the programs started last, next
+        // view = "grid"                    // "list" (newm's), "grid" (pages of icons) or "categories"
+        // compact = true                   // smaller rows
     }
 }
 
