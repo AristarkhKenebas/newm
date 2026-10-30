@@ -1548,6 +1548,9 @@ class ClipboardSection internal constructor(values: MutableMap<String, Any?>) : 
     var maxPictureMb by setting<Int>("max_picture_mb")
     var maxText by setting<Int>("max_text")
 
+    /** All pictures kept, in all (megabytes, 64; at most 256): the oldest unpinned ones go first. */
+    var picturesTotalMb by setting<Int>("pictures_total_mb")
+
     /** "Clear" clears at once (true, the default; false: it asks first, "Clear" again clears). */
     var clearAtOnce by setting<Boolean>("clear_at_once")
 

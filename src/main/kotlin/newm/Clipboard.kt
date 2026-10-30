@@ -90,6 +90,9 @@ private val confFiles = configuredValue("clipboard.files", true)
 private val confKeepPins = configuredValue("clipboard.keep_pins", true)
 private val confIgnore = configuredValue("clipboard.ignore", listOf("keepassxc", "bitwarden", "1password"))
 private val confMaxPictureMb = configuredValue("clipboard.max_picture_mb", 16)
+// clipboard { picturesTotalMb = 64 }: all pictures kept, in all (their PNGs, in newm's memory: a
+// photo's PNG may be many times its JPEG); the oldest unpinned ones go first.
+private val confPicturesTotalMb = configuredValue("clipboard.pictures_total_mb", 64)
 private val confMaxText = configuredValue("clipboard.max_text", 200_000)
 // clipboard { clearAtOnce = true; onChoose = "copy" | "paste"; pasteKey = "C-v"; terminalPasteKey = "C-S-v"; width; height; top; pinKey = "C-p" }
 private val confClearAtOnce = configuredValue("clipboard.clear_at_once", true)
@@ -235,7 +238,7 @@ class ClipboardHistory(private val wm: Layout) {
         // What is shown of a picture: at most this wide and high.
         const val THUMBNAIL = 640
 
-        // Every picture kept, in all (their PNGs).
+        // Every picture kept, in all, at most (clipboard { picturesTotalMb } is less).
         const val MAX_PICTURE_BYTES = 256L shl 20
     }
 
@@ -383,7 +386,7 @@ class ClipboardHistory(private val wm: Layout) {
         return comm to null
     }
 
-    private fun add(entry: ClipEntry) {
+    internal fun add(entry: ClipEntry) {
         val before = entries.firstOrNull { it.same(entry) }
         if (before?.pinned == true) entry.pinned = true
         entries.removeAll { it.same(entry) }
@@ -394,8 +397,9 @@ class ClipboardHistory(private val wm: Layout) {
             if (last < 0) break
             entries.removeAt(last)
         }
-        // Pictures in all: at most MAX_PICTURE_BYTES (the oldest unpinned ones go).
-        while (entries.sumOf { it.png?.size?.toLong() ?: 0L } > MAX_PICTURE_BYTES) {
+        // Pictures in all: at most clipboard { picturesTotalMb } (the oldest unpinned ones go).
+        val most = (confPicturesTotalMb().toLong().coerceIn(1, MAX_PICTURE_BYTES shr 20)) shl 20
+        while (entries.sumOf { it.png?.size?.toLong() ?: 0L } > most) {
             val last = entries.indexOfLast { !it.pinned && it.png != null }
             if (last < 0) break
             entries.removeAt(last)

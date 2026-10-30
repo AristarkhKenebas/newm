@@ -15,6 +15,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
   and X11's unmanaged windows are hidden as the windows are: what they show (a notification, a
   window's title) may be private. To keep them drawn: `lock { showPanels = true }` (config.json:
   `"panels": { "lock": { "show_panels": true } }`).
+- The clipboard's history keeps pictures up to 64 MB in all (`clipboard { picturesTotalMb }`,
+  config.json `clipboard.pictures_total_mb`; it was 256 MB, fixed). A photo kept as PNG may be many
+  times its JPEG: a few of them filled newm's memory (at most 384 MB for Java) and could stop it.
 
 ### Fixed
 - `misc { swallow = true }` works: a window started from a terminal (mpv from foot)

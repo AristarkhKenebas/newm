@@ -469,6 +469,7 @@ One block per monitor, by its connector (`"eDP-1"`, `"HDMI-A-1"`; `newm cmd debu
 | `keepPins` | `true` | pinned texts kept after a restart |
 | `ignore` | `["keepassxc", "bitwarden", "1password"]` | programs whose copies are never kept |
 | `maxPictureMb`, `maxText` | `16`, `200000` | the biggest picture, the longest text |
+| `picturesTotalMb` | `64` | all pictures kept, in all (megabytes, in newm's memory; at most 256): the oldest unpinned ones go first |
 | `clearAtOnce` | `true` | "Clear" clears at once; `false`: it asks first ("Really clear?"), and a second click or Enter clears |
 | `onChoose` | `"copy"` | choosing an entry: `"copy"` puts it on the clipboard; `"paste"` also pastes it into the window you were in (Ctrl+V sent to it) |
 | `pasteKey`, `terminalPasteKey` | `"C-v"`, `"C-S-v"` | the keys `"paste"` sends, to a terminal the second (`"S-Insert"` works too) |
