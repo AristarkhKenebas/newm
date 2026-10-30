@@ -1,12 +1,17 @@
 <div align="center">
 
-# newm
+<img src="docs/assets/brand/banner.png" alt="newm — an endless wall of windows, made for touchpads" width="100%">
+
+# <img src="docs/assets/brand/logo.svg" alt="" height="40" align="center"> newm
 
 **An endless wall of windows, made for touchpads.**
 
 **English** · [Русский](README.ru.md)
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3ddc97.svg?labelColor=111a15)](LICENSE)
+[![Wayland compositor](https://img.shields.io/badge/Wayland-compositor-13995f.svg?labelColor=111a15)](https://wayland.freedesktop.org/)
+[![On Caulis](https://img.shields.io/badge/on-Caulis%20%C2%B7%20Kotlin%2FJVM-f2b33d.svg?labelColor=111a15)](https://github.com/AristarkhKenebas/caulis)
+[![Look: Jadefire](https://img.shields.io/badge/look-Jadefire-e8552d.svg?labelColor=111a15)](docs/en/brand.md)
 
 ![newm's desktop](docs/assets/desktop.png)
 

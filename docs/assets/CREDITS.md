@@ -12,5 +12,8 @@
   newm on 29 October 2026 (re-encoded, 3674×2454). It replaces the wallpaper that came with
   the original Python newm, whose photographer and licence were unknown. The same is noted in
   `templates/WALLPAPER-CREDITS.md`.
+- `brand/logo.svg`, `brand/logo-256.png`, `brand/banner.png`: newm's own emblem and banner
+  (the Jadefire look), made for newm with its own shader "dragon-eye" (rendered on the GPU) and
+  the Inter typeface (SIL Open Font License 1.1); MIT as the rest of newm. No outside pictures.
 - The terminal is [foot](https://codeberg.org/dnkl/foot), with the Catppuccin Mocha colours;
   the programs in it are `bat`, `fastfetch` and `btop`.

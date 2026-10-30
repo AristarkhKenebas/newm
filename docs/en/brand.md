@@ -21,6 +21,15 @@ It sets, wherever your configuration says nothing itself:
 What you set yourself always wins: `theme = "jadefire"` and `focus { width = 2.0 }` is Jadefire
 with a thinner border.
 
+## The emblem
+
+![The Jadefire emblem](../assets/brand/logo-256.png)
+
+A slit-pupil eye whose iris is a wall of tiles — newm's wall seen through the dragon's eye: the
+tiles glow gold at the heart, jade further out, deep emerald at the rim, ringed with fire.
+`docs/assets/brand/logo.svg` is the emblem (any size), `logo-256.png` a picture of it, and
+`banner.png` (1280×640) the repository's banner and social preview.
+
 ## The colours
 
 | Token | Dark | | Token | Light |

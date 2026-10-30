@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>newm — the Jadefire emblem</title>
+  <defs>
+    <radialGradient id="iris" cx="128" cy="128" r="61" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffd772"/>
+      <stop offset="0.3" stop-color="#f2b33d"/>
+      <stop offset="0.58" stop-color="#3ddc97"/>
+      <stop offset="0.86" stop-color="#13995f"/>
+      <stop offset="1" stop-color="#0b5d3b"/>
+    </radialGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b5d3b"/>
+      <stop offset="0.5" stop-color="#3ddc97"/>
+      <stop offset="1" stop-color="#0b5d3b"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2b33d"/>
+      <stop offset="1" stop-color="#e8552d"/>
+    </linearGradient>
+    <clipPath id="round"><circle cx="128" cy="128" r="57"/></clipPath>
+  </defs>
+  <!-- The eye's opening -->
+  <path d="M12 128 Q128 -10 244 128 Q128 266 12 128 Z" fill="#0b110e" stroke="url(#lid)" stroke-width="7" stroke-linejoin="round"/>
+  <!-- The iris: a wall of tiles, gold at its heart -->
+  <g clip-path="url(#round)">
+    <rect x="60" y="60" width="136" height="136" fill="#060908"/>
+    <g fill="url(#iris)">
+      <rect x="73.0" y="73.0" width="34" height="34" rx="7"/>
+      <rect x="111.0" y="73.0" width="34" height="34" rx="7"/>
+      <rect x="149.0" y="73.0" width="34" height="34" rx="7"/>
+      <rect x="73.0" y="111.0" width="34" height="34" rx="7"/>
+      <rect x="111.0" y="111.0" width="34" height="34" rx="7"/>
+      <rect x="149.0" y="111.0" width="34" height="34" rx="7"/>
+      <rect x="73.0" y="149.0" width="34" height="34" rx="7"/>
+      <rect x="111.0" y="149.0" width="34" height="34" rx="7"/>
+      <rect x="149.0" y="149.0" width="34" height="34" rx="7"/>
+    </g>
+  </g>
+  <!-- A ring of fire round it -->
+  <circle cx="128" cy="128" r="58.5" fill="none" stroke="url(#rim)" stroke-width="3.5"/>
+  <!-- The slit pupil -->
+  <path d="M128 74 Q145 128 128 182 Q111 128 128 74 Z" fill="#060908" stroke="#ffd772" stroke-opacity="0.6" stroke-width="1.6"/>
+</svg>

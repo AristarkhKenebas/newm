@@ -1,12 +1,17 @@
 <div align="center">
 
-# newm
+<img src="docs/assets/brand/banner.png" alt="newm — бесконечная стена из окон, сделанная для тачпада" width="100%">
+
+# <img src="docs/assets/brand/logo.svg" alt="" height="40" align="center"> newm
 
 **Бесконечная стена из окон, сделанная для тачпада.**
 
 [English](README.md) · **Русский**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3ddc97.svg?labelColor=111a15)](LICENSE)
+[![Wayland compositor](https://img.shields.io/badge/Wayland-compositor-13995f.svg?labelColor=111a15)](https://wayland.freedesktop.org/)
+[![On Caulis](https://img.shields.io/badge/on-Caulis%20%C2%B7%20Kotlin%2FJVM-f2b33d.svg?labelColor=111a15)](https://github.com/AristarkhKenebas/caulis)
+[![Look: Jadefire](https://img.shields.io/badge/look-Jadefire-e8552d.svg?labelColor=111a15)](docs/ru/brand.md)
 
 ![Рабочий стол newm](docs/assets/desktop.png)
 
