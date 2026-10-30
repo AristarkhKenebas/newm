@@ -230,6 +230,37 @@ class LockTest {
     }
 
     @Test
+    fun `a password check of an earlier lock answering late does not unlock the next lock`() = withNewm { caulis, layout, _ ->
+        val started = java.util.concurrent.CountDownLatch(1)
+        val answer = java.util.concurrent.CountDownLatch(1)
+        val before = passwordCheck
+        passwordCheck = { _, _, _ ->
+            started.countDown()
+            answer.await(10, TimeUnit.SECONDS)
+            AuthOutcome(true)
+        }
+        Config.loadConfig(mapOf("panels" to mapOf("lock" to mapOf("faillock" to false))))
+        try {
+            lockAndWait(caulis, layout)
+            press(caulis, KEY_A)
+            press(caulis, KEY_ENTER)
+            assertTrue(started.await(10, TimeUnit.SECONDS), "checked")
+            // Unlocked another way meanwhile (newm cmd unlock), then locked again.
+            onLoop(caulis) { layout.trustedUnlock() }
+            waitUntil("unlocked") { onLoop(caulis) { !caulis.desktop.locked } }
+            lockAndWait(caulis, layout)
+            // The first check says yes now: it was for the lock before.
+            answer.countDown()
+            Thread.sleep(500)
+            assertTrue(onLoop(caulis) { caulis.desktop.locked }, "still locked: nothing was typed on this lock")
+        } finally {
+            passwordCheck = before
+            Config.loadConfig(emptyMap())
+            onLoop(caulis) { layout.trustedUnlock() }
+        }
+    }
+
+    @Test
     fun `the launcher and the bar's popups do not open over the lock screen`() = withNewm { caulis, layout, _ ->
         onLoop(caulis) { layout.ensureLocked(anim = false) }
         try {

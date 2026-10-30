@@ -42,6 +42,9 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - `newm cmd open-launcher` and `newm cmd bar <popup>` (any program can send them over D-Bus)
   do nothing while the screen is locked: the launcher and the bar's popups showed over the lock
   screen (they took no input).
+- A password check still running when the screen was unlocked another way (`newm cmd unlock`)
+  no longer unlocks the next lock when PAM answers late: each lock takes only the answers to what
+  was typed on it.
 
 ## [2026-10-30, on Caulis 0.1.7]
 

@@ -41,6 +41,8 @@ internal var passwordCheck: (service: String, user: String, password: String) ->
 private interface Backend {
     fun initAuth(user: String, message: String? = null) {}
     fun enterCred(cred: String) {}
+    /** The screen locks anew: what a check still running from before says is not taken. */
+    fun forgetPending() {}
     /** Starts the user's session, then [then] (on the compositor's thread). */
     fun startSession(then: () -> Unit) = then()
 }
@@ -89,6 +91,12 @@ private class PamBackend(private val auth: AuthBackend) : Backend {
                 done(number, u, AuthOutcome(false, "Checking the password took too long (a fingerprint reader waiting?). Again:"))
             }
         }
+    }
+
+    override fun forgetPending() {
+        if (checking) log.info { "A password check of an earlier lock still runs: its answer is not taken" }
+        attempt++
+        checking = false
     }
 
     private fun done(number: Int, u: String, outcome: AuthOutcome) {
@@ -335,7 +343,12 @@ class AuthBackend(private val layout: Layout) {
             layout.panelsUi.authProblem("newm cannot tell who you are (uid ${verbatim("$uid")}), so it cannot check a password. See newm's log.")
             return
         }
-        if (!isGreeter()) backend.initAuth(user)
+        if (!isGreeter()) {
+            // (A password typed on the lock before — unlocked meanwhile another way — never
+            // unlocks this one when PAM answers late.)
+            backend.forgetPending()
+            backend.initAuth(user)
+        }
     }
 
     // newm's own lock screen asks it, and so can a lock panel program (over D-Bus).
