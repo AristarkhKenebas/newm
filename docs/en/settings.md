@@ -346,6 +346,11 @@ newm's own launcher:
 | `hide` | `[]` | programs left out, by name or .desktop id: `listOf("htop", "org.gnome.Extensions")` |
 | `runTyped` | `false` | Enter with nothing found runs what you typed as a command |
 | `typos` | `1` | how many letters of a word you type may be wrong (changed, missing, extra, two swapped) and it still finds: `"fierfox"` finds Firefox. `2`: two in words of 8 letters or more; `0`: only exact. Words under 4 letters always match exactly. Typed on the other keyboard layout works either way (`"ашкуащч"` finds firefox), and the programs' names and keywords in your language (`Name[ru]`) are searched too |
+| `search` | `listOf("programs", "actions", "files", "calculator", "command")` | what the search finds: programs (and your entries); newm's actions (`"lock"` finds "Lock the screen", also Screenshot, Reload, Overview…); the files used lately by any program (`~/.local/share/recently-used.xbel`, only their names, only once something is typed); a sum (`2+2*3`, `(1,5+2)^2`, `sqrt(2)`: Enter copies the result); a command after `commandPrefix` (`> htop` runs it) |
+| `commandPrefix` | `">"` | what starts a command in the search; `""`: none |
+| `recentFiles` | `200` | how many of the files used lately are searched; `0`: none |
+| `openWith` | `"xdg-open"` | the program a file found opens with |
+| `perKind` | `6` | at most this many actions, and files, are shown |
 | `entries { "Lock"("Lock the screen") { ensureLocked() } }` | | entries of your own, with what they do |
 | `keys { "C-Return" { runTyped() } }` | | keys of your own in it: `next()`, `previous()`, `first()`, `last()`, `start()`, `runTyped()`, `close()` |
 

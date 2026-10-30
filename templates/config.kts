@@ -223,6 +223,8 @@ panels {
         // frequent = 8                     // how many programs you start most are shown first
         // hide = listOf("htop")            // programs left out of it
         // typos = 1                        // letters a word typed may have wrong ("fierfox" finds Firefox; 0: exact only)
+        // search = listOf("programs", "actions", "files", "calculator", "command")   // what the search finds
+        // commandPrefix = ">"              // "> htop" runs htop
     }
 }
 

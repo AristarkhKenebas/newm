@@ -84,6 +84,13 @@ private val confEntries = configuredValue("panels.launcher.entries", emptyList<M
 private val confKeys = configuredValue("panels.launcher.keys", emptyMap<String, Any?>())
 // launcher { typos = 1 }: how many letters a word typed may have wrong and still find (0: none).
 private val confTypos = configuredValue("panels.launcher.typos", 1)
+// launcher { search = listOf(...) }: what the search finds besides programs.
+internal val LAUNCHER_SOURCES = listOf("programs", "actions", "files", "calculator", "command")
+private val confSearch = configuredValue("panels.launcher.search", LAUNCHER_SOURCES)
+private val confCommandPrefix = configuredValue("panels.launcher.command_prefix", ">")
+private val confRecentFiles = configuredValue("panels.launcher.recent_files", 200)
+private val confOpenWith = configuredValue("panels.launcher.open_with", "xdg-open")
+private val confPerKind = configuredValue("panels.launcher.per_kind", 6)
 
 /**
  * What a key of `launcher { keys { "C-n" { next() } } }` can do: choose the next or the
@@ -192,6 +199,14 @@ internal object LaunchCounts {
     }
 }
 
+// What the search finds now (launcher { search }): see [universalResults].
+private fun searchEverything(all: List<DesktopApp>, query: String, sources: Set<String>, files: List<RecentFile>): List<DesktopApp> =
+    universalResults(all, if ("actions" in sources) launcherActions() else emptyList(), files, query, sources,
+        confTypos(), confPerKind(), confCommandPrefix(), confOpenWith(), copy = { l, text ->
+            log.info { "The sum's result copied" }
+            l.caulis.clipboard.setClipboard(dev.caulis.core.TextOnClipboard(text))
+        })
+
 /**
  * newm's launcher (Logo+D, five fingers): a search in the upper middle of the screen. Type a
  * few letters, Enter starts the first; the arrows or the pointer choose another; Escape or
@@ -236,7 +251,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
             val name = e["name"]?.toString() ?: return@mapNotNull null
             @Suppress("UNCHECKED_CAST")
             val action = e["action"] as? (Layout) -> Unit ?: return@mapNotNull null
-            DesktopApp(name, e["comment"]?.toString().orEmpty(), "", "", id = "entry:$name", run = action)
+            DesktopApp(name, e["comment"]?.toString().orEmpty(), "", "", id = "entry:$name", run = action, kind = "entry")
         }
         val rest = wm.session.restLeft()
         val reopen = if (rest > 0) listOf(DesktopApp(newm.bar.tr("Reopen %s windows").replace("%s", rest.toString()), newm.bar.tr("Left out when the session came back"),
@@ -245,12 +260,22 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
     }
     // Nothing typed: the frequent ones first (then by name); else the matches, the frequent first among equals.
     val frequentMost = confFrequent().coerceAtLeast(0)
-    val shown = remember(all, query) {
+    // The files used lately: read once the search has something typed (and only then), away
+    // from the compositor's thread; dropped with the launcher's scene.
+    val sources = confSearch().map { it.trim().lowercase() }.toSet()
+    var recentFiles by remember(opened) { mutableStateOf<List<RecentFile>?>(null) }
+    LaunchedEffect(opened, query.isNotBlank()) {
+        if (query.isBlank() || recentFiles != null || "files" !in sources) return@LaunchedEffect
+        recentFiles = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { RecentFiles.read(most = confRecentFiles()) }
+        log.trace { "${recentFiles?.size} files used lately, for the search" }
+    }
+    val shown = remember(all, query, recentFiles) {
         if (query.isBlank()) {
             if (frequentMost > 0) all.sortedWith(compareByDescending<DesktopApp> { it.id == "entry:reopen" }.thenByDescending { LaunchCounts.of(it) }.thenBy { it.name.lowercase() })
             else all.sortedWith(compareByDescending<DesktopApp> { it.id == "entry:reopen" }.thenBy { it.name.lowercase() })
-        } else DesktopApp.matching(all, query, confTypos())
+        } else searchEverything(all, query, sources, recentFiles.orEmpty())
     }
+    val kindsShown = remember(shown) { shown.map { it.group }.distinct().size }
     val frequent = if (query.isBlank() && frequentMost > 0 && shown.firstOrNull()?.id != "entry:reopen") shown.takeWhile { LaunchCounts.of(it) > 0 }.take(frequentMost).size else 0
     // (Kept in the list, not read here: reading it while composing composed the whole list anew at each row the pointer passed.)
     LaunchedEffect(shown) { if (selected >= shown.size) selected = (shown.size - 1).coerceAtLeast(0) }
@@ -268,11 +293,12 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
     }
 
     fun start(app: DesktopApp) {
-        LaunchCounts.started(app)
+        if (app.kind == "app" || app.kind == "entry") LaunchCounts.started(app)
         query = ""
         val run = app.run
         if (run != null) {
-            log.info { "Launcher entry: ${app.name}" }
+            // (A file's name or a command typed is nobody's business in the log: only what kind it was.)
+            log.info { if (app.kind == "entry") "Launcher entry: ${app.name}" else "Launcher: a result of kind ${app.kind}" }
             wm.exitOverlay()
             run(wm)
         } else {
@@ -317,7 +343,7 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                 }
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) BasicText(newm.bar.tr("Search programs"), style = text.copy(color = colors.dim, fontSize = 18.sp))
+                    if (query.isEmpty()) BasicText(newm.bar.tr(if (sources.size > 1) "Search programs, files, actions" else "Search programs"), style = text.copy(color = colors.dim, fontSize = 18.sp))
                     BasicTextField(
                         query, { query = it; selected = 0; byKeys++ },
                         Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
@@ -367,6 +393,8 @@ internal fun LauncherPanel(wm: Layout, apps: List<DesktopApp>, opened: Int, clos
                 itemsIndexed(shown, key = { _, app -> app.id.ifEmpty { app.name } }) { i, app ->
                     if (query.isBlank() && i == 0 && frequent > 0) Label(newm.bar.tr("Frequent"), colors)
                     if (query.isBlank() && i == frequent) Label(newm.bar.tr("All programs"), colors)
+                    // Something typed: the kind of what follows, where it changes (when more than programs were found).
+                    if (query.isNotBlank() && kindsShown > 1 && (i == 0 || shown[i - 1].group != app.group)) Label(newm.bar.tr(app.group), colors)
                     AppRow(app, { selected == i }, colors, text, icons, wm, intro = -1, onHover = { selected = i }, onClick = { start(app) })
                 }
             }
@@ -398,7 +426,8 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
     // The chosen one lit: read only while drawing, so choosing another redraws two rows, not
     // the whole list composed anew (that cost a heavy frame at each row the pointer passed).
     val lit = colors.accent.copy(alpha = 0.18f)
-    val key = app.icon.ifEmpty { app.id }
+    // (Results that are not programs draw a glyph: no icon looked up for them.)
+    val key = if (app.kind == "app" || app.kind == "entry") app.icon.ifEmpty { app.id } else ""
     val iconPixels = with(androidx.compose.ui.platform.LocalDensity.current) { 40.dp.roundToPx() }
     LaunchedEffect(key) {
         if (key.isNotEmpty() && key !in icons) {
@@ -420,7 +449,19 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val picture = icons[key]
-        if (picture != null) {
+        // What is not a program: a picture of its kind.
+        val glyph = when (app.kind) {
+            "calc" -> newm.bar.Glyph.CALCULATOR
+            "command" -> newm.bar.Glyph.TERMINAL
+            "action" -> newm.bar.Glyph.SETTINGS
+            "file" -> newm.bar.Glyph.FILE
+            else -> null
+        }
+        if (glyph != null) {
+            Box(Modifier.size(40.dp).background(colors.accent.copy(alpha = 0.16f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                newm.bar.GlyphIcon(glyph, colors.text, 20.dp)
+            }
+        } else if (picture != null) {
             Image(picture, null, Modifier.size(40.dp), filterQuality = FilterQuality.Low)
         } else {
             Box(Modifier.size(40.dp).background(colors.accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
@@ -430,7 +471,7 @@ private fun AppRow(app: DesktopApp, selected: () -> Boolean, colors: BarColors, 
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             BasicText(app.name, style = text.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (app.comment.isNotBlank()) BasicText(app.comment, style = text.copy(color = colors.dim, fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (app.comment.isNotBlank()) BasicText(if (app.kind == "calc" || app.kind == "command") newm.bar.tr(app.comment) else app.comment, style = text.copy(color = colors.dim, fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         BasicText("↵", style = text.copy(color = colors.dim, fontSize = 14.sp), modifier = Modifier.graphicsLayer { alpha = if (selected()) 1f else 0f })
     }

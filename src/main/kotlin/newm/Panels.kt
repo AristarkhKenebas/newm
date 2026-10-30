@@ -509,6 +509,11 @@ data class DesktopApp(
     val run: ((Layout) -> Unit)? = null,
     /** Its XDG categories ("Network", "WebBrowser"): the launcher's categories view groups by them. */
     val categories: List<String> = emptyList(),
+    /**
+     * What it is: "app" (a program), "entry" (of the configuration), "action" (newm's, as Logo+L
+     * locks), "file" (used lately), "calc" (a sum worked out), "command" (typed after ">").
+     */
+    val kind: String = "app",
 ) {
     companion object {
         /** The programs installed (applications folders of XDG_DATA_HOME and XDG_DATA_DIRS; the user's first). */

@@ -1136,6 +1136,26 @@ class LauncherPanelSection internal constructor(values: MutableMap<String, Any?>
      */
     var typos by setting<Int>("typos")
 
+    /**
+     * What the search finds: "programs" (and your entries), "actions" (newm's: "Lock the screen",
+     * "Screenshot of the window", "Reload this configuration"), "files" (those used lately, by
+     * any program: recently-used.xbel), "calculator" (a sum typed: "2+2*3", Enter copies the
+     * result), "command" (typed after [commandPrefix]: "> htop" runs it). All of them by default.
+     */
+    var search by setting<List<String>>("search")
+
+    /** What starts a command in the search ("> htop"); "" for none. */
+    var commandPrefix by setting<String>("command_prefix")
+
+    /** How many of the files used lately are searched (200; 0: none). Only their names are searched, only when something is typed. */
+    var recentFiles by setting<Int>("recent_files")
+
+    /** The program a file found opens with ("xdg-open"). */
+    var openWith by setting<String>("open_with")
+
+    /** At most this many actions, and files, are shown (6). */
+    var perKind by setting<Int>("per_kind")
+
     /** Entries of your own, with what they do: `entries { "Lock"("Lock the screen") { ensureLocked() } }`. */
     fun entries(configure: LauncherEntries.() -> Unit) {
         @Suppress("UNCHECKED_CAST")

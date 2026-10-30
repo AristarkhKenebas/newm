@@ -66,6 +66,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
   letters in long words). Typing on the other keyboard layout now works both ways ("ашкуащч"
   finds Firefox, "ntktuhfv" finds Телеграм), and the programs' names, kinds and keywords in your
   language (`Name[ru]`, `Keywords[ru]`) are searched as well.
+- The launcher searches more than programs: newm's actions ("lock" finds Lock the screen, also
+  screenshots, the overview, reloading the configuration), the files used lately by any program
+  (their names only, read only once something is typed), a calculator (`2+2*3`, `(1,5+2)^2`,
+  `sqrt(2)`: Enter copies the result) and commands (`> htop` runs htop). Results come under
+  headings by kind. `launcher { search = listOf(...); commandPrefix = ">"; recentFiles = 200;
+  openWith = "xdg-open"; perKind = 6 }`; `search = listOf("programs")` is the old behaviour.
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips
