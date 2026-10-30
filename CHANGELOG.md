@@ -85,6 +85,12 @@ From now on every change people would notice gets a line under [Unreleased] in t
   with a soft shadow), `"macos"` (a thin strip, 28 high, the clock at the right end) besides
   `"islands"` (the default, unchanged) and `"classic"`. Height, margin and corners keep their
   settings; the looks along the edge only change their defaults.
+- New bar modules, each shown only where you place it: `media` (what a media player plays,
+  through MPRIS: the title, play/pause, the one before and the next, a thin line of where it
+  is), `cpu`, `memory` and `temperature` (read only while shown, every `systemEverySeconds`;
+  a click starts a system monitor), `screens` (a dot for each screen of the wall, the one in
+  view lit; a click goes there) and `weather` (wttr.in; the only module that asks the
+  internet, only when placed — see the privacy note in the bars guide).
 
 ### Changed
 - Behind newm's own lock screen, programs' panels (a waybar, mako's pop-ups), menus and tooltips

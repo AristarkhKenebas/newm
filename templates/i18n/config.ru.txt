@@ -426,8 +426,8 @@ ru: промежуток до краёв экрана
 en: "auto" (follows light or dark), "light", "dark"
 ru: "auto" (следует светлой или тёмной теме), "light", "dark"
 
-en: also "wall": a small map of your wall
-ru: ещё "wall": маленькая карта вашей стены
+en: also "wall": a small map of your wall; "media", "cpu", "memory", "temperature", "screens", "weather"
+ru: ещё "wall": маленькая карта стены; "media", "cpu", "memory", "temperature", "screens", "weather"
 
 en: java.time patterns: "h:mm a", "HH:mm:ss"
 ru: шаблоны java.time: "h:mm a", "HH:mm:ss"

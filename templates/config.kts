@@ -192,7 +192,7 @@ panels {
         theme = "auto"                      // "auto" (follows light or dark), "light", "dark"
         fontSize = 13
         // font = "Inter"
-        left = listOf("window")             // also "wall": a small map of your wall
+        left = listOf("window")             // also "wall": a small map of your wall; "media", "cpu", "memory", "temperature", "screens", "weather"
         center = listOf("clock")
         right = listOf("tray", "layout", "bluetooth", "network", "volume", "battery", "notifications", "power")
         clock = "HH:mm"                     // java.time patterns: "h:mm a", "HH:mm:ss"

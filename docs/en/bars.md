@@ -181,6 +181,21 @@ unless you place them yourself or turn them off (`quickButton = false`,
 is shown as you wrote it (or turn it off with `menuButton = false`). A name
 that is not a module shows as it is, as a text.
 
+More modules, none of them shown unless you place them:
+
+| Module | What | Its settings (in `topBar { }`) |
+|---|---|---|
+| `media` | what a media player plays (MPRIS: Spotify, Firefox, mpv with mpris, Amberol, …): the one before, play/pause with the title, the artist and a thin line of where it is, the next one. A click plays or pauses, the middle button and the wheel go on or back. Nothing while nothing plays | `mediaWidth` (`220`): the title at its widest |
+| `cpu`, `memory`, `temperature` | the processor's use, the memory's (or the GB used), a temperature, in the warning colour when high (90 %, `temperatureWarning`). Read only while a bar shows one of them. A click starts a system monitor | `systemEverySeconds` (`2`), `memoryAs` (`"percent"` or `"used"`), `temperatureSensor` (`""`: the first of k10temp, coretemp, zenpower, cpu_thermal, x86_pkg_temp, acpitz; or a hwmon or thermal zone name), `temperatureWarning` (`80`), `systemMonitor` (`"auto"`: btop in the terminal, else GNOME's system monitor, else htop; `""`: nothing) |
+| `screens` | the screens of the wall (`screens { }`): a dot for each, the one in view wider and lit; a click goes to one, the wheel to the next or the one before | |
+| `weather` | the weather, as `wttr.in` says it (an icon and the temperature) | `weatherPlace` (`""`), `weatherEveryMinutes` (`30`), `weatherUrl` (`"https://wttr.in/%s?format=%c+%t"`, `%s`: the place) |
+
+**The weather and your privacy.** `weather` is the only module that asks something on the
+internet, and only once you place it: every `weatherEveryMinutes` it asks `weatherUrl`.
+The service sees your address (IP) and the place you write; with `weatherPlace = ""` it
+guesses your place from that address. Nothing else is sent. Leave the module out and newm
+never asks.
+
 The clock, the date and the calendar follow `language`. On a monitor not in `outputs` the bar
 is not drawn (windows still keep its room).
 

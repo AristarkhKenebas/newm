@@ -280,6 +280,12 @@ keys {
 | `quickButton` | `true` | кнопка быстрых настроек перед кнопкой питания (и в вашем `right`, если `quick` не поставлен вами) |
 | `notificationsButton` | `true` | колокольчик уведомлений перед кнопкой быстрых настроек (и в вашем `right`, если `notifications` не поставлен вами) |
 | `layoutNames` | `{}` | подписи раскладок: `mapOf("us" to "EN")` (остальные: `us` — EN, иначе первые две буквы кода) |
+| `mediaWidth` | `220` | модуль `media`: самая большая ширина названия |
+| `systemEverySeconds` | `2` | модули `cpu`, `memory`, `temperature`: как часто читаются (только пока видны) |
+| `memoryAs` | `"percent"` | модуль `memory`: `"percent"` или `"used"` (ГБ) |
+| `temperatureSensor`, `temperatureWarning` | `""`, `80` | модуль `temperature`: датчик (`""`: первый известный) и с какой температуры °C это предупреждение |
+| `systemMonitor` | `"auto"` | что запускает щелчок по `cpu`, `memory` или `temperature` (`"auto"`: btop в терминале, иначе системный монитор GNOME, иначе htop; `""`: ничего) |
+| `weatherPlace`, `weatherEveryMinutes`, `weatherUrl` | `""`, `30`, `"https://wttr.in/%s?format=%c+%t"` | модуль `weather` (ходит в интернет, только если поставлен; см. [Панели](bars.md)) |
 | `outputs` | `[]` | мониторы с панелью (`["eDP-1"]`); пусто — все |
 | `clockHint` | `"EEEE, d MMMM yyyy"` | подсказка часов; `""` — без неё |
 | `hintDelayMs` | `800` | сколько держать указатель до подсказки |

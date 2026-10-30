@@ -154,6 +154,14 @@ class BarModel(val wm: Layout) {
     val sound = Sound(wm.caulis)
     val powerProfiles = PowerProfiles(wm.caulis)
 
+    /** The media players (MPRIS), the processor/memory/temperature and the weather: each started only while a bar shows it. */
+    val media = Media(wm.caulis)
+    val system = SystemStats({ action -> wm.caulis.post { action() } })
+    var weather by mutableStateOf<String?>(null)
+        private set
+    private var weatherDue = 0L
+    private var weatherAsking = false
+
     /** newm's notifications: their cards and the bell's history (started by the layout, with or without this bar). */
     val notifications = NotificationCenter(this)
 
@@ -327,6 +335,7 @@ class BarModel(val wm: Layout) {
             val t = LocalDateTime.now()
             if (t.toLocalDate() != now.toLocalDate() || clockPatterns.any { clockText(it, t) != clockText(it, now) }) now = t
             refreshModules()
+            followModules()
             watchBattery()
             if (noticePlace != Triple(cardsCorner(), cardsWidth(), cardsGap())) applyNoticeStyle()
         }
@@ -551,6 +560,39 @@ class BarModel(val wm: Layout) {
                             moduleRunning.remove(name)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // --- newm's modules that read something only while shown: media, cpu/memory/temperature, weather ---
+
+    // Each second: what the bars show now starts (or stops) what they need.
+    private fun followModules() {
+        val bars = wm.barsNow()
+        val shown = bars.flatMap { it.allModules }.toSet()
+        if ("media" in shown) media.start()
+        val systemBar = bars.firstOrNull { b -> b.allModules.any { it == "cpu" || it == "memory" || it == "temperature" } }
+        if (systemBar != null && !system.running) {
+            system.sensor = systemBar.temperatureSensor
+            system.start(systemBar.systemEverySeconds.toLong())
+        } else if (systemBar == null && system.running) {
+            log.info { "No bar shows the processor, memory or temperature: no longer read" }
+            system.stop()
+        }
+        val weatherBar = bars.firstOrNull { "weather" in it.allModules }
+        val now = System.currentTimeMillis()
+        if (weatherBar != null && !weatherAsking && now >= weatherDue) {
+            weatherDue = now + weatherBar.weatherEveryMinutes * 60_000L
+            weatherAsking = true
+            val url = weatherUrl(weatherBar.weatherUrl, weatherBar.weatherPlace)
+            // (Only the place is sent, as the configuration says; nothing else of the computer.)
+            log.info { "Asking the weather (every ${weatherBar.weatherEveryMinutes} min)" }
+            inBackground {
+                val text = try { fetchWeather(url) } catch (e: Exception) { log.trace { "The weather: $e" }; null }
+                wm.caulis.post {
+                    weatherAsking = false
+                    if (text != null) weather = text else if (weather == null) weatherDue = System.currentTimeMillis() + 5 * 60_000L
                 }
             }
         }
@@ -838,6 +880,10 @@ private fun Modules(names: List<String>, bar: Bar, model: BarModel, colors: BarC
         "quick" -> QuickModule(bar, model, colors)
         "notifications" -> NotificationsModule(bar, model, colors)
         "texts" -> TextsModule(bar, colors, text)
+        "media" -> MediaModule(bar, model, colors, text)
+        "cpu", "memory", "temperature" -> SystemModule(name, bar, model, colors, text)
+        "screens" -> ScreensModule(bar, model, colors, text)
+        "weather" -> WeatherModule(bar, model, colors, text)
         // A module of the configuration's own, else the name as it is.
         else -> if (name in bar.modules) CustomModule(name, bar, model, colors, text) else Chip(colors) { BasicText(name, style = text) }
     }
@@ -1097,6 +1143,119 @@ private fun BatteryModule(bar: Bar, model: BarModel, colors: BarColors, text: Te
                 Spacer(Modifier.width(4.dp))
                 BasicText("${b.percent}%", style = text.copy(color = if (b.percent <= confBatteryCritical() && !b.charging) colors.danger else colors.text))
             }
+        }
+    }
+}
+
+// The media player: the one before, play or pause with the title (and artist) and a thin line of
+// where it is, the next one. Nothing while nothing plays.
+@Composable
+private fun MediaModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
+    val m = model.media.now ?: return
+    val media = model.media
+    // (Where it is: drawn anew once a second, only while it plays.)
+    var tick by remember { mutableStateOf(System.nanoTime()) }
+    LaunchedEffect(m.playing, m.atNanos) {
+        while (m.playing) {
+            kotlinx.coroutines.delay(1000)
+            tick = System.nanoTime()
+        }
+    }
+    if (m.canPrevious) Chip(colors, onPrimary = { media.press("Previous") }) { GlyphIcon(Glyph.SKIP_BACK, colors.text, (bar.iconSize - 3).dp) }
+    val clicks = model.clicksOf(bar, "media", Clicks(click = { media.press("PlayPause") }, middle = { media.press("Next") },
+        scroll = { dy -> val n = model.notches("${bar.top}/media", dy); if (n != 0) media.press(if (n > 0) "Next" else "Previous") }))
+    Chip(colors, clicks, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "media") {
+        verbatim(listOf(m.title, m.artist).filter { it.isNotBlank() }.joinToString(" — ")) + "\n" + tr("%s · a click plays or pauses, the wheel goes on or back").replace("%s", verbatim(m.identity))
+    } }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlyphIcon(if (m.playing) Glyph.PAUSE else Glyph.PLAY, colors.text, (bar.iconSize - 2).dp)
+            Spacer(Modifier.width(7.dp))
+            androidx.compose.foundation.layout.Column(Modifier.widthIn(max = bar.mediaWidth.dp)) {
+                BasicText(listOf(m.title, m.artist).filter { it.isNotBlank() }.joinToString(" · "), style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (m.lengthMicros > 0) {
+                    val done = m.progress(tick)
+                    Canvas(Modifier.fillMaxWidth().height(2.dp)) {
+                        drawRoundRect(colors.text.copy(alpha = 0.18f), Offset.Zero, size, CornerRadius(1.dp.toPx()))
+                        drawRoundRect(colors.accent, Offset.Zero, Size(size.width * done, size.height), CornerRadius(1.dp.toPx()))
+                    }
+                }
+            }
+        }
+    }
+    if (m.canNext) Chip(colors, onPrimary = { media.press("Next") }) { GlyphIcon(Glyph.SKIP_FORWARD, colors.text, (bar.iconSize - 3).dp) }
+}
+
+// The processor's use, the memory's, a temperature: a glyph and a number (a warning's colour when high). A click starts a system monitor.
+@Composable
+private fun SystemModule(name: String, bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
+    val load = model.system.load
+    val (glyph, value, high) = when (name) {
+        "cpu" -> Triple(Glyph.CPU, load.cpuPercent?.let { "$it%" }, (load.cpuPercent ?: 0) >= 90)
+        "memory" -> Triple(Glyph.MEMORY, if (bar.memoryAs == "used") load.memoryUsedKib?.let { String.format(java.util.Locale.ROOT, "%.1f GB", it / 1048576.0) } else load.memoryPercent?.let { "$it%" }, (load.memoryPercent ?: 0) >= 90)
+        else -> Triple(Glyph.THERMOMETER, load.celsius?.let { "$it°" }, (load.celsius ?: 0) >= bar.temperatureWarning)
+    }
+    if (value == null && name == "temperature") return
+    val monitor = bar.systemMonitor.trim()
+    val clicks = model.clicksOf(bar, name, Clicks(click = if (monitor.isEmpty()) null else { { startSystemMonitor(monitor, model.wm) } }))
+    Chip(colors, clicks, onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, name) {
+        when (name) {
+            "cpu" -> "Processor"
+            "memory" -> load.memoryUsedKib?.let { used -> tr("Memory: %s").replace("%s", String.format(java.util.Locale.ROOT, "%.1f / %.1f GB", used / 1048576.0, (load.memoryTotalKib ?: 0) / 1048576.0)) } ?: "Memory"
+            else -> "Temperature"
+        }
+    } }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlyphIcon(glyph, if (high) colors.warning else colors.text, (bar.iconSize - 1).dp)
+            Spacer(Modifier.width(5.dp))
+            // (Digits of one width: the bar does not jump as they change.)
+            BasicText(value ?: "…", style = text.copy(color = if (high) colors.warning else colors.text, fontFeatureSettings = "tnum"))
+        }
+    }
+}
+
+// What a click on the processor, memory or temperature starts: "auto" is btop in the terminal, else GNOME's system monitor.
+private fun startSystemMonitor(monitor: String, wm: newm.Layout) {
+    val command = if (monitor != "auto") monitor else when {
+        newm.onPath("btop") -> "${newm.defaultTerminal()} -e btop"
+        newm.onPath("gnome-system-monitor") -> "gnome-system-monitor"
+        newm.onPath("htop") -> "${newm.defaultTerminal()} -e htop"
+        else -> return log.info { "No system monitor installed (btop, gnome-system-monitor, htop): topBar { systemMonitor } names one" }
+    }
+    log.info { "Starting the system monitor" }
+    wm.launch(command)
+}
+
+// The screens of the wall (screens { }): a dot for each, the one in view lit; a click goes to one.
+@Composable
+private fun ScreensModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
+    val (count, now) = bar.screens
+    if (count <= 0) return
+    Chip(colors, model.clicksOf(bar, "screens", Clicks(scroll = { dy -> val n = model.notches("${bar.top}/screens", dy); if (n != 0) model.wm.focusScreen(n) })),
+        onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "screens") { tr("Screen %s").replace("%s", "${now + 1} / $count") } }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            for (k in 0 until count) {
+                val on = k == now
+                Box(
+                    Modifier.padding(horizontal = 2.dp).width(if (on) 18.dp else 12.dp).height(10.dp)
+                        .background(if (on) colors.accent else colors.text.copy(alpha = 0.28f), RoundedCornerShape(3.dp))
+                        .onClick { if (k != now) model.wm.focusScreen(k - now) },
+                )
+            }
+        }
+    }
+}
+
+// The weather (only when placed: it asks a service on the internet, see topBar { weatherUrl }).
+@Composable
+private fun WeatherModule(bar: Bar, model: BarModel, colors: BarColors, text: TextStyle) {
+    val w = model.weather ?: return
+    Chip(colors, model.clicksOf(bar, "weather", Clicks()), onHint = { on, mx -> model.hint(on, bar, bar.originX + mx, "weather") {
+        if (bar.weatherPlace.isBlank()) "The weather here (wttr.in)" else tr("The weather in %s").replace("%s", verbatim(bar.weatherPlace))
+    } }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlyphIcon(Glyph.WEATHER, colors.text, (bar.iconSize - 1).dp)
+            Spacer(Modifier.width(5.dp))
+            BasicText(w, style = text, maxLines = 1)
         }
     }
 }

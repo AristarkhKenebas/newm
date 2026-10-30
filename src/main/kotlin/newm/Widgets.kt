@@ -557,6 +557,16 @@ private val confHintDelay = BarSetting("hint_delay_ms", 800)
 private val confModules = BarSetting<Map<String, Any?>>("modules", emptyMap())
 // on("window") { middle { } }: what a click, the middle and right buttons, the wheel do on a module (instead of newm's).
 private val confOn = BarSetting<Map<String, Any?>>("on", emptyMap())
+// The modules "media", "cpu", "memory", "temperature", "screens", "weather".
+private val confMediaWidth = BarSetting("media_width", 220)
+private val confSystemEvery = BarSetting("system_every_seconds", 2)
+private val confMemoryAs = BarSetting("memory_as", "percent")
+private val confTemperatureSensor = BarSetting("temperature_sensor", "")
+private val confTemperatureWarning = BarSetting("temperature_warning", 80)
+private val confSystemMonitor = BarSetting("system_monitor", "auto")
+private val confWeatherPlace = BarSetting("weather_place", "")
+private val confWeatherEvery = BarSetting("weather_every_minutes", 30)
+private val confWeatherUrl = BarSetting("weather_url", "https://wttr.in/%s?format=%c+%t")
 
 // The configuration's label of layout [name] ("us", "de(neo)"), else "us" -> "EN", "ru" -> "RU", "de(neo)" -> "DE".
 internal fun layoutLabel(name: String, labels: Map<String, Any?>): String {
@@ -685,6 +695,30 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
     /** What clicks and the wheel do on a module instead of newm's (module name -> click, middle, right, scroll_up, scroll_down). */
     val clicks: Map<String, Any?> get() = confOn(top)
 
+    /** The media module's title at its widest (dp). */
+    val mediaWidth: Int get() = confMediaWidth(top).coerceIn(60, 800)
+
+    /** How often the processor, memory and temperature are read (seconds). */
+    val systemEverySeconds: Int get() = confSystemEvery(top).coerceIn(1, 60)
+
+    /** The memory as "percent" or "used" (GB). */
+    val memoryAs: String get() = confMemoryAs(top)
+
+    /** The temperature's sensor ("k10temp", "coretemp"; "": the first known), and from how many °C it is shown as a warning. */
+    val temperatureSensor: String get() = confTemperatureSensor(top)
+    val temperatureWarning: Int get() = confTemperatureWarning(top)
+
+    /** What a click on the processor, memory or temperature starts ("auto": btop in the terminal, else GNOME's system monitor; "": nothing). */
+    val systemMonitor: String get() = confSystemMonitor(top)
+
+    /** The weather (only with the module "weather" placed): the place ("" lets the service guess it), how often (minutes), the address asked (%s: the place). */
+    val weatherPlace: String get() = confWeatherPlace(top)
+    val weatherEveryMinutes: Int get() = confWeatherEvery(top).coerceIn(5, 24 * 60)
+    val weatherUrl: String get() = confWeatherUrl(top)
+
+    /** All its modules (left, center and right). */
+    val allModules: List<String> get() = left + center + right
+
     /** This monitor has the bar (topBar { outputs }: empty is all). */
     val shownHere: Boolean get() = confBarOutputs(top).let { it.isEmpty() || monitor.name in it }
 
@@ -712,6 +746,10 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
 
     /** The keyboard layout in use ("EN", "RU"), empty while there is only one. */
     var keyboardLayout by mutableStateOf("")
+        private set
+
+    /** Its workspace's screens (screens { }): how many there are, and the one in view (0-based; 0 to -1 without screens). */
+    var screens by mutableStateOf(0 to -1)
         private set
 
     // The islands where they are (relative to the bar): blurred behind.
@@ -805,6 +843,13 @@ class Bar(private val wm: Layout, val monitor: Monitor, val top: Boolean) : Anim
         val names = wm.caulis.keyboardLayoutNames
         val k = if (names.size > 1) names.getOrNull(wm.caulis.keyboardLayoutNow)?.let { layoutLabel(it, confLayoutNames(top)) }.orEmpty() else ""
         if (k != keyboardLayout) keyboardLayout = k
+        // (Read without placing the windows not yet on a screen: that is the layout's to do.)
+        val s = if (!Screens.on()) 0 to -1 else {
+            val pages = wsState.viewStates.values.filter { it.isTiled && it.swallowed == null && it.page >= 0 }.map { it.page }
+            val now = Screens.pageAt(wsState.i + .5, wsState.j + .5)
+            maxOf((pages.maxOrNull() ?: -1) + 1, now + 1) to now
+        }
+        if (s != screens) screens = s
     }
 }
 

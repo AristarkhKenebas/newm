@@ -1400,6 +1400,31 @@ class NativeBarSection internal constructor(values: MutableMap<String, Any?>) : 
     /** The keyboard layouts' labels: `mapOf("us" to "EN", "de(neo)" to "NEO")` (by the layout's name or its code; others: "us" EN, else the code's first two letters). */
     var layoutNames by setting<Map<String, String>>("layout_names")
 
+    /** The module "media": its title at its widest (220). */
+    var mediaWidth by setting<Int>("media_width")
+
+    /** The modules "cpu", "memory", "temperature": read every so many seconds (2), only while shown. */
+    var systemEverySeconds by setting<Int>("system_every_seconds")
+
+    /** The module "memory" as "percent" (the default) or "used" (GB). */
+    var memoryAs by setting<String>("memory_as")
+
+    /** The module "temperature": its sensor ("k10temp", "coretemp"; "": the first known) and from how many °C it is a warning (80). */
+    var temperatureSensor by setting<String>("temperature_sensor")
+    var temperatureWarning by setting<Int>("temperature_warning")
+
+    /** What a click on "cpu", "memory" or "temperature" starts ("auto": btop in the terminal, else GNOME's system monitor, else htop; "": nothing). */
+    var systemMonitor by setting<String>("system_monitor")
+
+    /**
+     * The module "weather" (it asks wttr.in on the internet, only when placed): the place ("",
+     * the default, lets the service guess it from your address), how often in minutes (30),
+     * the address asked (%s: the place).
+     */
+    var weatherPlace by setting<String>("weather_place")
+    var weatherEveryMinutes by setting<Int>("weather_every_minutes")
+    var weatherUrl by setting<String>("weather_url")
+
     /** The monitors with this bar (`listOf("eDP-1")`); empty, the default: all. */
     var outputs by setting<List<String>>("outputs")
 

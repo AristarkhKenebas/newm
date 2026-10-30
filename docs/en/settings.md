@@ -280,6 +280,12 @@ Or with newm's own rules, next to the others in `view { rules { } }`:
 | `notificationsButton` | `true` | the notifications' bell before the quick settings' button (also in a `right` of your own, unless you place `notifications` yourself) |
 | `layoutNames` | `{}` | the keyboard layouts' labels: `mapOf("us" to "EN")` (others: `us` EN, else the code's first two letters) |
 | `outputs` | `[]` | the monitors with the bar (`["eDP-1"]`); empty: all |
+| `mediaWidth` | `220` | the module `media`: the title at its widest |
+| `systemEverySeconds` | `2` | the modules `cpu`, `memory`, `temperature`: how often they are read (only while shown) |
+| `memoryAs` | `"percent"` | the module `memory`: `"percent"` or `"used"` (GB) |
+| `temperatureSensor`, `temperatureWarning` | `""`, `80` | the module `temperature`: its sensor (`""`: the first known) and from how many °C it is a warning |
+| `systemMonitor` | `"auto"` | what a click on `cpu`, `memory` or `temperature` starts (`"auto"`: btop in the terminal, else GNOME's system monitor, else htop; `""`: nothing) |
+| `weatherPlace`, `weatherEveryMinutes`, `weatherUrl` | `""`, `30`, `"https://wttr.in/%s?format=%c+%t"` | the module `weather` (asks the internet, only when placed; see [Bars](bars.md)) |
 | `clockHint` | `"EEEE, d MMMM yyyy"` | the clock's hint; `""` for none |
 | `hintDelayMs` | `800` | how long the pointer stays before a hint shows |
 | `module("name") { }` | | a module of your own: `text { }` or `command("...")`, `everySeconds` (5), `timeoutSeconds` (5), `icon`, `onClick { }`, `onMiddle { }`, `onRight { }`, `onScroll { dy -> }` (see [Bars](bars.md#modules-of-your-own)) |
