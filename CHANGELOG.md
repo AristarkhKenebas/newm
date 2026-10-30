@@ -33,6 +33,10 @@ From now on every change people would notice gets a line under [Unreleased] in t
 - config.json / config.lua: a misspelt setting in `keyboard`, `cursor` or `input`
   (`keyboard.layout` for `layouts`) is told on screen with the settings there are, as in
   `compositor`, instead of being left out without a word.
+- The bar text `wifi()` (bars/classic.kts, config.json `"texts": ["wifi"]`) no longer freezes
+  the desktop: the Wi-Fi's name is asked of nmcli on a thread of its own, without a new scan and
+  for at most 5 s; the bar shows the name it knows meanwhile. Before, nmcli ran on the
+  compositor's thread every 10 s and its scan stopped pictures and input for seconds.
 
 ### Security
 - `newm cmd restart` is refused while the screen is locked. The start script starts newm again

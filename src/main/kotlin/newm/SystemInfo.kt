@@ -61,25 +61,47 @@ object SystemInfo {
         return "$capacity%${if (charging) " +" else ""}"
     }
 
-    // The Wi-Fi's name, asked of nmcli now and then (not every second).
+    // The Wi-Fi's name, asked of nmcli now and then (not every second), on a thread of its own:
+    // the bar's texts are made on the compositor's thread, and nmcli may take seconds
+    // (NetworkManager busy; a plain "dev wifi" even scanned first).
+    @Volatile
     private var wifiName: String = ""
     private var wifiAsked = 0L
+    private val wifiAsking = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    // How the name is asked (tests: a slow one).
+    internal var wifiCommand = listOf("nmcli", "-t", "-f", "active,ssid", "dev", "wifi", "list", "--rescan", "no")
 
     /** The Wi-Fi: "JVB (93%)"; empty without one. */
     fun wifi(): String {
         val now = System.nanoTime()
-        if (now - wifiAsked > 10_000_000_000L) {
+        if (now - wifiAsked > 10_000_000_000L && wifiAsking.compareAndSet(false, true)) {
             wifiAsked = now
-            wifiName = try {
-                val p = dev.caulis.ffi.Processes.start(ProcessBuilder("nmcli", "-t", "-f", "active,ssid", "dev", "wifi").redirectErrorStream(true))
-                p.inputStream.bufferedReader().readLines().firstOrNull { it.startsWith("yes:") }?.substringAfter(':').orEmpty()
-            } catch (_: Exception) {
-                ""
+            Thread.ofPlatform().daemon().name("newm-wifi-name").start {
+                try {
+                    askWifiName()?.let { wifiName = it }
+                } finally {
+                    wifiAsking.set(false)
+                }
             }
         }
         val quality = read("/proc/net/wireless")?.lines()?.drop(2)?.firstOrNull()?.trim()?.split(Regex("\\s+"))?.getOrNull(2)?.trimEnd('.')?.toDoubleOrNull()
         val percent = quality?.let { " (${(it / 70 * 100).toInt().coerceIn(0, 100)}%)" }.orEmpty()
         return if (wifiName.isEmpty() && quality == null) "" else "${wifiName.ifEmpty { "Wi-Fi" }}$percent"
+    }
+
+    // The active Wi-Fi's name as nmcli tells it ("" none), or null when it did not answer in time.
+    private fun askWifiName(): String? = try {
+        val p = dev.caulis.ffi.Processes.start(ProcessBuilder(wifiCommand).redirectErrorStream(true))
+        val lines = java.util.concurrent.CompletableFuture.supplyAsync { p.inputStream.bufferedReader().readLines() }
+        if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            p.destroyForcibly()
+            null
+        } else {
+            lines.get(1, java.util.concurrent.TimeUnit.SECONDS).firstOrNull { it.startsWith("yes:") }?.substringAfter(':').orEmpty()
+        }
+    } catch (_: Exception) {
+        ""
     }
 
     /** The date: "21 May 2022" (a pattern of java.time's DateTimeFormatter for another look). */
